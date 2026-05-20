@@ -559,7 +559,6 @@ function openWebDecksPanel() {
   if (!panel) return;
 
   panel.hidden = false;
-  fetchWebDecks();
 }
 
 function closeImportPanel() {
