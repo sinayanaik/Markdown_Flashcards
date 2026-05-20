@@ -30,6 +30,7 @@
               <button type="button" data-export="markdown" data-scope="all">All Markdown</button>
             </div>
           </div>
+          <button class="tool-button button is-small" id="allCardsBtn" type="button">All</button>
           <button class="tool-button button is-small" id="themeBtn" type="button">Dark</button>
           <button class="icon-button button is-small" id="shuffleBtn" type="button" title="Shuffle" aria-label="Shuffle cards">
             <span aria-hidden="true">&#8644;</span>
@@ -133,6 +134,19 @@
 
     <section class="print-root" id="printRoot" aria-hidden="true"></section>
 
+    <section class="all-cards-panel" id="allCardsPanel" hidden aria-label="All cards">
+      <div class="all-cards-shell">
+        <div class="all-cards-head">
+          <div>
+            <h1>All cards</h1>
+            <p id="allCardsSummary">0 cards</p>
+          </div>
+          <button class="icon-button" id="closeAllCardsBtn" type="button" aria-label="Close all cards">&#215;</button>
+        </div>
+        <div class="all-cards-list" id="allCardsList"></div>
+      </div>
+    </section>
+
     <section class="diagram-modal" id="diagramModal" hidden aria-label="Diagram preview">
       <div class="diagram-modal-head">
         <span>Diagram</span>
@@ -147,6 +161,6 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="app.js?v=20260520-05"></script>
+    <script src="app.js?v=20260520-06"></script>
   </body>
 </html>

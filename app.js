@@ -37,9 +37,25 @@ const state = {
   review: 0,
   flipped: false,
   dragStartX: 0,
+  dragStartY: 0,
   dragCurrentX: 0,
+  dragCurrentY: 0,
+  dragPointerId: null,
   dragging: false
 };
+
+const swipeConfig = {
+  intentDistance: 18,
+  intentRatio: 1.35,
+  commitRatio: 1.6,
+  minCommitDistance: 110,
+  maxCommitDistance: 190,
+  widthCommitRatio: 0.22,
+  resistance: 0.46,
+  maxPreviewOffset: 92
+};
+
+let allCardsRenderId = 0;
 
 const el = {
   sourceInput: document.querySelector("#sourceInput"),
@@ -57,6 +73,11 @@ const el = {
   closeDiagramBtn: document.querySelector("#closeDiagramBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   exportMenu: document.querySelector("#exportMenu"),
+  allCardsBtn: document.querySelector("#allCardsBtn"),
+  allCardsPanel: document.querySelector("#allCardsPanel"),
+  allCardsList: document.querySelector("#allCardsList"),
+  allCardsSummary: document.querySelector("#allCardsSummary"),
+  closeAllCardsBtn: document.querySelector("#closeAllCardsBtn"),
   themeBtn: document.querySelector("#themeBtn"),
   deckTitle: document.querySelector("#deckTitle"),
   shuffleBtn: document.querySelector("#shuffleBtn"),
@@ -372,7 +393,7 @@ async function previewCard(card) {
   if (!card) return;
   state.previewCard = card;
   state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right");
+  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
   await renderMarkdown(el.questionView, card.question);
   await renderMarkdown(el.answerView, card.answer);
@@ -597,6 +618,98 @@ function closeDiagramModal() {
   el.diagramModalBody.innerHTML = "";
 }
 
+function closeAllCardsPanel() {
+  allCardsRenderId += 1;
+  el.allCardsPanel.hidden = true;
+}
+
+function setAllCardStatus(cardId, status) {
+  state.statusById[cardId] = status;
+  syncResults();
+  updateMeta();
+  updateAllCardStatuses();
+}
+
+function updateAllCardStatuses() {
+  el.allCardsList.querySelectorAll(".all-card").forEach((node) => {
+    const status = state.statusById[node.dataset.cardId] || "";
+    node.dataset.status = status;
+    node.querySelectorAll("[data-all-status]").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.allStatus === status);
+    });
+  });
+}
+
+async function ensureAllCardAnswer(item) {
+  if (item.dataset.answerRendered === "true" || item.dataset.answerRendered === "rendering") return;
+  const card = item.cardData;
+  if (!card) return;
+
+  item.dataset.answerRendered = "rendering";
+  const answerView = item.querySelector(".all-card-answer .rendered");
+  answerView.textContent = "Rendering...";
+  await renderMarkdown(answerView, card.answer);
+  item.dataset.answerRendered = "true";
+}
+
+function flipAllCard(item) {
+  if (item.dataset.answerRendered === "rendering") return;
+  const willShowAnswer = !item.classList.contains("is-flipped");
+  item.classList.toggle("is-flipped", willShowAnswer);
+  if (willShowAnswer) ensureAllCardAnswer(item);
+}
+
+async function renderAllCards() {
+  const cards = state.masterCards;
+  const renderId = allCardsRenderId;
+  el.allCardsList.innerHTML = "";
+  el.allCardsSummary.textContent = `${cards.length} ${cards.length === 1 ? "card" : "cards"}`;
+
+  for (const [index, card] of cards.entries()) {
+    if (renderId !== allCardsRenderId) return;
+
+    const item = document.createElement("article");
+    item.className = "all-card";
+    item.tabIndex = 0;
+    item.dataset.cardId = card.id;
+    item.dataset.status = state.statusById[card.id] || "";
+    item.dataset.answerRendered = "false";
+    item.cardData = card;
+    item.innerHTML = `
+      <div class="all-card-top">
+        <span class="all-card-index">${index + 1}</span>
+        <div class="all-card-actions" aria-label="Categorize card">
+          <button class="all-card-review" type="button" data-all-status="review">Review</button>
+          <button class="all-card-known" type="button" data-all-status="known">Known</button>
+        </div>
+      </div>
+      <div class="all-card-face all-card-question">
+        <span class="face-label">Question</span>
+        <div class="rendered"></div>
+      </div>
+      <div class="all-card-face all-card-answer">
+        <span class="face-label">Answer</span>
+        <div class="rendered"></div>
+      </div>
+    `;
+    el.allCardsList.appendChild(item);
+    await renderMarkdown(item.querySelector(".all-card-question .rendered"), card.question);
+  }
+
+  updateAllCardStatuses();
+}
+
+function openAllCardsPanel() {
+  if (!state.masterCards.length) {
+    setStatus("Import a deck before opening all cards.", "error");
+    return;
+  }
+
+  allCardsRenderId += 1;
+  el.allCardsPanel.hidden = false;
+  renderAllCards();
+}
+
 function updateMeta() {
   const total = state.cards.length;
   const finished = Math.min(state.current, total);
@@ -619,6 +732,7 @@ function updateMeta() {
   el.reviewBtn.disabled = disabled;
   el.shuffleBtn.disabled = total < 2;
   el.resetBtn.disabled = total === 0;
+  el.allCardsBtn.disabled = state.masterCards.length === 0;
   el.exportBtn.disabled = state.masterCards.length === 0 && state.results.known.length === 0 && state.results.review.length === 0;
   el.replayKnownBtn.disabled = state.results.known.length === 0;
   el.replayReviewBtn.disabled = state.results.review.length === 0;
@@ -629,7 +743,7 @@ function updateMeta() {
 async function showCard() {
   state.previewCard = null;
   state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right");
+  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
 
   const card = state.cards[state.current];
@@ -654,6 +768,7 @@ function buildCards(titleHint = "") {
   state.current = 0;
   state.deckTitle = cards.length ? inferDeckTitle(source, titleHint) : "";
   resetResults();
+  closeAllCardsPanel();
 
   if (cards.length) {
     setStatus(`Built ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
@@ -677,6 +792,8 @@ function flipCard() {
 function moveCard(result) {
   const card = state.previewCard || state.cards[state.current];
   if (!card) return;
+  el.card.classList.remove("is-dragging", "drag-review", "drag-known");
+  el.card.style.transform = "";
   state.statusById[card.id] = result;
   syncResults();
 
@@ -1069,19 +1186,89 @@ function loadSample() {
   buildCards("Sample flashcards");
 }
 
+function currentCardCanMove() {
+  return Boolean(state.previewCard || state.cards[state.current]);
+}
+
+function swipeCommitDistance() {
+  return Math.min(
+    swipeConfig.maxCommitDistance,
+    Math.max(swipeConfig.minCommitDistance, el.card.offsetWidth * swipeConfig.widthCommitRatio)
+  );
+}
+
+function resetCardDrag() {
+  state.dragging = false;
+  state.dragPointerId = null;
+  el.card.classList.remove("is-dragging", "drag-review", "drag-known");
+  el.card.style.transform = "";
+}
+
 function handlePointerDown(event) {
+  if (!currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
   state.dragging = false;
   state.dragStartX = event.clientX;
+  state.dragStartY = event.clientY;
   state.dragCurrentX = event.clientX;
+  state.dragCurrentY = event.clientY;
+  state.dragPointerId = event.pointerId;
+  el.card.setPointerCapture?.(event.pointerId);
 }
 
 function handlePointerMove(event) {
+  if (state.dragPointerId !== event.pointerId) return;
   state.dragCurrentX = event.clientX;
+  state.dragCurrentY = event.clientY;
+
+  const dx = state.dragCurrentX - state.dragStartX;
+  const dy = state.dragCurrentY - state.dragStartY;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+
+  if (!state.dragging) {
+    if (absX < swipeConfig.intentDistance || absX < absY * swipeConfig.intentRatio) return;
+    state.dragging = true;
+    el.card.classList.add("is-dragging");
+  }
+
+  event.preventDefault();
+  const direction = dx > 0 ? 1 : -1;
+  const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
+  const progress = Math.min(absX / swipeCommitDistance(), 1);
+  el.card.classList.toggle("drag-known", dx > 0 && progress > 0.65);
+  el.card.classList.toggle("drag-review", dx < 0 && progress > 0.65);
+  el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 1.4}deg) scale(${1 - progress * 0.008})`;
 }
 
 function handlePointerUp(event) {
-  state.dragging = false;
-  el.card.style.transform = "";
+  if (state.dragPointerId !== event.pointerId) return;
+  el.card.releasePointerCapture?.(event.pointerId);
+
+  const dx = state.dragCurrentX - state.dragStartX;
+  const dy = state.dragCurrentY - state.dragStartY;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  const committed = state.dragging
+    && absX >= swipeCommitDistance()
+    && absX >= absY * swipeConfig.commitRatio;
+
+  if (committed) {
+    el.card.classList.remove("is-dragging", "drag-review", "drag-known");
+    el.card.style.transform = "";
+    state.dragging = false;
+    state.dragPointerId = null;
+    moveCard(dx > 0 ? "known" : "review");
+    return;
+  }
+
+  resetCardDrag();
+}
+
+function handlePointerCancel(event) {
+  if (state.dragPointerId === event.pointerId) {
+    el.card.releasePointerCapture?.(event.pointerId);
+    resetCardDrag();
+  }
 }
 
 el.parseBtn.addEventListener("click", () => buildCards());
@@ -1089,6 +1276,29 @@ el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
 el.importBtn.addEventListener("click", openImportPanel);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
+el.allCardsBtn.addEventListener("click", openAllCardsPanel);
+el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
+el.allCardsList.addEventListener("click", (event) => {
+  const statusButton = event.target.closest("[data-all-status]");
+  if (statusButton) {
+    event.stopPropagation();
+    const item = statusButton.closest(".all-card");
+    setAllCardStatus(item.dataset.cardId, statusButton.dataset.allStatus);
+    return;
+  }
+
+  const item = event.target.closest(".all-card");
+  if (item && event.target.closest("a, button") === null) {
+    flipAllCard(item);
+  }
+});
+el.allCardsList.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const item = event.target.closest(".all-card");
+  if (!item || event.target.closest("button")) return;
+  event.preventDefault();
+  flipAllCard(item);
+});
 el.exportBtn.addEventListener("click", (event) => {
   event.stopPropagation();
   el.exportMenu.hidden = !el.exportMenu.hidden;
@@ -1122,20 +1332,22 @@ el.clearProgressBtn.addEventListener("click", clearProgress);
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
 el.card.addEventListener("click", (event) => {
-  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && event.target.closest("a") === null) flipCard();
+  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && event.target.closest("a, button") === null) flipCard();
 });
 el.card.addEventListener("pointerdown", handlePointerDown);
 el.card.addEventListener("pointermove", handlePointerMove);
 el.card.addEventListener("pointerup", handlePointerUp);
-el.card.addEventListener("pointercancel", handlePointerUp);
+el.card.addEventListener("pointercancel", handlePointerCancel);
 
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea")) return;
   if (event.key === "Escape") {
     el.exportMenu.hidden = true;
     closeDiagramModal();
+    closeAllCardsPanel();
     closeImportPanel();
   }
+  if (!el.allCardsPanel.hidden) return;
   if (event.key === " " || event.key === "Enter") {
     event.preventDefault();
     flipCard();
