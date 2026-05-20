@@ -88,27 +88,30 @@ button:disabled {
 
 .appbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
 }
 
 .deck-meta {
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(0, auto) minmax(0, auto);
+  grid-template-columns: auto auto;
   min-width: 0;
   align-items: baseline;
-  gap: 12px;
+  justify-content: center;
+  justify-items: center;
+  gap: 4px 12px;
   color: var(--muted);
-  font-size: 0.9rem;
-  white-space: normal;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .deck-title {
-  max-width: min(42vw, 520px);
+  max-width: 100%;
+  grid-column: 1 / -1;
   overflow: hidden;
   color: color-mix(in srgb, var(--accent) 72%, var(--muted));
-  font-size: 0.68rem;
+  font-size: 0.74rem;
   font-weight: 850;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;
@@ -134,7 +137,7 @@ button:disabled {
 
 .toolbar {
   min-width: 0;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .tool-button,
@@ -271,6 +274,12 @@ button:disabled {
 .card.drag-known {
   border-color: color-mix(in srgb, var(--known) 74%, var(--line));
   box-shadow: 0 18px 60px color-mix(in srgb, var(--known) 22%, transparent);
+}
+
+.card.drag-prev,
+.card.drag-next {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .result-panel {
@@ -1134,8 +1143,6 @@ textarea {
   }
 
   .appbar {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
     gap: 8px;
   }
 
@@ -1145,26 +1152,22 @@ textarea {
   }
 
   .deck-meta {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 10px;
-    white-space: normal;
+    grid-template-columns: auto auto;
+    gap: 4px 8px;
+    white-space: nowrap;
   }
 
   .deck-title {
-    max-width: 100%;
-    grid-column: 1 / -1;
     font-size: 0.72rem;
   }
 
-  .deck-meta strong,
-  #cardCount {
+  .deck-meta strong {
     font-size: 0.82rem;
   }
 
   .toolbar {
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: center;
     overflow: visible;
     padding-bottom: 2px;
   }
@@ -1235,10 +1238,10 @@ textarea {
 
   .controls {
     display: grid;
-    grid-template-columns: minmax(96px, 1fr) minmax(82px, 0.76fr) minmax(96px, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      "review prev known"
-      "review next known";
+      "review known"
+      "prev next";
     gap: 8px;
   }
 
@@ -1274,10 +1277,13 @@ textarea {
 
   .controls .review,
   .controls .known {
-    height: 92px;
-    flex-direction: column;
-    gap: 8px;
+    height: 54px;
     font-size: 0.84rem;
+  }
+
+  .controls .nav-card {
+    height: 40px;
+    font-size: 0.76rem;
   }
 
   .replay-actions {
@@ -1373,12 +1379,11 @@ textarea {
   }
 
   .appbar {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
+    gap: 8px;
   }
 
   .toolbar {
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .study-layout {
@@ -1416,14 +1421,11 @@ textarea {
   }
 
   .deck-meta {
-    grid-template-columns: 1fr;
-    gap: 3px;
+    grid-template-columns: auto auto;
+    gap: 3px 8px;
   }
 
-  .deck-title,
-  .deck-meta strong,
-  #positionText,
-  #cardCount {
+  .deck-title {
     grid-column: 1 / -1;
   }
 
@@ -1445,7 +1447,7 @@ textarea {
 
   .controls .review,
   .controls .known {
-    height: 88px;
+    height: 52px;
   }
 }
 

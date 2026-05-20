@@ -23,9 +23,9 @@ The app also accepts:
 
 ## Features
 
-- Swipe right or press `ArrowRight` for known cards.
-- Swipe left or press `ArrowLeft` for review cards.
-- Press `ArrowDown` / `ArrowUp`, or use the up/down buttons to move between cards without categorizing.
+- Swipe left or press `ArrowRight` for the next card.
+- Swipe right or press `ArrowLeft` for the previous card.
+- Use the explicit `Review` and `Known` buttons to categorize cards.
 - On mobile, vertical gestures are reserved for scrolling the page and long card content.
 - Click or tap the card, press `Space`, or press `Enter` to flip.
 - Renders Markdown, tables, code blocks, LaTeX with KaTeX, and Mermaid diagrams.
