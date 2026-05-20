@@ -702,15 +702,18 @@ button:disabled {
 .controls button {
   display: inline-flex;
   width: auto;
-  min-width: 64px;
+  min-width: 86px;
   height: 42px;
   min-height: 42px;
   align-items: center;
   justify-content: center;
+  gap: 7px;
   border-radius: 8px;
   padding: 0 14px;
-  font-size: 1rem;
+  font-size: 0.86rem;
   font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .controls {
@@ -742,9 +745,9 @@ button:disabled {
 }
 
 .controls .review {
-  border: 1px solid color-mix(in srgb, var(--review) 86%, #000);
-  background: var(--review);
-  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--review) 56%, var(--line));
+  background: color-mix(in srgb, var(--review) 24%, var(--panel));
+  color: color-mix(in srgb, var(--review) 78%, var(--text));
 }
 
 .controls .nav-card {
@@ -754,9 +757,9 @@ button:disabled {
 }
 
 .controls .known {
-  border: 1px solid color-mix(in srgb, var(--known) 86%, #000);
-  background: var(--known);
-  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--known) 58%, var(--line));
+  background: color-mix(in srgb, var(--known) 24%, var(--panel));
+  color: color-mix(in srgb, var(--known) 82%, var(--text));
 }
 
 .import-panel {
@@ -1191,7 +1194,7 @@ textarea {
   }
 
   .quiz-panel {
-    height: calc(78svh + 72px);
+    height: auto;
     min-height: 0;
     padding: 8px;
   }
@@ -1225,14 +1228,17 @@ textarea {
   }
 
   .deck {
-    height: 78svh;
-    min-height: 0;
+    height: min(64svh, 560px);
+    min-height: 360px;
     padding: 8px 0;
   }
 
   .controls {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(96px, 1fr) minmax(82px, 0.76fr) minmax(96px, 1fr);
+    grid-template-areas:
+      "review prev known"
+      "review next known";
     gap: 8px;
   }
 
@@ -1243,10 +1249,35 @@ textarea {
   }
 
   .controls button {
-    flex: 1 1 calc(50% - 8px);
     width: auto;
-    min-width: 96px;
+    min-width: 0;
     height: 42px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+  }
+
+  .controls .review {
+    grid-area: review;
+  }
+
+  .controls .known {
+    grid-area: known;
+  }
+
+  .controls #prevCardBtn {
+    grid-area: prev;
+  }
+
+  .controls #nextCardBtn {
+    grid-area: next;
+  }
+
+  .controls .review,
+  .controls .known {
+    height: 92px;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.84rem;
   }
 
   .replay-actions {
@@ -1397,7 +1428,7 @@ textarea {
   }
 
   .quiz-panel {
-    height: calc(78svh + 76px);
+    height: auto;
     min-height: 0;
   }
 
@@ -1407,8 +1438,14 @@ textarea {
 
   .controls button {
     width: auto;
-    min-width: 86px;
+    min-width: 0;
     height: 40px;
+    padding: 0 8px;
+  }
+
+  .controls .review,
+  .controls .known {
+    height: 88px;
   }
 }
 

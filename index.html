@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="vendor/bulma.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260520-28">
+    <link rel="stylesheet" href="styles.css?v=20260520-30">
   </head>
   <body>
     <main class="app-shell">
@@ -73,10 +73,10 @@
           </div>
 
           <div class="controls" aria-label="Card actions">
-            <button class="review" id="reviewBtn" type="button" title="Review" aria-label="Mark card for review">❌</button>
-            <button class="nav-card" id="prevCardBtn" type="button" title="Previous card" aria-label="Previous card">&#8593;</button>
-            <button class="nav-card" id="nextCardBtn" type="button" title="Next card" aria-label="Next card">&#8595;</button>
-            <button class="known" id="knownBtn" type="button" title="Known" aria-label="Mark card known">✅</button>
+            <button class="review" id="reviewBtn" type="button" title="Review" aria-label="Mark card for review"><span aria-hidden="true">❌</span><span>Review</span></button>
+            <button class="nav-card" id="prevCardBtn" type="button" title="Previous card" aria-label="Previous card"><span aria-hidden="true">&#8593;</span><span>Prev</span></button>
+            <button class="nav-card" id="nextCardBtn" type="button" title="Next card" aria-label="Next card"><span aria-hidden="true">&#8595;</span><span>Next</span></button>
+            <button class="known" id="knownBtn" type="button" title="Known" aria-label="Mark card known"><span>Known</span><span aria-hidden="true">✅</span></button>
           </div>
           <div class="replay-actions" aria-label="Replay options">
             <button id="replayAllBtn" type="button">All cards</button>
