@@ -369,6 +369,47 @@ marked.setOptions({
   headerIds: false
 });
 
+const codeLanguageAliases = {
+  cjs: "javascript",
+  coffee: "coffeescript",
+  "c++": "cpp",
+  "c#": "csharp",
+  "f#": "fsharp",
+  html: "markup",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  md: "markdown",
+  py: "python",
+  rb: "ruby",
+  sh: "bash",
+  shell: "bash",
+  tex: "latex",
+  ts: "typescript",
+  tsx: "typescript",
+  yml: "yaml"
+};
+
+if (window.Prism?.plugins?.autoloader) {
+  Prism.plugins.autoloader.languages_path = "https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/";
+}
+
+let prismPythonConfigured = false;
+
+function configurePrismLanguages() {
+  if (prismPythonConfigured || !window.Prism?.languages?.python) return;
+
+  Prism.languages.insertBefore("python", "function", {
+    method: {
+      pattern: /(\.)[A-Za-z_]\w*(?=\s*\()/,
+      lookbehind: true
+    },
+    "uppercase-constant": /\b[A-Z][A-Z0-9_]*\b/
+  });
+
+  prismPythonConfigured = true;
+}
+
 function configureMermaid(theme) {
   const dark = theme === "dark";
   mermaid.initialize({
@@ -887,11 +928,54 @@ function markdownToSafeHtml(markdown) {
   });
 }
 
+function declaredCodeLanguage(code) {
+  const languageClass = Array.from(code.classList).find((className) => className.startsWith("language-"));
+  return languageClass ? languageClass.replace(/^language-/, "").trim() : "";
+}
+
+function normalizeCodeLanguage(language) {
+  const normalized = String(language || "").toLowerCase();
+  return codeLanguageAliases[normalized] || normalized;
+}
+
+function codeLanguageLabel(language) {
+  return language
+    .replace(/^language-/, "")
+    .replace(/[-_]+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function enhanceCodeBlocks(container) {
+  configurePrismLanguages();
+
+  container.querySelectorAll("pre code").forEach((code) => {
+    const pre = code.closest("pre");
+    const declaredLanguage = declaredCodeLanguage(code);
+    const normalizedLanguage = normalizeCodeLanguage(declaredLanguage);
+
+    pre?.classList.add("code-block");
+
+    if (declaredLanguage && pre) {
+      pre.classList.add("has-code-language");
+      pre.dataset.language = codeLanguageLabel(declaredLanguage);
+    }
+
+    if (!window.Prism || !normalizedLanguage || code.dataset.highlighted === "yes") return;
+
+    code.classList.add(`language-${normalizedLanguage}`);
+    pre?.classList.add(`language-${normalizedLanguage}`);
+    Prism.highlightElement(code);
+  });
+}
+
 async function enhanceRenderedMarkdown(container) {
   container.querySelectorAll("a[href]").forEach((link) => {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
   });
+
+  enhanceCodeBlocks(container);
 
   container.querySelectorAll(".math-display[data-tex], .math-inline[data-tex]").forEach((node) => {
     try {
