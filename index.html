@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Flashcards</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="stylesheet" href="vendor/bulma.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="styles.css">
   </head>
@@ -19,9 +20,9 @@
         </div>
 
         <div class="toolbar">
-          <button class="tool-button" id="importBtn" type="button">Import</button>
+          <button class="tool-button button is-small" id="importBtn" type="button">Import</button>
           <div class="menu-wrap">
-            <button class="tool-button" id="exportBtn" type="button">Export</button>
+            <button class="tool-button button is-small" id="exportBtn" type="button">Export</button>
             <div class="export-menu" id="exportMenu" hidden>
               <button type="button" data-export="pdf" data-scope="known">Known PDF</button>
               <button type="button" data-export="pdf" data-scope="review">Review PDF</button>
@@ -29,11 +30,11 @@
               <button type="button" data-export="markdown" data-scope="all">All Markdown</button>
             </div>
           </div>
-          <button class="tool-button" id="themeBtn" type="button">Dark</button>
-          <button class="icon-button" id="shuffleBtn" type="button" title="Shuffle" aria-label="Shuffle cards">
+          <button class="tool-button button is-small" id="themeBtn" type="button">Dark</button>
+          <button class="icon-button button is-small" id="shuffleBtn" type="button" title="Shuffle" aria-label="Shuffle cards">
             <span aria-hidden="true">&#8644;</span>
           </button>
-          <button class="icon-button" id="resetBtn" type="button" title="Restart" aria-label="Restart quiz">
+          <button class="icon-button button is-small" id="resetBtn" type="button" title="Restart" aria-label="Restart quiz">
             <span aria-hidden="true">&#8635;</span>
           </button>
         </div>
@@ -146,6 +147,6 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="app.js?v=20260520-04"></script>
+    <script src="app.js?v=20260520-05"></script>
   </body>
 </html>

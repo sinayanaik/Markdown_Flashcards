@@ -393,94 +393,131 @@ function encodeAttribute(value) {
   return escapeHtml(encodeURIComponent(value));
 }
 
-function preprocessLineDelimitedMath(markdown) {
-  const lines = normalizeMarkdown(markdown).split("\n");
-  const output = [];
-  let delimiter = "";
-  let buffer = [];
-  let inFence = false;
+function isEscaped(source, index) {
+  let slashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) {
+    slashes += 1;
+  }
+  return slashes % 2 === 1;
+}
 
-  const flushMath = () => {
-    output.push(`<div class="math-display" data-tex="${encodeAttribute(buffer.join("\n").trim())}"></div>`);
-    delimiter = "";
-    buffer = [];
-  };
+function isSingleDollarLine(source, index) {
+  if (source[index] !== "$" || source[index - 1] === "$" || source[index + 1] === "$" || isEscaped(source, index)) {
+    return false;
+  }
 
-  const startsWithDelimiter = (line) => {
-    if (/^\s*\$\$/.test(line)) return "$$";
-    if (/^\s*\$(?!\$)/.test(line)) return "$";
-    return "";
-  };
+  const lineStart = source.lastIndexOf("\n", index - 1) + 1;
+  const lineEnd = source.indexOf("\n", index);
+  const line = source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd);
+  return line.trim() === "$";
+}
 
-  const endsWithDelimiter = (line, value) => {
-    const rightTrimmed = line.trimEnd();
-    if (!rightTrimmed.endsWith(value)) return false;
-    if (value === "$" && rightTrimmed.endsWith("$$")) return false;
-    return rightTrimmed.at(-value.length - 1) !== "\\";
-  };
+function findSingleDollarLine(source, start) {
+  for (let index = source.indexOf("$", start); index !== -1; index = source.indexOf("$", index + 1)) {
+    if (isSingleDollarLine(source, index)) return index;
+  }
+  return -1;
+}
 
-  const removeOpeningDelimiter = (line, value) => line.replace(value === "$$" ? /^\s*\$\$/ : /^\s*\$(?!\$)/, "");
-  const removeClosingDelimiter = (line, value) => line.trimEnd().slice(0, -value.length);
+function findUnescaped(source, token, start) {
+  for (let index = source.indexOf(token, start); index !== -1; index = source.indexOf(token, index + token.length)) {
+    if (!isEscaped(source, index)) return index;
+  }
+  return -1;
+}
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const isDelimiter = trimmed === "$$" || trimmed === "$";
-    const isFence = /^\s*```/.test(line);
+function canOpenInlineDollar(source, index) {
+  const next = source[index + 1];
+  return next && next !== "$" && !/\s/.test(next) && !isEscaped(source, index);
+}
 
-    if (delimiter) {
-      if (trimmed === delimiter) {
-        flushMath();
-      } else if (endsWithDelimiter(line, delimiter)) {
-        buffer.push(removeClosingDelimiter(line, delimiter));
-        flushMath();
-      } else {
-        buffer.push(line);
+function findInlineDollarClose(source, start) {
+  for (let index = source.indexOf("$", start); index !== -1; index = source.indexOf("$", index + 1)) {
+    const previous = source[index - 1];
+    if (source[index + 1] !== "$" && previous && !/\s/.test(previous) && !isEscaped(source, index)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function mathNode(tex, displayMode) {
+  const tag = displayMode ? "div" : "span";
+  const className = displayMode ? "math-display" : "math-inline";
+  return `<${tag} class="${className}" data-tex="${encodeAttribute(tex.trim())}"></${tag}>`;
+}
+
+function protectMath(markdown) {
+  let output = "";
+  let index = 0;
+
+  while (index < markdown.length) {
+    if (markdown.startsWith("$$", index) && !isEscaped(markdown, index)) {
+      const close = findUnescaped(markdown, "$$", index + 2);
+      if (close !== -1) {
+        output += mathNode(markdown.slice(index + 2, close), true);
+        index = close + 2;
+        continue;
       }
-      continue;
     }
 
-    if (isFence) {
-      inFence = !inFence;
-      output.push(line);
-      continue;
+    if (isSingleDollarLine(markdown, index)) {
+      const openLineEnd = markdown.indexOf("\n", index);
+      const contentStart = openLineEnd === -1 ? index + 1 : openLineEnd + 1;
+      const close = findSingleDollarLine(markdown, contentStart);
+      if (close !== -1) {
+        const closeLineStart = markdown.lastIndexOf("\n", close - 1) + 1;
+        output += mathNode(markdown.slice(contentStart, closeLineStart), true);
+        const closeLineEnd = markdown.indexOf("\n", close);
+        index = closeLineEnd === -1 ? close + 1 : closeLineEnd + 1;
+        continue;
+      }
     }
 
-    if (inFence) {
-      output.push(line);
-      continue;
+    if ((markdown.startsWith("\\[", index) || markdown.startsWith("\\(", index)) && !isEscaped(markdown, index)) {
+      const displayMode = markdown[index + 1] === "[";
+      const closeToken = displayMode ? "\\]" : "\\)";
+      const close = findUnescaped(markdown, closeToken, index + 2);
+      if (close !== -1) {
+        output += mathNode(markdown.slice(index + 2, close), displayMode);
+        index = close + 2;
+        continue;
+      }
     }
 
-    if (isDelimiter) {
-      delimiter = trimmed;
-      buffer = [];
-      continue;
+    if (markdown[index] === "$" && canOpenInlineDollar(markdown, index)) {
+      const close = findInlineDollarClose(markdown, index + 1);
+      if (close !== -1) {
+        output += mathNode(markdown.slice(index + 1, close), false);
+        index = close + 1;
+        continue;
+      }
     }
 
-    const openingDelimiter = startsWithDelimiter(line);
-    if (openingDelimiter && !endsWithDelimiter(line, openingDelimiter)) {
-      delimiter = openingDelimiter;
-      buffer = [removeOpeningDelimiter(line, openingDelimiter)];
-      continue;
-    }
-
-    output.push(line);
+    output += markdown[index];
+    index += 1;
   }
 
-  if (delimiter) {
-    output.push(delimiter, ...buffer);
-  }
-
-  return output.join("\n");
+  return output;
 }
 
 function preprocessSpecialBlocks(markdown) {
-  return preprocessLineDelimitedMath(markdown)
-    .replace(/```[ \t]*mermaid[^\n]*\n([\s\S]*?)```/gi, (_, diagram) => {
-      return `<div class="mermaid" data-diagram="${encodeAttribute(diagram.trim())}"></div>`;
-    })
-    .replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
-      return `<div class="math-display" data-tex="${encodeAttribute(tex.trim())}"></div>`;
-    });
+  const source = normalizeMarkdown(markdown || "");
+  const fencePattern = /```[ \t]*([^\n]*)\n([\s\S]*?)```/g;
+  let output = "";
+  let lastIndex = 0;
+  let match;
+
+  while ((match = fencePattern.exec(source))) {
+    output += protectMath(source.slice(lastIndex, match.index));
+    output += /\bmermaid\b/i.test(match[1])
+      ? `<div class="mermaid" data-diagram="${encodeAttribute(match[2].trim())}"></div>`
+      : match[0];
+    lastIndex = fencePattern.lastIndex;
+  }
+
+  output += protectMath(source.slice(lastIndex));
+  return output;
 }
 
 async function renderMarkdown(container, markdown) {
@@ -496,10 +533,10 @@ async function renderMarkdown(container, markdown) {
     link.rel = "noopener noreferrer";
   });
 
-  container.querySelectorAll(".math-display[data-tex]").forEach((node) => {
+  container.querySelectorAll(".math-display[data-tex], .math-inline[data-tex]").forEach((node) => {
     try {
       katex.render(decodeURIComponent(node.dataset.tex), node, {
-        displayMode: true,
+        displayMode: node.classList.contains("math-display"),
         throwOnError: false
       });
     } catch (error) {
@@ -654,7 +691,7 @@ function moveCard(result) {
   window.setTimeout(() => {
     state.current += 1;
     showCard();
-  }, 180);
+  }, 240);
 }
 
 function shuffleCards() {

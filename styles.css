@@ -1,5 +1,6 @@
 :root {
   color-scheme: light;
+  --app-pad: clamp(6px, 1.4vw, 14px);
   --bg: #f4f2ec;
   --panel: #fffdf8;
   --panel-2: #f0eee7;
@@ -46,6 +47,8 @@
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 26rem),
     radial-gradient(circle at 100% 100%, rgba(183, 121, 31, 0.12), transparent 30rem),
@@ -72,28 +75,33 @@ button:disabled {
 .app-shell {
   display: grid;
   width: min(1680px, calc(100% - 16px));
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
-  grid-template-rows: auto 1fr;
+  min-height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   margin: 0 auto;
-  padding: 10px 0;
+  overflow: hidden;
+  padding: var(--app-pad) 0;
 }
 
 .appbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
 }
 
 .deck-meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(0, auto) minmax(0, auto);
   min-width: 0;
   align-items: baseline;
   gap: 12px;
   color: var(--muted);
   font-size: 0.9rem;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .deck-title {
@@ -107,6 +115,10 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.deck-meta > * {
+  min-width: 0;
+}
+
 .deck-meta strong {
   color: var(--text);
   font-weight: 800;
@@ -118,6 +130,11 @@ button:disabled {
 .import-actions {
   display: flex;
   gap: 8px;
+}
+
+.toolbar {
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .tool-button,
@@ -136,11 +153,13 @@ button:disabled {
 }
 
 .tool-button {
+  flex: 0 0 auto;
   padding: 0 14px;
 }
 
 .icon-button {
   display: grid;
+  flex: 0 0 auto;
   width: 38px;
   place-items: center;
   padding: 0;
@@ -174,15 +193,19 @@ button:disabled {
 
 .study-layout {
   display: grid;
+  height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(230px, 0.26fr) minmax(560px, 1fr) minmax(230px, 0.26fr);
+  grid-template-columns: minmax(180px, 0.24fr) minmax(0, 1fr) minmax(180px, 0.24fr);
   gap: 10px;
+  overflow: hidden;
 }
 
 .quiz-panel {
   display: grid;
+  height: 100%;
   min-height: 0;
   grid-template-rows: auto 1fr auto auto;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--panel) 84%, transparent);
@@ -208,6 +231,7 @@ button:disabled {
 
 .deck {
   display: grid;
+  overflow: hidden;
   min-height: 0;
   place-items: center;
   padding: 10px 0;
@@ -216,24 +240,31 @@ button:disabled {
 .card {
   position: relative;
   width: min(100%, 1060px);
-  height: min(74vh, 720px);
-  min-height: 500px;
+  height: 100%;
+  max-height: min(74vh, 720px);
+  max-height: min(74dvh, 720px);
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--card);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
-  transition: transform 150ms ease, opacity 150ms ease;
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease,
+    box-shadow 240ms ease;
   touch-action: manipulation;
+  will-change: transform, opacity;
 }
 
 .result-panel {
   display: flex;
   width: 100%;
-  height: calc(100vh - 76px);
+  height: 100%;
   max-height: none;
   min-height: 0;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--panel) 78%, transparent);
@@ -295,14 +326,17 @@ button:disabled {
 .brick-list {
   display: flex;
   min-height: 0;
-  flex: 1;
+  flex: 1 1 0;
   flex-direction: column-reverse;
   gap: 7px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 .brick {
+  flex: 0 0 auto;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -329,17 +363,17 @@ button:disabled {
 }
 
 .card.is-flipped {
-  transform: none;
+  transform: translateY(-2px);
 }
 
 .card.swipe-left {
   opacity: 0;
-  transform: translateX(-72px) rotate(-2deg);
+  transform: translateX(-42px) rotate(-1deg) scale(0.992);
 }
 
 .card.swipe-right {
   opacity: 0;
-  transform: translateX(72px) rotate(2deg);
+  transform: translateX(42px) rotate(1deg) scale(0.992);
 }
 
 .card-face {
@@ -349,10 +383,12 @@ button:disabled {
   flex-direction: column;
   gap: 16px;
   overflow: auto;
-  padding: clamp(20px, 3.5vw, 42px);
+  padding: clamp(18px, 3vw, 42px);
   border-radius: 14px;
   opacity: 1;
-  transition: opacity 130ms ease, visibility 130ms ease;
+  transition:
+    opacity 180ms ease,
+    visibility 180ms ease;
   visibility: visible;
 }
 
@@ -386,8 +422,23 @@ button:disabled {
 .rendered {
   min-width: 0;
   overflow-wrap: anywhere;
+  hyphens: auto;
   font-size: clamp(1.04rem, 1.35vw, 1.2rem);
   line-height: 1.58;
+}
+
+.card-question .rendered {
+  font-size: clamp(1.45rem, 4.8vw, 2.35rem);
+  line-height: 1.28;
+}
+
+.card-question .rendered :is(h1, h2, h3, p) {
+  overflow-wrap: anywhere;
+}
+
+.card-question .rendered :is(h1, h2, h3) {
+  font-size: 1em;
+  line-height: inherit;
 }
 
 .rendered > :first-child {
@@ -564,6 +615,7 @@ button:disabled {
   display: none;
   align-items: center;
   justify-content: center;
+  overflow: auto;
   background: rgba(0, 0, 0, 0.46);
   padding: 18px;
 }
@@ -573,7 +625,9 @@ button:disabled {
 }
 
 .import-card {
-  width: min(760px, 100%);
+  width: min(760px, calc(100vw - 36px));
+  min-width: 0;
+  max-width: 100%;
   max-height: min(760px, calc(100vh - 36px));
   overflow: auto;
   border: 1px solid var(--line);
@@ -589,6 +643,10 @@ button:disabled {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.import-head > div {
+  min-width: 0;
 }
 
 .import-head h1 {
@@ -749,38 +807,84 @@ textarea {
 
 @media (max-width: 720px) {
   .app-shell {
-    width: min(100% - 10px, 680px);
-    padding: 8px 0;
+    width: calc(100% - 10px);
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+    padding: 6px 0;
   }
 
   .appbar {
+    grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
-    flex-direction: column;
+    gap: 8px;
   }
 
   .deck-meta,
   .toolbar {
-    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .deck-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    white-space: normal;
   }
 
   .deck-title {
     max-width: 100%;
-    flex-basis: 100%;
+    grid-column: 1 / -1;
+    font-size: 0.72rem;
+  }
+
+  .deck-meta strong,
+  #cardCount {
+    font-size: 0.82rem;
+  }
+
+  .toolbar {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  .tool-button,
+  .icon-button {
+    min-height: 34px;
+  }
+
+  .tool-button {
+    padding: 0 11px;
+  }
+
+  .icon-button {
+    width: 34px;
   }
 
   .quiz-panel {
-    padding: 10px;
+    min-height: calc(100svh - 118px);
+    min-height: calc(100dvh - 118px);
+    padding: 8px;
   }
 
   .study-layout {
-    grid-template-columns: 1fr;
+    display: flex;
+    height: auto;
+    min-height: 0;
+    flex-direction: column;
+    gap: 8px;
+    overflow: visible;
   }
 
   .result-panel {
-    height: auto;
-    max-height: 220px;
-    min-height: 130px;
+    height: 150px;
+    max-height: 150px;
+    min-height: 92px;
     order: 2;
+    padding: 8px;
   }
 
   .known-panel {
@@ -788,24 +892,160 @@ textarea {
   }
 
   .card {
-    height: 62vh;
-    min-height: 390px;
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    border-radius: 12px;
   }
 
   .deck {
-    padding: 10px 0;
+    min-height: 0;
+    padding: 8px 0;
   }
 
-  .card {
-    order: 3;
+  .card-face {
+    gap: 12px;
+    padding: clamp(16px, 5vw, 24px);
+    border-radius: 12px;
   }
 
   .controls button {
+    width: 44px;
+    height: 42px;
     min-width: 0;
+  }
+
+  .replay-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .replay-actions button {
+    min-height: 28px;
+    padding: 0 10px;
+  }
+
+  .rendered {
+    font-size: clamp(1rem, 3.7vw, 1.15rem);
+  }
+
+  .card-question .rendered {
+    font-size: clamp(1.42rem, 6.2vw, 2rem);
+  }
+
+  .face-label {
+    padding: 4px 9px;
+    font-size: 0.66rem;
+  }
+
+  .brick {
+    padding: 7px 8px;
+    font-size: 0.74rem;
+  }
+
+  .import-panel {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .import-card {
+    width: min(100%, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+    padding: 16px;
+  }
+
+  .import-head {
+    gap: 10px;
+  }
+
+  .import-head h1 {
+    font-size: 1.2rem;
+  }
+
+  textarea {
+    min-height: 180px;
   }
 
   .url-row {
     flex-direction: column;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1080px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .appbar {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .toolbar {
+    justify-content: flex-start;
+  }
+
+  .study-layout {
+    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .quiz-panel {
+    min-height: min(760px, calc(100dvh - 86px));
+    order: 1;
+  }
+
+  .result-panel {
+    height: 180px;
+    max-height: 180px;
+    min-height: 120px;
+    order: 2;
+  }
+
+  .known-panel {
+    order: 3;
+  }
+
+  .card {
+    max-height: none;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .app-shell {
+    width: calc(100% - 8px);
+  }
+
+  .deck-meta {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .deck-title,
+  .deck-meta strong,
+  #positionText,
+  #cardCount {
+    grid-column: 1 / -1;
+  }
+
+  .quiz-panel {
+    min-height: calc(100svh - 138px);
+    min-height: calc(100dvh - 138px);
+  }
+
+  .card-question .rendered {
+    font-size: clamp(1.32rem, 7vw, 1.72rem);
+  }
+
+  .controls button {
+    width: 42px;
+    height: 40px;
   }
 }
 
