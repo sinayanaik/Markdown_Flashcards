@@ -406,6 +406,22 @@ function preprocessLineDelimitedMath(markdown) {
     buffer = [];
   };
 
+  const startsWithDelimiter = (line) => {
+    if (/^\s*\$\$/.test(line)) return "$$";
+    if (/^\s*\$(?!\$)/.test(line)) return "$";
+    return "";
+  };
+
+  const endsWithDelimiter = (line, value) => {
+    const rightTrimmed = line.trimEnd();
+    if (!rightTrimmed.endsWith(value)) return false;
+    if (value === "$" && rightTrimmed.endsWith("$$")) return false;
+    return rightTrimmed.at(-value.length - 1) !== "\\";
+  };
+
+  const removeOpeningDelimiter = (line, value) => line.replace(value === "$$" ? /^\s*\$\$/ : /^\s*\$(?!\$)/, "");
+  const removeClosingDelimiter = (line, value) => line.trimEnd().slice(0, -value.length);
+
   for (const line of lines) {
     const trimmed = line.trim();
     const isDelimiter = trimmed === "$$" || trimmed === "$";
@@ -413,6 +429,9 @@ function preprocessLineDelimitedMath(markdown) {
 
     if (delimiter) {
       if (trimmed === delimiter) {
+        flushMath();
+      } else if (endsWithDelimiter(line, delimiter)) {
+        buffer.push(removeClosingDelimiter(line, delimiter));
         flushMath();
       } else {
         buffer.push(line);
@@ -434,6 +453,13 @@ function preprocessLineDelimitedMath(markdown) {
     if (isDelimiter) {
       delimiter = trimmed;
       buffer = [];
+      continue;
+    }
+
+    const openingDelimiter = startsWithDelimiter(line);
+    if (openingDelimiter && !endsWithDelimiter(line, openingDelimiter)) {
+      delimiter = openingDelimiter;
+      buffer = [removeOpeningDelimiter(line, openingDelimiter)];
       continue;
     }
 

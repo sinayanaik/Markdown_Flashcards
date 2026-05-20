@@ -209,7 +209,6 @@ button:disabled {
 .deck {
   display: grid;
   min-height: 0;
-  perspective: 1400px;
   place-items: center;
   padding: 10px 0;
 }
@@ -223,8 +222,7 @@ button:disabled {
   border-radius: 14px;
   background: var(--card);
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
-  transform-style: preserve-3d;
-  transition: transform 170ms ease, opacity 150ms ease;
+  transition: transform 150ms ease, opacity 150ms ease;
   touch-action: manipulation;
 }
 
@@ -331,7 +329,7 @@ button:disabled {
 }
 
 .card.is-flipped {
-  transform: rotateY(180deg);
+  transform: none;
 }
 
 .card.swipe-left {
@@ -353,12 +351,25 @@ button:disabled {
   overflow: auto;
   padding: clamp(20px, 3.5vw, 42px);
   border-radius: 14px;
-  backface-visibility: hidden;
+  opacity: 1;
+  transition: opacity 130ms ease, visibility 130ms ease;
+  visibility: visible;
 }
 
 .card-answer {
   background: var(--card-answer);
-  transform: rotateY(180deg);
+  opacity: 0;
+  visibility: hidden;
+}
+
+.card.is-flipped .card-question {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.card.is-flipped .card-answer {
+  opacity: 1;
+  visibility: visible;
 }
 
 .face-label {
