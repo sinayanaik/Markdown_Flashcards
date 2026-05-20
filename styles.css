@@ -471,6 +471,53 @@ button:disabled {
   margin-bottom: 0;
 }
 
+.rendered :is(ul, ol),
+.fit-content :is(ul, ol) {
+  margin: 0.65em 0 0.65em 1.35em;
+  padding-left: 1.1em;
+}
+
+.rendered ul,
+.fit-content ul {
+  list-style: disc outside;
+}
+
+.rendered ol,
+.fit-content ol {
+  list-style: decimal outside;
+}
+
+.rendered ul ul,
+.fit-content ul ul {
+  list-style-type: circle;
+}
+
+.rendered ul ul ul,
+.fit-content ul ul ul {
+  list-style-type: square;
+}
+
+.rendered li,
+.fit-content li {
+  display: list-item;
+  padding-left: 0.15em;
+}
+
+.rendered li + li,
+.fit-content li + li {
+  margin-top: 0.35em;
+}
+
+.rendered li > :first-child,
+.fit-content li > :first-child {
+  margin-top: 0;
+}
+
+.rendered li > :last-child,
+.fit-content li > :last-child {
+  margin-bottom: 0;
+}
+
 .rendered pre {
   overflow: auto;
   border-radius: 10px;
