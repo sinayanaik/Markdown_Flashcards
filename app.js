@@ -48,8 +48,6 @@ const state = {
   dragLastX: 0,
   dragLastY: 0,
   dragLastTime: 0,
-  dragAxis: "",
-  dragScrollNode: null,
   dragging: false,
   dragMoved: false,
   suppressClickUntil: 0,
@@ -61,8 +59,6 @@ const deckStorageKey = "swipe-notes-current-deck-v1";
 const swipeConfig = {
   intentDistance: 12,
   intentRatio: 1.12,
-  verticalCancelDistance: 18,
-  verticalCancelRatio: 1.28,
   commitRatio: 1.18,
   minCommitDistance: 66,
   maxCommitDistance: 142,
@@ -113,7 +109,6 @@ const el = {
   scoreText: document.querySelector("#scoreText"),
   progressBar: document.querySelector("#progressBar"),
   statusText: document.querySelector("#statusText"),
-  flipBtn: document.querySelector("#flipBtn"),
   prevCardBtn: document.querySelector("#prevCardBtn"),
   nextCardBtn: document.querySelector("#nextCardBtn"),
   knownBtn: document.querySelector("#knownBtn"),
@@ -478,7 +473,7 @@ async function previewCard(card) {
   if (!card) return;
   state.previewCard = card;
   state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
   await renderMarkdown(el.questionView, card.question);
   await renderMarkdown(el.answerView, card.answer);
@@ -837,7 +832,6 @@ function updateMeta() {
   el.progressBar.style.width = total ? `${(finished / total) * 100}%` : "0";
 
   const disabled = !state.previewCard && (total === 0 || state.current >= total);
-  el.flipBtn.disabled = disabled;
   el.prevCardBtn.disabled = Boolean(state.previewCard) || total === 0 || state.current <= 0;
   el.nextCardBtn.disabled = Boolean(state.previewCard) || total === 0 || state.current >= total - 1;
   el.knownBtn.disabled = disabled;
@@ -878,7 +872,7 @@ async function showCard(direction = 0) {
   const token = state.transitionToken;
   state.previewCard = null;
   state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
   clearCardTransitionClasses();
   el.card.style.transform = "";
   const enterClass = transitionClassFor(direction, "in");
@@ -908,7 +902,7 @@ function animateToCard(direction, updateState) {
   state.transitionToken = token;
   const exitClass = transitionClassFor(direction, "out");
   clearCardTransitionClasses();
-  el.card.classList.remove("swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  el.card.classList.remove("swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
   if (exitClass) el.card.classList.add(exitClass);
 
@@ -968,7 +962,7 @@ function navigateCard(direction, animationDirection = direction) {
 function moveCard(result) {
   const card = state.previewCard || state.cards[state.current];
   if (!card) return;
-  el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  el.card.classList.remove("is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
   state.statusById[card.id] = result;
   syncResults();
@@ -1557,17 +1551,7 @@ function dragVelocity(current, previous, time) {
   return (current - previous) / elapsed;
 }
 
-function scrollableCardFace(target) {
-  const face = closestElement(target, ".card-face");
-  if (!face) return null;
-  return face.scrollHeight > face.clientHeight + 2 ? face : null;
-}
-
-function shouldLetCardFaceScroll() {
-  return Boolean(state.dragScrollNode);
-}
-
-function beginSwipe(clientX, clientY, pointerId = null, pointerType = "", target = null) {
+function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   const time = performance.now();
   state.dragging = false;
   state.dragMoved = false;
@@ -1582,8 +1566,6 @@ function beginSwipe(clientX, clientY, pointerId = null, pointerType = "", target
   state.dragPointerId = pointerId;
   state.dragPointerType = pointerType;
   state.dragCaptured = false;
-  state.dragAxis = "";
-  state.dragScrollNode = scrollableCardFace(target);
 }
 
 function resetCardDrag() {
@@ -1592,16 +1574,13 @@ function resetCardDrag() {
   state.dragPointerType = "";
   state.dragCaptured = false;
   state.dragMoved = false;
-  state.dragAxis = "";
-  state.dragScrollNode = null;
-  el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  el.card.classList.remove("is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
 }
 
 function updateSwipe(clientX, clientY, event) {
   const time = performance.now();
   const velocityX = dragVelocity(clientX, state.dragLastX, time);
-  const velocityY = dragVelocity(clientY, state.dragLastY, time);
   state.dragCurrentX = clientX;
   state.dragCurrentY = clientY;
 
@@ -1622,13 +1601,13 @@ function updateSwipe(clientX, clientY, event) {
       return;
     }
 
-    if (hasVerticalIntent && shouldLetCardFaceScroll()) {
+    if (hasVerticalIntent) {
+      state.suppressClickUntil = time + 360;
       resetCardDrag();
       return;
     }
 
     state.dragging = true;
-    state.dragAxis = hasHorizontalIntent ? "x" : "y";
     if (event?.pointerId !== undefined && !state.dragCaptured) {
       el.card.setPointerCapture?.(event.pointerId);
       state.dragCaptured = true;
@@ -1638,27 +1617,14 @@ function updateSwipe(clientX, clientY, event) {
 
   if (event?.cancelable && typeof event.preventDefault === "function") event.preventDefault();
 
-  if (state.dragAxis === "y") {
-    const direction = dy > 0 ? 1 : -1;
-    const resisted = direction * Math.min(absY * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
-    const progress = Math.min(absY / swipeCommitDistance(), 1);
-    const flicking = absY >= swipeConfig.flickDistance && Math.abs(velocityY) >= swipeConfig.flickVelocity;
-    const choosing = progress > 0.45 || flicking;
-    el.card.classList.toggle("drag-next", dy < 0 && choosing);
-    el.card.classList.toggle("drag-prev", dy > 0 && choosing);
-    el.card.classList.remove("drag-known", "drag-review");
-    el.card.style.transform = `translateY(${resisted}px) scale(${1 - progress * 0.01})`;
-  } else {
-    const direction = dx > 0 ? 1 : -1;
-    const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
-    const progress = Math.min(absX / swipeCommitDistance(), 1);
-    const flicking = absX >= swipeConfig.flickDistance && Math.abs(velocityX) >= swipeConfig.flickVelocity;
-    const choosing = progress > 0.45 || flicking;
-    el.card.classList.toggle("drag-known", dx > 0 && choosing);
-    el.card.classList.toggle("drag-review", dx < 0 && choosing);
-    el.card.classList.remove("drag-prev", "drag-next");
-    el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 2.2}deg) scale(${1 - progress * 0.01})`;
-  }
+  const direction = dx > 0 ? 1 : -1;
+  const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
+  const progress = Math.min(absX / swipeCommitDistance(), 1);
+  const flicking = absX >= swipeConfig.flickDistance && Math.abs(velocityX) >= swipeConfig.flickVelocity;
+  const choosing = progress > 0.45 || flicking;
+  el.card.classList.toggle("drag-known", dx > 0 && choosing);
+  el.card.classList.toggle("drag-review", dx < 0 && choosing);
+  el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 2.2}deg) scale(${1 - progress * 0.01})`;
 
   state.dragLastX = clientX;
   state.dragLastY = clientY;
@@ -1671,14 +1637,12 @@ function finishSwipe() {
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
   const elapsed = Math.max(performance.now() - state.dragStartTime, 1);
-  const primaryDistance = state.dragAxis === "y" ? absY : absX;
-  const secondaryDistance = state.dragAxis === "y" ? absX : absY;
-  const averageVelocity = primaryDistance / elapsed;
+  const averageVelocity = absX / elapsed;
   const committed = state.dragging
-    && primaryDistance >= secondaryDistance * swipeConfig.commitRatio
+    && absX >= absY * swipeConfig.commitRatio
     && (
-      primaryDistance >= swipeCommitDistance()
-      || (primaryDistance >= swipeConfig.flickDistance && averageVelocity >= swipeConfig.flickVelocity)
+      absX >= swipeCommitDistance()
+      || (absX >= swipeConfig.flickDistance && averageVelocity >= swipeConfig.flickVelocity)
     );
 
   if (state.dragMoved || state.dragging) {
@@ -1686,22 +1650,15 @@ function finishSwipe() {
   }
 
   if (committed) {
-    el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+    el.card.classList.remove("is-dragging", "drag-review", "drag-known");
     el.card.style.transform = "";
-    const axis = state.dragAxis;
     state.dragging = false;
     state.dragPointerId = null;
     state.dragPointerType = "";
     state.dragCaptured = false;
     state.dragMoved = false;
-    state.dragAxis = "";
-    state.dragScrollNode = null;
 
-    if (axis === "y") {
-      navigateCard(dy < 0 ? 1 : -1, dy < 0 ? -1 : 1);
-    } else {
-      moveCard(dx > 0 ? "known" : "review");
-    }
+    moveCard(dx > 0 ? "known" : "review");
     return;
   }
 
@@ -1711,7 +1668,7 @@ function finishSwipe() {
 function handlePointerDown(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   if (event.pointerType === "mouse" && isSelectableCardText(event.target)) return;
-  beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType, event.target);
+  beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
 }
 
 function handlePointerMove(event) {
@@ -1740,7 +1697,7 @@ function handleTouchStart(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   const point = touchPoint(event);
   if (!point) return;
-  beginSwipe(point.clientX, point.clientY, "touch", "touch", event.target);
+  beginSwipe(point.clientX, point.clientY, "touch", "touch");
 }
 
 function handleTouchMove(event) {
@@ -1801,7 +1758,6 @@ el.themeBtn.addEventListener("click", () => {
   setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
 el.fileInput.addEventListener("change", (event) => loadFile(event.target.files[0]));
-el.flipBtn.addEventListener("click", flipCard);
 el.prevCardBtn.addEventListener("click", () => navigateCard(-1));
 el.nextCardBtn.addEventListener("click", () => navigateCard(1));
 el.knownBtn.addEventListener("click", () => moveCard("known"));

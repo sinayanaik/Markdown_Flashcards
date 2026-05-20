@@ -25,9 +25,9 @@ The app also accepts:
 
 - Swipe right or press `ArrowRight` for known cards.
 - Swipe left or press `ArrowLeft` for review cards.
-- Swipe up for next, swipe down for previous, press `ArrowDown` / `ArrowUp`, or use the up/down buttons to move between cards without categorizing.
-- On long cards, vertical swipes inside the card scroll the answer/question content; use the up/down buttons or keyboard to traverse while reading scrollable content.
-- Click, press `Space`, or press `Enter` to flip.
+- Press `ArrowDown` / `ArrowUp`, or use the up/down buttons to move between cards without categorizing.
+- On mobile, vertical gestures are reserved for scrolling the page and long card content.
+- Click or tap the card, press `Space`, or press `Enter` to flip.
 - Renders Markdown, tables, code blocks, LaTeX with KaTeX, and Mermaid diagrams.
 - Imports pasted Markdown, uploaded `.md` / `.txt` / `.json` / `.zip` files, direct raw Markdown URLs, and public pages through Jina Reader fallback.
 - Persists the current deck and known/review markers in the browser.
