@@ -27,8 +27,9 @@ The app also accepts:
 - Swipe left or press `ArrowLeft` for review cards.
 - Click, press `Space`, or press `Enter` to flip.
 - Renders Markdown, tables, code blocks, LaTeX with KaTeX, and Mermaid diagrams.
-- Imports pasted Markdown, uploaded `.md` / `.txt` / `.zip` files, direct raw Markdown URLs, and public pages through Jina Reader fallback.
-- Dark mode, compact deck-first layout, Markdown export, and PDF export for known, review, or all cards.
+- Imports pasted Markdown, uploaded `.md` / `.txt` / `.json` / `.zip` files, direct raw Markdown URLs, and public pages through Jina Reader fallback.
+- Persists the current deck and known/review markers in the browser.
+- Dark mode, compact deck-first layout, Markdown export, JSON export with markers, and PDF export for known, review, or all cards.
 
 Private Notion pages cannot be read securely by a static GitHub Pages app because using the Notion API requires a secret token. Public Notion pages can also hide collapsed toggle bodies from URL readers; if the import finds only question headings, export the page as Markdown or paste the expanded toggle content.
 

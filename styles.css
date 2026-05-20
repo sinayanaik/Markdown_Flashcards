@@ -1078,10 +1078,21 @@ textarea {
   }
 
   .toolbar {
+    flex-wrap: wrap;
     justify-content: flex-start;
-    overflow-x: auto;
+    overflow: visible;
     padding-bottom: 2px;
-    scrollbar-width: thin;
+  }
+
+  .menu-wrap {
+    position: relative;
+  }
+
+  .export-menu {
+    top: calc(100% + 6px);
+    right: auto;
+    left: 0;
+    width: min(220px, calc(100vw - 16px));
   }
 
   .tool-button,

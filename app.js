@@ -28,6 +28,7 @@ const state = {
   statusById: {},
   previewCard: null,
   deckTitle: "",
+  sourceTitle: "",
   results: {
     known: [],
     review: []
@@ -51,6 +52,8 @@ const state = {
   suppressClickUntil: 0
 };
 
+const deckStorageKey = "swipe-notes-current-deck-v1";
+
 const swipeConfig = {
   intentDistance: 12,
   intentRatio: 1.12,
@@ -67,6 +70,7 @@ const swipeConfig = {
 };
 
 let allCardsRenderId = 0;
+let printTitleBeforeExport = "";
 
 const el = {
   sourceInput: document.querySelector("#sourceInput"),
@@ -189,6 +193,26 @@ function humanizeSourceTitle(value) {
     .replace(/[-_\s]+[a-f0-9]{32}$/i, "")
     .replace(/[-_\s]+[a-f0-9]{8,}$/i, "");
   return withoutNotionId
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourceFileTitle(value) {
+  const cleaned = normalizeMarkdown(String(value || ""))
+    .split(/[?#]/)[0]
+    .split("/")
+    .filter(Boolean)
+    .pop() || "";
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(cleaned);
+    } catch {
+      return cleaned;
+    }
+  })();
+  return decoded
+    .replace(/\.(md|markdown|mdown|mkdn|txt|json|zip)$/i, "")
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -692,6 +716,7 @@ function setAllCardStatus(cardId, status) {
     state.statusById[cardId] = status;
   }
   syncResults();
+  savePersistedDeck();
   updateMeta();
   updateAllCardStatuses();
 }
@@ -832,13 +857,16 @@ function buildCards(titleHint = "") {
   state.masterCards = cards.slice();
   state.current = 0;
   state.deckTitle = cards.length ? inferDeckTitle(source, titleHint) : "";
+  state.sourceTitle = cards.length ? sourceFileTitle(titleHint) || state.deckTitle : "";
   resetResults();
   closeAllCardsPanel();
 
   if (cards.length) {
     setStatus(`Built ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
+    savePersistedDeck();
     closeImportPanel();
   } else {
+    savePersistedDeck();
     const message = headingCount
       ? `Found ${headingCount} question heading${headingCount === 1 ? "" : "s"}, but no answer text. This Notion page is exposing collapsed toggle titles only; export Markdown or paste expanded toggle content.`
       : "No cards found. Use > toggle blocks, Q:/A: blocks, question headings, or structured note sections with answer content.";
@@ -861,6 +889,7 @@ function moveCard(result) {
   el.card.style.transform = "";
   state.statusById[card.id] = result;
   syncResults();
+  savePersistedDeck();
 
   if (state.previewCard) {
     state.previewCard = null;
@@ -872,6 +901,7 @@ function moveCard(result) {
   el.card.classList.add(result === "known" ? "swipe-right" : "swipe-left");
   window.setTimeout(() => {
     state.current += 1;
+    savePersistedDeck();
     showCard();
   }, 240);
 }
@@ -891,6 +921,7 @@ function resetQuiz() {
   state.current = 0;
   state.previewCard = null;
   setStatus("Studying all cards.");
+  savePersistedDeck();
   showCard();
 }
 
@@ -919,6 +950,115 @@ function formatCardList(title, cards) {
     ? cards.map((card, index) => `### ${index + 1}. ${card.question}\n\n${card.answer}`).join("\n\n")
     : "_None_";
   return `## ${title}\n\n${body}`;
+}
+
+function slugifyFileName(value, fallback = "flashcards") {
+  const source = String(value || "").trim() || fallback;
+  const cleaned = source
+    .replace(/\.(md|markdown|mdown|mkdn|txt|json|zip)$/i, "")
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || fallback;
+}
+
+function exportBaseName(scope = "all") {
+  const base = slugifyFileName(state.deckTitle || state.sourceTitle || "flashcards");
+  if (scope === "known") return `${base} - known`;
+  if (scope === "review") return `${base} - review`;
+  return base;
+}
+
+function normalizeCardStatus(status) {
+  return status === "known" || status === "review" ? status : "";
+}
+
+function deckSnapshot() {
+  return {
+    app: "markdown-flashcards",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    deckTitle: state.deckTitle || "",
+    sourceTitle: state.sourceTitle || state.deckTitle || "",
+    current: Number.isFinite(state.current) ? state.current : 0,
+    cards: state.masterCards.map((card, index) => ({
+      id: card.id || `${index}-${card.question.slice(0, 32)}`,
+      question: card.question,
+      answer: card.answer,
+      status: normalizeCardStatus(state.statusById[card.id])
+    }))
+  };
+}
+
+function savePersistedDeck() {
+  try {
+    if (!state.masterCards.length) {
+      localStorage.removeItem(deckStorageKey);
+      return;
+    }
+
+    localStorage.setItem(deckStorageKey, JSON.stringify(deckSnapshot()));
+  } catch (error) {
+    console.warn("Could not save deck state", error);
+  }
+}
+
+function loadDeckSnapshot(payload, titleHint = "") {
+  if (!payload || !Array.isArray(payload.cards)) {
+    throw new Error("Invalid flashcard JSON");
+  }
+
+  const usedIds = new Set();
+  const statusById = {};
+  const cards = payload.cards
+    .map((rawCard, index) => {
+      const question = String(rawCard?.question || "").trim();
+      const answer = String(rawCard?.answer || "").trim();
+      if (!question || !answer) return null;
+
+      let id = String(rawCard.id || `${index}-${question.slice(0, 32)}`);
+      if (usedIds.has(id)) id = `${index}-${id}`;
+      usedIds.add(id);
+
+      const status = normalizeCardStatus(rawCard?.status || payload.statusById?.[id]);
+      if (status) statusById[id] = status;
+
+      return { id, question, answer };
+    })
+    .filter(Boolean);
+
+  if (!cards.length) {
+    throw new Error("No cards in flashcard JSON");
+  }
+
+  state.cards = cards.slice();
+  state.masterCards = cards.slice();
+  state.statusById = statusById;
+  state.current = Math.min(Math.max(Number(payload.current) || 0, 0), cards.length);
+  state.previewCard = null;
+  state.flipped = false;
+  state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
+  state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
+  syncResults();
+  closeAllCardsPanel();
+  savePersistedDeck();
+  showCard();
+}
+
+function loadPersistedDeck() {
+  try {
+    const stored = localStorage.getItem(deckStorageKey);
+    if (!stored) return false;
+
+    loadDeckSnapshot(JSON.parse(stored), "Saved deck");
+    setStatus(`Restored ${state.masterCards.length} saved card${state.masterCards.length === 1 ? "" : "s"}.`);
+    closeImportPanel();
+    return true;
+  } catch (error) {
+    console.warn("Could not restore saved deck", error);
+    localStorage.removeItem(deckStorageKey);
+    return false;
+  }
 }
 
 function cardsForScope(scope) {
@@ -950,12 +1090,30 @@ function exportMarkdown(scope = "all") {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `flashcards-${scope}.md`;
+  link.download = `${exportBaseName(scope)}.md`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
   setStatus(`Exported ${title.toLowerCase()} as Markdown.`);
+}
+
+function exportJson() {
+  if (!state.masterCards.length) {
+    setStatus("No cards to export.", "error");
+    return;
+  }
+
+  const blob = new Blob([`${JSON.stringify(deckSnapshot(), null, 2)}\n`], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${exportBaseName("all")}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setStatus("Exported all cards and markers as JSON.");
 }
 
 function contentFits(node) {
@@ -1018,6 +1176,8 @@ async function exportPdf(scope = "all") {
   el.exportBtn.disabled = true;
   el.printRoot.innerHTML = "";
   el.printRoot.classList.add("is-preparing");
+  printTitleBeforeExport = document.title;
+  document.title = exportBaseName(scope);
   try {
     await afterPaint();
 
@@ -1055,6 +1215,8 @@ async function exportPdf(scope = "all") {
   } catch (error) {
     console.error("PDF export failed", error);
     el.printRoot.classList.remove("is-preparing");
+    if (printTitleBeforeExport) document.title = printTitleBeforeExport;
+    printTitleBeforeExport = "";
     setStatus("Could not prepare the PDF export.", "error");
   } finally {
     el.exportBtn.disabled = false;
@@ -1066,6 +1228,10 @@ function handleExportAction(format, scope) {
   if (format === "pdf") {
     setStatus("Opening PDF export...");
     window.setTimeout(() => exportPdf(scope), 0);
+    return;
+  }
+  if (format === "json") {
+    exportJson();
     return;
   }
   exportMarkdown(scope);
@@ -1138,6 +1304,7 @@ async function fetchUrl() {
       state.statusById = {};
       state.previewCard = null;
       state.deckTitle = "";
+      state.sourceTitle = "";
       state.current = 0;
       resetResults();
       setStatus("This public Notion URL only exposes collapsed question headings, not answers. Use Export -> Markdown & CSV, then upload the zip or paste the exported Markdown.", "error");
@@ -1168,6 +1335,10 @@ function isMarkdownName(name) {
 
 function isZipName(name) {
   return /\.zip$/i.test(normalizedArchiveName(name).split("?")[0]);
+}
+
+function isJsonName(name) {
+  return /\.json$/i.test(normalizedArchiveName(name).split("?")[0]);
 }
 
 async function collectMarkdownFromZip(input, prefix = "", depth = 0) {
@@ -1239,7 +1410,21 @@ function loadFile(file) {
 
   const reader = new FileReader();
   reader.addEventListener("load", () => {
-    el.sourceInput.value = String(reader.result || "");
+    const text = String(reader.result || "");
+
+    if (isJsonName(file.name) || file.type === "application/json") {
+      try {
+        loadDeckSnapshot(JSON.parse(text), file.name);
+        el.sourceInput.value = "";
+        setStatus(`Loaded ${state.masterCards.length} card${state.masterCards.length === 1 ? "" : "s"} with saved markers from ${file.name}.`);
+        closeImportPanel();
+      } catch (error) {
+        setStatus("Could not read this flashcard JSON export.", "error");
+      }
+      return;
+    }
+
+    el.sourceInput.value = text;
     setStatus(`Loaded ${file.name}.`);
     buildCards(file.name);
   });
@@ -1555,8 +1740,12 @@ el.diagramModal.addEventListener("click", (event) => {
 window.addEventListener("afterprint", () => {
   el.printRoot.classList.remove("is-preparing");
   el.printRoot.innerHTML = "";
+  if (printTitleBeforeExport) document.title = printTitleBeforeExport;
+  printTitleBeforeExport = "";
 });
 
 setTheme(localStorage.getItem("swipe-notes-theme") || "dark");
-setStatus("");
-showCard();
+if (!loadPersistedDeck()) {
+  setStatus("");
+  showCard();
+}

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="vendor/bulma.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260520-16">
+    <link rel="stylesheet" href="styles.css?v=20260520-17">
   </head>
   <body>
     <main class="app-shell">
@@ -28,6 +28,7 @@
               <button type="button" data-export="pdf" data-scope="review">Review PDF</button>
               <button type="button" data-export="pdf" data-scope="all">All PDF</button>
               <button type="button" data-export="markdown" data-scope="all">All Markdown</button>
+              <button type="button" data-export="json" data-scope="all">All JSON</button>
             </div>
           </div>
           <button class="tool-button button is-small" id="allCardsBtn" type="button">All</button>
@@ -105,8 +106,8 @@
         </div>
 
         <label class="file-pick">
-          <input id="fileInput" type="file" accept=".md,.markdown,.txt,.zip,text/markdown,text/plain,application/zip,application/x-zip-compressed">
-          <span>Open Markdown or zip</span>
+          <input id="fileInput" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
+          <span>Open Markdown, JSON, or zip</span>
         </label>
 
         <label class="field">
@@ -160,6 +161,6 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="app.js?v=20260520-15"></script>
+    <script src="app.js?v=20260520-20"></script>
   </body>
 </html>
