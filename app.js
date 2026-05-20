@@ -551,14 +551,16 @@ function preprocessSpecialBlocks(markdown) {
   return output;
 }
 
-async function renderMarkdown(container, markdown) {
+function markdownToSafeHtml(markdown) {
   const prepared = preprocessSpecialBlocks(markdown || "");
   const html = marked.parse(prepared);
-  container.innerHTML = DOMPurify.sanitize(html, {
+  return DOMPurify.sanitize(html, {
     ADD_TAGS: ["foreignObject"],
     ADD_ATTR: ["target", "rel", "class", "data-tex", "data-diagram"]
   });
+}
 
+async function enhanceRenderedMarkdown(container) {
   container.querySelectorAll("a[href]").forEach((link) => {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
@@ -599,6 +601,11 @@ async function renderMarkdown(container, markdown) {
       console.warn("Mermaid render failed", error);
     }
   }
+}
+
+async function renderMarkdown(container, markdown) {
+  container.innerHTML = markdownToSafeHtml(markdown);
+  await enhanceRenderedMarkdown(container);
 }
 
 function addDiagramZoomControl(node) {
@@ -906,24 +913,13 @@ function exportMarkdown(scope = "all") {
   setStatus(`Exported ${title.toLowerCase()} as Markdown.`);
 }
 
-async function renderForExport(markdown) {
-  const container = document.createElement("div");
-  container.className = "rendered";
-  container.style.position = "fixed";
-  container.style.left = "-10000px";
-  container.style.width = "720px";
-  document.body.appendChild(container);
-  await renderMarkdown(container, markdown);
-  const html = container.innerHTML;
-  container.remove();
-  return html;
-}
-
 function contentFits(node) {
   return node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1;
 }
 
 function fitPrintNode(node) {
+  if (contentFits(node)) return;
+
   node.style.transform = "";
   node.style.width = "";
 
@@ -931,7 +927,7 @@ function fitPrintNode(node) {
   let high = 88;
   let best = low;
 
-  for (let index = 0; index < 18; index += 1) {
+  for (let index = 0; index < 10; index += 1) {
     const mid = (low + high) / 2;
     node.style.fontSize = `${mid}px`;
     if (contentFits(node)) {
@@ -957,6 +953,12 @@ function fitPrintPages() {
   el.printRoot.querySelectorAll(".fit-content").forEach(fitPrintNode);
 }
 
+function afterPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
 async function exportPdf(scope = "all") {
   const cards = cardsForScope(scope);
   const title = scope === "known" ? "Known Cards" : scope === "review" ? "Review Cards" : "All Cards";
@@ -966,44 +968,57 @@ async function exportPdf(scope = "all") {
   }
 
   setStatus(`Preparing ${title.toLowerCase()} PDF...`);
-
-  const pages = [];
-  for (const [index, card] of cards.entries()) {
-    const question = await renderForExport(card.question);
-    const answer = await renderForExport(card.answer);
-    pages.push(`
-      <section class="print-page">
-        <div class="page-kicker">Question ${index + 1}</div>
-        <div class="fit-content">${question}</div>
-      </section>
-      <section class="print-page">
-        <div class="page-kicker">Answer ${index + 1}</div>
-        <div class="fit-content">${answer}</div>
-      </section>
-    `);
-  }
-
-  el.printRoot.innerHTML = `
-    <h1 class="print-title">${escapeHtml(title)}</h1>
-    ${pages.join("\n")}
-  `;
+  el.exportBtn.disabled = true;
+  el.printRoot.innerHTML = "";
   el.printRoot.classList.add("is-preparing");
+  try {
+    await afterPaint();
 
-  window.setTimeout(() => {
+    const pages = [];
+    for (const [index, card] of cards.entries()) {
+      pages.push(`
+        <section class="print-page">
+          <div class="page-kicker">Question ${index + 1}</div>
+          <div class="fit-content">${markdownToSafeHtml(card.question)}</div>
+        </section>
+        <section class="print-page">
+          <div class="page-kicker">Answer ${index + 1}</div>
+          <div class="fit-content">${markdownToSafeHtml(card.answer)}</div>
+        </section>
+      `);
+
+      if ((index + 1) % 20 === 0) {
+        setStatus(`Preparing ${title.toLowerCase()} PDF... ${index + 1}/${cards.length}`);
+        await afterPaint();
+      }
+    }
+
+    el.printRoot.innerHTML = `
+      <h1 class="print-title">${escapeHtml(title)}</h1>
+      ${pages.join("\n")}
+    `;
+    await enhanceRenderedMarkdown(el.printRoot);
+    await (document.fonts?.ready || Promise.resolve());
+    await afterPaint();
+
     fitPrintPages();
-    window.setTimeout(() => {
-      fitPrintPages();
-      el.printRoot.classList.remove("is-preparing");
-      window.print();
-      setStatus(`Opened ${title.toLowerCase()} print dialog.`);
-    }, 200);
-  }, 0);
+    el.printRoot.classList.remove("is-preparing");
+    window.print();
+    setStatus(`Opened ${title.toLowerCase()} print dialog.`);
+  } catch (error) {
+    console.error("PDF export failed", error);
+    el.printRoot.classList.remove("is-preparing");
+    setStatus("Could not prepare the PDF export.", "error");
+  } finally {
+    el.exportBtn.disabled = false;
+  }
 }
 
 function handleExportAction(format, scope) {
   el.exportMenu.hidden = true;
   if (format === "pdf") {
-    exportPdf(scope);
+    setStatus("Opening PDF export...");
+    window.setTimeout(() => exportPdf(scope), 0);
     return;
   }
   exportMarkdown(scope);
@@ -1436,10 +1451,12 @@ el.card.addEventListener("pointerdown", handlePointerDown);
 el.card.addEventListener("pointermove", handlePointerMove);
 el.card.addEventListener("pointerup", handlePointerUp);
 el.card.addEventListener("pointercancel", handlePointerCancel);
-el.card.addEventListener("touchstart", handleTouchStart, { passive: true });
-el.card.addEventListener("touchmove", handleTouchMove, { passive: false });
-el.card.addEventListener("touchend", handleTouchEnd);
-el.card.addEventListener("touchcancel", handleTouchCancel);
+if (!window.PointerEvent) {
+  el.card.addEventListener("touchstart", handleTouchStart, { passive: true });
+  el.card.addEventListener("touchmove", handleTouchMove, { passive: false });
+  el.card.addEventListener("touchend", handleTouchEnd);
+  el.card.addEventListener("touchcancel", handleTouchCancel);
+}
 
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea")) return;

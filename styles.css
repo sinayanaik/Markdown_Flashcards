@@ -406,7 +406,8 @@ button:disabled {
     opacity 180ms ease,
     visibility 180ms ease;
   visibility: visible;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: auto;
+  overscroll-behavior-x: contain;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
 }
