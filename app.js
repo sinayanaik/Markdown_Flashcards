@@ -266,6 +266,7 @@ async function loadWebDeck(deckId) {
     savePersistedDeck();
     setStatus(`Loaded ${cards.length} cards from web successfully.`);
     document.getElementById("webDecksPanel").hidden = true;
+    closeImportPanel();
     showCard();
   } catch (error) {
     setStatus("Failed to load deck from web.", "error");
@@ -387,6 +388,7 @@ const el = {
   fileInput: document.querySelector("#fileInput"),
   fetchBtn: document.querySelector("#fetchBtn"),
   parseBtn: document.querySelector("#parseBtn"),
+  openWebDecksFromImportBtn: document.querySelector("#openWebDecksFromImportBtn"),
   sampleBtn: document.querySelector("#sampleBtn"),
   importBtn: document.querySelector("#importBtn"),
   closeImportBtn: document.querySelector("#closeImportBtn"),
@@ -550,6 +552,14 @@ async function editCurrentDeckTitle() {
 
 function openImportPanel() {
   el.importPanel.classList.add("is-open");
+}
+
+function openWebDecksPanel() {
+  const panel = document.getElementById("webDecksPanel");
+  if (!panel) return;
+
+  panel.hidden = false;
+  fetchWebDecks();
 }
 
 function closeImportPanel() {
@@ -1515,14 +1525,9 @@ function deckSnapshot() {
 
 function savePersistedDeck() {
   try {
-    if (!state.masterCards.length) {
-      localStorage.removeItem(deckStorageKey);
-      return;
-    }
-
-    localStorage.setItem(deckStorageKey, JSON.stringify(deckSnapshot()));
+    localStorage.removeItem(deckStorageKey);
   } catch (error) {
-    console.warn("Could not save deck state", error);
+    console.warn("Could not clear deck state", error);
   }
 }
 
@@ -2176,11 +2181,6 @@ function handleTouchCancel() {
 
 
 
-if (document.getElementById("webDecksBtn")) {
-  document.getElementById("webDecksBtn").addEventListener("click", () => {
-    document.getElementById("webDecksPanel").hidden = false;
-  });
-}
 if (document.getElementById("closeWebDecksBtn")) {
   document.getElementById("closeWebDecksBtn").addEventListener("click", () => {
     document.getElementById("webDecksPanel").hidden = true;
@@ -2204,6 +2204,7 @@ el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
 el.importBtn.addEventListener("click", openImportPanel);
+el.openWebDecksFromImportBtn.addEventListener("click", openWebDecksPanel);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
 el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
@@ -2316,7 +2317,6 @@ window.addEventListener("afterprint", () => {
 });
 
 setTheme(localStorage.getItem("swipe-notes-theme") || "dark");
-if (!loadPersistedDeck()) {
-  setStatus("");
-  showCard();
-}
+localStorage.removeItem(deckStorageKey);
+setStatus("");
+showCard();

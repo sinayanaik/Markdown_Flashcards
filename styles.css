@@ -1037,6 +1037,17 @@ textarea {
   padding: 0 14px;
 }
 
+.import-actions button:not(:first-child) {
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 0 14px;
+}
+
+.import-actions button:not(:first-child):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .file-pick {
   display: block;
 }

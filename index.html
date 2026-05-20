@@ -9,14 +9,13 @@
     <link rel="stylesheet" href="vendor/bulma.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260520-36">
+    <link rel="stylesheet" href="styles.css?v=20260520-37">
   </head>
   <body>
     <main class="app-shell">
       <header class="appbar">
         <div class="toolbar">
-          <button class="tool-button button is-small" id="webDecksBtn" type="button">Web Decks</button>
-          <button class="tool-button button is-small" id="importBtn" type="button">Import</button>
+          <button class="tool-button button is-small" id="importBtn" type="button">Import / Web</button>
           <button class="tool-button button is-small" id="syncBtn" type="button" title="Sync current deck to Web">Sync</button>
           <div class="menu-wrap">
             <button class="tool-button button is-small" id="exportBtn" type="button">Export</button>
@@ -107,7 +106,7 @@
         <div class="import-head">
           <div>
             <h1>Import notes</h1>
-            <p>Use an exported Notion zip, Markdown file, pasted Markdown, or a public raw Markdown URL.</p>
+            <p>Use a web deck, exported Notion zip, Markdown file, pasted Markdown, or public raw Markdown URL.</p>
           </div>
           <button class="icon-button" id="closeImportBtn" type="button" aria-label="Close import panel">&#215;</button>
         </div>
@@ -132,6 +131,7 @@
 
         <div class="import-actions">
           <button id="parseBtn" type="button">Build deck</button>
+          <button id="openWebDecksFromImportBtn" type="button">Web Decks</button>
           <button id="sampleBtn" type="button" hidden>Load sample</button>
         </div>
 
@@ -211,6 +211,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260520-36"></script>
+    <script src="app.js?v=20260520-37"></script>
   </body>
 </html>
