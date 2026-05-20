@@ -46,10 +46,13 @@ const state = {
   dragCaptured: false,
   dragStartTime: 0,
   dragLastX: 0,
+  dragLastY: 0,
   dragLastTime: 0,
+  dragAxis: "",
   dragging: false,
   dragMoved: false,
-  suppressClickUntil: 0
+  suppressClickUntil: 0,
+  transitionToken: 0
 };
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
@@ -110,6 +113,8 @@ const el = {
   progressBar: document.querySelector("#progressBar"),
   statusText: document.querySelector("#statusText"),
   flipBtn: document.querySelector("#flipBtn"),
+  prevCardBtn: document.querySelector("#prevCardBtn"),
+  nextCardBtn: document.querySelector("#nextCardBtn"),
   knownBtn: document.querySelector("#knownBtn"),
   reviewBtn: document.querySelector("#reviewBtn"),
   replayReviewBtn: document.querySelector("#replayReviewBtn"),
@@ -472,7 +477,7 @@ async function previewCard(card) {
   if (!card) return;
   state.previewCard = card;
   state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
+  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
   el.card.style.transform = "";
   await renderMarkdown(el.questionView, card.question);
   await renderMarkdown(el.answerView, card.answer);
@@ -547,54 +552,67 @@ function mathNode(tex, displayMode) {
   return `<${tag} class="${className}" data-tex="${encodeAttribute(tex.trim())}"></${tag}>`;
 }
 
+function normalizeDisplayMathIndentation(markdown) {
+  return markdown
+    .replace(/(^|\n)[ \t]{4,}\$\$[ \t]*\n([\s\S]*?)\n[ \t]{4,}\$\$[ \t]*(?=\n|$)/g, (match, prefix, tex) => {
+      const normalizedTex = tex
+        .split("\n")
+        .map((line) => line.replace(/^[ \t]{4}/, ""))
+        .join("\n");
+      return `${prefix}$$\n${normalizedTex}\n$$`;
+    })
+    .replace(/(^|\n)[ \t]{4,}\$\$([^\n]+?)\$\$[ \t]*(?=\n|$)/g, "$1$$$$$2$$$$");
+}
+
 function protectMath(markdown) {
   let output = "";
   let index = 0;
+  const source = normalizeDisplayMathIndentation(markdown);
 
-  while (index < markdown.length) {
-    if (markdown.startsWith("$$", index) && !isEscaped(markdown, index)) {
-      const close = findUnescaped(markdown, "$$", index + 2);
+  while (index < source.length) {
+    if (source.startsWith("$$", index) && !isEscaped(source, index)) {
+      const close = findUnescaped(source, "$$", index + 2);
       if (close !== -1) {
-        output += mathNode(markdown.slice(index + 2, close), true);
+        output += mathNode(source.slice(index + 2, close), true);
         index = close + 2;
         continue;
       }
     }
 
-    if (isSingleDollarLine(markdown, index)) {
-      const openLineEnd = markdown.indexOf("\n", index);
+    if (isSingleDollarLine(source, index)) {
+      const openLineEnd = source.indexOf("\n", index);
       const contentStart = openLineEnd === -1 ? index + 1 : openLineEnd + 1;
-      const close = findSingleDollarLine(markdown, contentStart);
+      const close = findSingleDollarLine(source, contentStart);
       if (close !== -1) {
-        const closeLineStart = markdown.lastIndexOf("\n", close - 1) + 1;
-        output += mathNode(markdown.slice(contentStart, closeLineStart), true);
-        const closeLineEnd = markdown.indexOf("\n", close);
+        const closeLineStart = source.lastIndexOf("\n", close - 1) + 1;
+        output += mathNode(source.slice(contentStart, closeLineStart), true);
+        const closeLineEnd = source.indexOf("\n", close);
         index = closeLineEnd === -1 ? close + 1 : closeLineEnd + 1;
         continue;
       }
     }
 
-    if ((markdown.startsWith("\\[", index) || markdown.startsWith("\\(", index)) && !isEscaped(markdown, index)) {
-      const displayMode = markdown[index + 1] === "[";
+    if ((source.startsWith("\\[", index) || source.startsWith("\\(", index)) && !isEscaped(source, index)) {
+      const displayMode = source[index + 1] === "[";
       const closeToken = displayMode ? "\\]" : "\\)";
-      const close = findUnescaped(markdown, closeToken, index + 2);
+      const close = findUnescaped(source, closeToken, index + 2);
       if (close !== -1) {
-        output += mathNode(markdown.slice(index + 2, close), displayMode);
+        output += mathNode(source.slice(index + 2, close), displayMode);
         index = close + 2;
         continue;
       }
     }
 
-    if (markdown[index] === "$" && canOpenInlineDollar(markdown, index)) {
-      const close = findInlineDollarClose(markdown, index + 1);
+    if (source[index] === "$" && canOpenInlineDollar(source, index)) {
+      const close = findInlineDollarClose(source, index + 1);
       if (close !== -1) {
-        output += mathNode(markdown.slice(index + 1, close), false);
+        output += mathNode(source.slice(index + 1, close), false);
         index = close + 1;
         continue;
       }
     }
 
-    output += markdown[index];
+    output += source[index];
     index += 1;
   }
 
@@ -819,6 +837,8 @@ function updateMeta() {
 
   const disabled = !state.previewCard && (total === 0 || state.current >= total);
   el.flipBtn.disabled = disabled;
+  el.prevCardBtn.disabled = Boolean(state.previewCard) || total === 0 || state.current <= 0;
+  el.nextCardBtn.disabled = Boolean(state.previewCard) || total === 0 || state.current >= total - 1;
   el.knownBtn.disabled = disabled;
   el.reviewBtn.disabled = disabled;
   el.shuffleBtn.disabled = total < 2;
@@ -830,11 +850,38 @@ function updateMeta() {
   el.replayAllBtn.disabled = state.masterCards.length === 0;
 }
 
-async function showCard() {
+function transitionClassFor(direction, phase) {
+  if (!direction) return "";
+  const suffix = phase === "in" ? "in" : "out";
+  if (direction === "known") return `transition-right-${suffix}`;
+  if (direction === "review") return `transition-left-${suffix}`;
+  if (direction > 0) return `transition-down-${suffix}`;
+  if (direction < 0) return `transition-up-${suffix}`;
+  return "";
+}
+
+function clearCardTransitionClasses() {
+  el.card.classList.remove(
+    "transition-left-out",
+    "transition-left-in",
+    "transition-right-out",
+    "transition-right-in",
+    "transition-up-out",
+    "transition-up-in",
+    "transition-down-out",
+    "transition-down-in"
+  );
+}
+
+async function showCard(direction = 0) {
+  const token = state.transitionToken;
   state.previewCard = null;
   state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known");
+  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  clearCardTransitionClasses();
   el.card.style.transform = "";
+  const enterClass = transitionClassFor(direction, "in");
+  if (enterClass) el.card.classList.add(enterClass);
 
   const card = state.cards[state.current];
   if (!card) {
@@ -847,6 +894,29 @@ async function showCard() {
   await renderMarkdown(el.questionView, card.question);
   await renderMarkdown(el.answerView, card.answer);
   updateMeta();
+  if (enterClass) {
+    window.setTimeout(() => {
+      if (state.transitionToken !== token) return;
+      el.card.classList.remove(enterClass);
+    }, 280);
+  }
+}
+
+function animateToCard(direction, updateState) {
+  const token = state.transitionToken + 1;
+  state.transitionToken = token;
+  const exitClass = transitionClassFor(direction, "out");
+  clearCardTransitionClasses();
+  el.card.classList.remove("swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
+  el.card.style.transform = "";
+  if (exitClass) el.card.classList.add(exitClass);
+
+  window.setTimeout(() => {
+    if (state.transitionToken !== token) return;
+    updateState();
+    savePersistedDeck();
+    showCard(direction);
+  }, 210);
 }
 
 function buildCards(titleHint = "") {
@@ -882,10 +952,22 @@ function flipCard() {
   el.card.classList.toggle("is-flipped", state.flipped);
 }
 
+function navigateCard(direction) {
+  if (state.previewCard || !state.cards.length) return;
+  const nextIndex = Math.min(Math.max(state.current + direction, 0), state.cards.length - 1);
+  if (nextIndex === state.current) return;
+  setStatus(direction > 0 ? "Moved to next card." : "Moved to previous card.");
+  animateToCard(direction, () => {
+    state.current = nextIndex;
+    state.previewCard = null;
+    state.flipped = false;
+  });
+}
+
 function moveCard(result) {
   const card = state.previewCard || state.cards[state.current];
   if (!card) return;
-  el.card.classList.remove("is-dragging", "drag-review", "drag-known");
+  el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
   el.card.style.transform = "";
   state.statusById[card.id] = result;
   syncResults();
@@ -898,12 +980,9 @@ function moveCard(result) {
     return;
   }
 
-  el.card.classList.add(result === "known" ? "swipe-right" : "swipe-left");
-  window.setTimeout(() => {
+  animateToCard(result, () => {
     state.current += 1;
-    savePersistedDeck();
-    showCard();
-  }, 240);
+  });
 }
 
 function shuffleCards() {
@@ -1470,9 +1549,9 @@ function swipeCommitDistance() {
   );
 }
 
-function dragVelocity(clientX, time) {
+function dragVelocity(current, previous, time) {
   const elapsed = Math.max(time - state.dragLastTime, 1);
-  return (clientX - state.dragLastX) / elapsed;
+  return (current - previous) / elapsed;
 }
 
 function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
@@ -1484,11 +1563,13 @@ function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   state.dragCurrentX = clientX;
   state.dragCurrentY = clientY;
   state.dragLastX = clientX;
+  state.dragLastY = clientY;
   state.dragStartTime = time;
   state.dragLastTime = time;
   state.dragPointerId = pointerId;
   state.dragPointerType = pointerType;
   state.dragCaptured = false;
+  state.dragAxis = "";
 }
 
 function resetCardDrag() {
@@ -1497,13 +1578,15 @@ function resetCardDrag() {
   state.dragPointerType = "";
   state.dragCaptured = false;
   state.dragMoved = false;
-  el.card.classList.remove("is-dragging", "drag-review", "drag-known");
+  state.dragAxis = "";
+  el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
   el.card.style.transform = "";
 }
 
 function updateSwipe(clientX, clientY, event) {
   const time = performance.now();
-  const velocity = dragVelocity(clientX, time);
+  const velocityX = dragVelocity(clientX, state.dragLastX, time);
+  const velocityY = dragVelocity(clientY, state.dragLastY, time);
   state.dragCurrentX = clientX;
   state.dragCurrentY = clientY;
 
@@ -1514,18 +1597,18 @@ function updateSwipe(clientX, clientY, event) {
   state.dragMoved = state.dragMoved || absX > 6 || absY > 6;
 
   if (!state.dragging) {
-    const verticalScroll = absY >= swipeConfig.verticalCancelDistance && absY > absX * swipeConfig.verticalCancelRatio;
-    if (verticalScroll) {
-      if (event?.pointerId !== undefined && state.dragCaptured) el.card.releasePointerCapture?.(event.pointerId);
-      resetCardDrag();
-      return;
-    }
-    if (absX < swipeConfig.intentDistance || absX < absY * swipeConfig.intentRatio) {
+    const hasHorizontalIntent = absX >= swipeConfig.intentDistance && absX >= absY * swipeConfig.intentRatio;
+    const hasVerticalIntent = absY >= swipeConfig.intentDistance && absY >= absX * swipeConfig.intentRatio;
+
+    if (!hasHorizontalIntent && !hasVerticalIntent) {
       state.dragLastX = clientX;
+      state.dragLastY = clientY;
       state.dragLastTime = time;
       return;
     }
+
     state.dragging = true;
+    state.dragAxis = hasHorizontalIntent ? "x" : "y";
     if (event?.pointerId !== undefined && !state.dragCaptured) {
       el.card.setPointerCapture?.(event.pointerId);
       state.dragCaptured = true;
@@ -1534,15 +1617,31 @@ function updateSwipe(clientX, clientY, event) {
   }
 
   if (event?.cancelable) event.preventDefault();
-  const direction = dx > 0 ? 1 : -1;
-  const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
-  const progress = Math.min(absX / swipeCommitDistance(), 1);
-  const flicking = absX >= swipeConfig.flickDistance && Math.abs(velocity) >= swipeConfig.flickVelocity;
-  const choosing = progress > 0.45 || flicking;
-  el.card.classList.toggle("drag-known", dx > 0 && choosing);
-  el.card.classList.toggle("drag-review", dx < 0 && choosing);
-  el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 2.2}deg) scale(${1 - progress * 0.01})`;
+
+  if (state.dragAxis === "y") {
+    const direction = dy > 0 ? 1 : -1;
+    const resisted = direction * Math.min(absY * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
+    const progress = Math.min(absY / swipeCommitDistance(), 1);
+    const flicking = absY >= swipeConfig.flickDistance && Math.abs(velocityY) >= swipeConfig.flickVelocity;
+    const choosing = progress > 0.45 || flicking;
+    el.card.classList.toggle("drag-next", dy > 0 && choosing);
+    el.card.classList.toggle("drag-prev", dy < 0 && choosing);
+    el.card.classList.remove("drag-known", "drag-review");
+    el.card.style.transform = `translateY(${resisted}px) scale(${1 - progress * 0.01})`;
+  } else {
+    const direction = dx > 0 ? 1 : -1;
+    const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
+    const progress = Math.min(absX / swipeCommitDistance(), 1);
+    const flicking = absX >= swipeConfig.flickDistance && Math.abs(velocityX) >= swipeConfig.flickVelocity;
+    const choosing = progress > 0.45 || flicking;
+    el.card.classList.toggle("drag-known", dx > 0 && choosing);
+    el.card.classList.toggle("drag-review", dx < 0 && choosing);
+    el.card.classList.remove("drag-prev", "drag-next");
+    el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 2.2}deg) scale(${1 - progress * 0.01})`;
+  }
+
   state.dragLastX = clientX;
+  state.dragLastY = clientY;
   state.dragLastTime = time;
 }
 
@@ -1552,12 +1651,14 @@ function finishSwipe() {
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
   const elapsed = Math.max(performance.now() - state.dragStartTime, 1);
-  const averageVelocity = absX / elapsed;
+  const primaryDistance = state.dragAxis === "y" ? absY : absX;
+  const secondaryDistance = state.dragAxis === "y" ? absX : absY;
+  const averageVelocity = primaryDistance / elapsed;
   const committed = state.dragging
-    && absX >= absY * swipeConfig.commitRatio
+    && primaryDistance >= secondaryDistance * swipeConfig.commitRatio
     && (
-      absX >= swipeCommitDistance()
-      || (absX >= swipeConfig.flickDistance && averageVelocity >= swipeConfig.flickVelocity)
+      primaryDistance >= swipeCommitDistance()
+      || (primaryDistance >= swipeConfig.flickDistance && averageVelocity >= swipeConfig.flickVelocity)
     );
 
   if (state.dragMoved || state.dragging) {
@@ -1565,14 +1666,21 @@ function finishSwipe() {
   }
 
   if (committed) {
-    el.card.classList.remove("is-dragging", "drag-review", "drag-known");
+    el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
     el.card.style.transform = "";
+    const axis = state.dragAxis;
     state.dragging = false;
     state.dragPointerId = null;
     state.dragPointerType = "";
     state.dragCaptured = false;
     state.dragMoved = false;
-    moveCard(dx > 0 ? "known" : "review");
+    state.dragAxis = "";
+
+    if (axis === "y") {
+      navigateCard(dy > 0 ? 1 : -1);
+    } else {
+      moveCard(dx > 0 ? "known" : "review");
+    }
     return;
   }
 
@@ -1608,26 +1716,26 @@ function touchPoint(event) {
 }
 
 function handleTouchStart(event) {
-  if (window.PointerEvent || !currentCardCanMove() || isCardActionTarget(event.target)) return;
+  if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   const point = touchPoint(event);
   if (!point) return;
   beginSwipe(point.clientX, point.clientY, "touch", "touch");
 }
 
 function handleTouchMove(event) {
-  if (window.PointerEvent || state.dragPointerId !== "touch") return;
+  if (state.dragPointerId !== "touch") return;
   const point = touchPoint(event);
   if (!point) return;
   updateSwipe(point.clientX, point.clientY, event);
 }
 
 function handleTouchEnd() {
-  if (window.PointerEvent || state.dragPointerId !== "touch") return;
+  if (state.dragPointerId !== "touch") return;
   finishSwipe();
 }
 
 function handleTouchCancel() {
-  if (window.PointerEvent || state.dragPointerId !== "touch") return;
+  if (state.dragPointerId !== "touch") return;
   resetCardDrag();
 }
 
@@ -1673,6 +1781,8 @@ el.themeBtn.addEventListener("click", () => {
 });
 el.fileInput.addEventListener("change", (event) => loadFile(event.target.files[0]));
 el.flipBtn.addEventListener("click", flipCard);
+el.prevCardBtn.addEventListener("click", () => navigateCard(-1));
+el.nextCardBtn.addEventListener("click", () => navigateCard(1));
 el.knownBtn.addEventListener("click", () => moveCard("known"));
 el.reviewBtn.addEventListener("click", () => moveCard("review"));
 el.knownBrickList.addEventListener("click", (event) => {
@@ -1702,12 +1812,10 @@ el.card.addEventListener("pointerdown", handlePointerDown);
 el.card.addEventListener("pointermove", handlePointerMove);
 el.card.addEventListener("pointerup", handlePointerUp);
 el.card.addEventListener("pointercancel", handlePointerCancel);
-if (!window.PointerEvent) {
-  el.card.addEventListener("touchstart", handleTouchStart, { passive: true });
-  el.card.addEventListener("touchmove", handleTouchMove, { passive: false });
-  el.card.addEventListener("touchend", handleTouchEnd);
-  el.card.addEventListener("touchcancel", handleTouchCancel);
-}
+el.card.addEventListener("touchstart", handleTouchStart, { passive: true });
+el.card.addEventListener("touchmove", handleTouchMove, { passive: false });
+el.card.addEventListener("touchend", handleTouchEnd);
+el.card.addEventListener("touchcancel", handleTouchCancel);
 
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea")) return;
@@ -1724,6 +1832,8 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "ArrowRight") moveCard("known");
   if (event.key === "ArrowLeft") moveCard("review");
+  if (event.key === "ArrowDown") navigateCard(1);
+  if (event.key === "ArrowUp") navigateCard(-1);
 });
 
 document.addEventListener("click", (event) => {

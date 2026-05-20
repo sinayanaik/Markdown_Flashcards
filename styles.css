@@ -11,8 +11,8 @@
   --line: #d8d4c8;
   --accent: #16796c;
   --accent-strong: #0d5e53;
-  --review: #b7791f;
-  --known: #20834f;
+  --review: #d71920;
+  --known: #008f3a;
   --danger: #c33f3f;
   --shadow: 0 24px 70px rgba(32, 28, 18, 0.16);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -30,8 +30,8 @@
   --line: #2b3933;
   --accent: #55d6bf;
   --accent-strong: #8af0df;
-  --review: #f0b15a;
-  --known: #75d999;
+  --review: #ff4d55;
+  --known: #2fd36b;
   --danger: #ff7777;
   --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
 }
@@ -235,6 +235,7 @@ button:disabled {
   min-height: 0;
   place-items: center;
   padding: 10px 0;
+  perspective: 1200px;
 }
 
 .card {
@@ -270,6 +271,12 @@ button:disabled {
 .card.drag-known {
   border-color: color-mix(in srgb, var(--known) 74%, var(--line));
   box-shadow: 0 18px 60px color-mix(in srgb, var(--known) 22%, transparent);
+}
+
+.card.drag-prev,
+.card.drag-next {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .result-panel {
@@ -390,6 +397,80 @@ button:disabled {
 .card.swipe-right {
   opacity: 0;
   transform: translateX(42px) rotate(1deg) scale(0.992);
+}
+
+.card.transition-left-out,
+.card.transition-right-out,
+.card.transition-up-out,
+.card.transition-down-out {
+  opacity: 0;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  transition:
+    transform 210ms cubic-bezier(0.55, 0.06, 0.68, 0.19),
+    opacity 170ms ease,
+    box-shadow 210ms ease;
+}
+
+.card.transition-left-out {
+  transform: translateX(max(-340px, -38vw)) rotate(-5deg) scale(0.94);
+}
+
+.card.transition-right-out {
+  transform: translateX(min(340px, 38vw)) rotate(5deg) scale(0.94);
+}
+
+.card.transition-up-out {
+  transform: translateY(max(-260px, -30vh)) rotateX(-5deg) scale(0.94);
+}
+
+.card.transition-down-out {
+  transform: translateY(min(260px, 30vh)) rotateX(5deg) scale(0.94);
+}
+
+.card.transition-left-in,
+.card.transition-right-in,
+.card.transition-up-in,
+.card.transition-down-in {
+  animation: card-enter 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card.transition-left-in {
+  --enter-x: min(300px, 34vw);
+  --enter-y: 0;
+}
+
+.card.transition-right-in {
+  --enter-x: max(-300px, -34vw);
+  --enter-y: 0;
+}
+
+.card.transition-up-in {
+  --enter-x: 0;
+  --enter-y: min(220px, 26vh);
+}
+
+.card.transition-down-in {
+  --enter-x: 0;
+  --enter-y: max(-220px, -26vh);
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    transform: translate(var(--enter-x, 0), var(--enter-y, 18px)) scale(0.94);
+  }
+
+  72% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1.012);
+  }
+
+  to {
+    opacity: 1;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+    transform: translate(0, 0) scale(1);
+  }
 }
 
 .card-face {
@@ -626,7 +707,7 @@ button:disabled {
 
 .controls button {
   display: grid;
-  width: 44px;
+  width: 46px;
   height: 40px;
   min-height: 40px;
   place-items: center;
@@ -663,8 +744,9 @@ button:disabled {
 }
 
 .controls .review {
-  background: color-mix(in srgb, var(--review) 16%, var(--panel));
-  color: var(--review);
+  border: 1px solid color-mix(in srgb, var(--review) 86%, #000);
+  background: var(--review);
+  color: #fff;
 }
 
 .controls .flip {
@@ -672,9 +754,15 @@ button:disabled {
   color: var(--bg);
 }
 
+.controls .nav-card {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--accent);
+}
+
 .controls .known {
-  background: color-mix(in srgb, var(--known) 16%, var(--panel));
-  color: var(--known);
+  border: 1px solid color-mix(in srgb, var(--known) 86%, #000);
+  background: var(--known);
+  color: #fff;
 }
 
 .import-panel {
@@ -1149,7 +1237,9 @@ textarea {
   }
 
   .controls {
-    display: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .card-face {
