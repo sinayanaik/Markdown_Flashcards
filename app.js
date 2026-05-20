@@ -27,6 +27,7 @@ const state = {
   masterCards: [],
   statusById: {},
   previewCard: null,
+  deckTitle: "",
   results: {
     known: [],
     review: []
@@ -57,6 +58,7 @@ const el = {
   exportBtn: document.querySelector("#exportBtn"),
   exportMenu: document.querySelector("#exportMenu"),
   themeBtn: document.querySelector("#themeBtn"),
+  deckTitle: document.querySelector("#deckTitle"),
   shuffleBtn: document.querySelector("#shuffleBtn"),
   resetBtn: document.querySelector("#resetBtn"),
   card: document.querySelector("#card"),
@@ -143,6 +145,39 @@ function removeEmptyHeadingGroups(markdown) {
     .split("\n")
     .filter((line) => !/^#{1,6}\s*[^\S\r\n]*$/.test(line))
     .join("\n");
+}
+
+function humanizeSourceTitle(value) {
+  const cleaned = normalizeMarkdown(String(value || ""))
+    .split(/[?#]/)[0]
+    .split("/")
+    .filter(Boolean)
+    .pop() || "";
+  const withoutExtension = cleaned.replace(/\.(md|markdown|mdown|mkdn|txt|zip)$/i, "");
+  const withoutNotionId = withoutExtension
+    .replace(/[-_\s]+[a-f0-9]{32}$/i, "")
+    .replace(/[-_\s]+[a-f0-9]{8,}$/i, "");
+  return withoutNotionId
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferDeckTitle(markdown, fallback = "") {
+  const source = stripReaderMetadata(markdown);
+  const lines = normalizeMarkdown(source).split("\n");
+  const h1 = lines.find((line) => /^#\s+.+/.test(line.trim()));
+  if (h1) return h1.replace(/^#\s+/, "").replace(/\s+#*$/, "").trim();
+
+  const nonQuestionHeading = lines.find((line) => {
+    const match = line.trim().match(/^#{2,6}\s+(.+?)\s*#*$/);
+    return match && !match[1].trim().endsWith("?");
+  });
+  if (nonQuestionHeading) {
+    return nonQuestionHeading.replace(/^#{2,6}\s+/, "").replace(/\s+#*$/, "").trim();
+  }
+
+  return humanizeSourceTitle(fallback);
 }
 
 function stripQuoteMarker(line) {
@@ -358,13 +393,64 @@ function encodeAttribute(value) {
   return escapeHtml(encodeURIComponent(value));
 }
 
+function preprocessLineDelimitedMath(markdown) {
+  const lines = normalizeMarkdown(markdown).split("\n");
+  const output = [];
+  let delimiter = "";
+  let buffer = [];
+  let inFence = false;
+
+  const flushMath = () => {
+    output.push(`<div class="math-display" data-tex="${encodeAttribute(buffer.join("\n").trim())}"></div>`);
+    delimiter = "";
+    buffer = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isDelimiter = trimmed === "$$" || trimmed === "$";
+    const isFence = /^\s*```/.test(line);
+
+    if (delimiter) {
+      if (trimmed === delimiter) {
+        flushMath();
+      } else {
+        buffer.push(line);
+      }
+      continue;
+    }
+
+    if (isFence) {
+      inFence = !inFence;
+      output.push(line);
+      continue;
+    }
+
+    if (inFence) {
+      output.push(line);
+      continue;
+    }
+
+    if (isDelimiter) {
+      delimiter = trimmed;
+      buffer = [];
+      continue;
+    }
+
+    output.push(line);
+  }
+
+  if (delimiter) {
+    output.push(delimiter, ...buffer);
+  }
+
+  return output.join("\n");
+}
+
 function preprocessSpecialBlocks(markdown) {
-  return markdown
+  return preprocessLineDelimitedMath(markdown)
     .replace(/```[ \t]*mermaid[^\n]*\n([\s\S]*?)```/gi, (_, diagram) => {
       return `<div class="mermaid" data-diagram="${encodeAttribute(diagram.trim())}"></div>`;
-    })
-    .replace(/(^|\n)[ \t]*\$\$[ \t]*\n([\s\S]*?)\n[ \t]*\$\$[ \t]*(?=\n|$)/g, (_, prefix, tex) => {
-      return `${prefix}<div class="math-display" data-tex="${encodeAttribute(tex.trim())}"></div>`;
     })
     .replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
       return `<div class="math-display" data-tex="${encodeAttribute(tex.trim())}"></div>`;
@@ -452,6 +538,9 @@ function updateMeta() {
   const total = state.cards.length;
   const finished = Math.min(state.current, total);
   syncResults();
+  el.deckTitle.textContent = state.deckTitle;
+  el.deckTitle.title = state.deckTitle;
+  el.deckTitle.hidden = !state.deckTitle;
   el.cardCount.textContent = `${total} ${total === 1 ? "card" : "cards"}`;
   el.positionText.textContent = state.previewCard ? "Preview" : total ? `Card ${Math.min(state.current + 1, total)} of ${total}` : "Card 0 of 0";
   el.scoreText.textContent = `Known ${state.known} / Review ${state.review}`;
@@ -493,13 +582,14 @@ async function showCard() {
   updateMeta();
 }
 
-function buildCards() {
+function buildCards(titleHint = "") {
   const source = stripReaderMetadata(el.sourceInput.value);
   const cards = parseCards(source);
   const headingCount = countQuestionHeadings(source);
   state.cards = cards;
   state.masterCards = cards.slice();
   state.current = 0;
+  state.deckTitle = cards.length ? inferDeckTitle(source, titleHint) : "";
   resetResults();
 
   if (cards.length) {
@@ -800,6 +890,7 @@ async function fetchUrl() {
       state.masterCards = [];
       state.statusById = {};
       state.previewCard = null;
+      state.deckTitle = "";
       state.current = 0;
       resetResults();
       setStatus("This public Notion URL only exposes collapsed question headings, not answers. Use Export -> Markdown & CSV, then upload the zip or paste the exported Markdown.", "error");
@@ -808,7 +899,7 @@ async function fetchUrl() {
     }
 
     setStatus("Fetched source. Building cards...");
-    buildCards();
+    buildCards(url);
   } catch (error) {
     setStatus("Could not fetch this URL. If it is private Notion content, export Markdown or paste the page content.", "error");
   } finally {
@@ -885,7 +976,7 @@ async function loadZipFile(file) {
       .join("\n\n---\n\n");
     el.sourceInput.value = markdown;
     setStatus(`Loaded ${markdownFiles.length} Markdown file${markdownFiles.length === 1 ? "" : "s"} from ${file.name}.`);
-    buildCards();
+    buildCards(markdownFiles.length === 1 ? markdownFiles[0].name : file.name);
   } catch (error) {
     setStatus("Could not read this zip export.", "error");
   }
@@ -903,7 +994,7 @@ function loadFile(file) {
   reader.addEventListener("load", () => {
     el.sourceInput.value = String(reader.result || "");
     setStatus(`Loaded ${file.name}.`);
-    buildCards();
+    buildCards(file.name);
   });
   reader.addEventListener("error", () => setStatus("Could not read the selected file.", "error"));
   reader.readAsText(file);
@@ -912,7 +1003,7 @@ function loadFile(file) {
 function loadSample() {
   el.sourceInput.value = sampleMarkdown;
   setStatus("Sample loaded.");
-  buildCards();
+  buildCards("Sample flashcards");
 }
 
 function handlePointerDown(event) {
@@ -930,7 +1021,7 @@ function handlePointerUp(event) {
   el.card.style.transform = "";
 }
 
-el.parseBtn.addEventListener("click", buildCards);
+el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
 el.importBtn.addEventListener("click", openImportPanel);

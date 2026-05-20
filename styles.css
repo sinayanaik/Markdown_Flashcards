@@ -96,6 +96,17 @@ button:disabled {
   white-space: nowrap;
 }
 
+.deck-title {
+  max-width: min(42vw, 520px);
+  overflow: hidden;
+  color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
 .deck-meta strong {
   color: var(--text);
   font-weight: 800;
@@ -739,6 +750,11 @@ textarea {
   .deck-meta,
   .toolbar {
     flex-wrap: wrap;
+  }
+
+  .deck-title {
+    max-width: 100%;
+    flex-basis: 100%;
   }
 
   .quiz-panel {
