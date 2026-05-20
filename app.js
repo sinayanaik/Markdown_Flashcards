@@ -30,6 +30,7 @@ const state = {
   previewCard: null,
   deckTitle: "",
   sourceTitle: "",
+  importTitleHint: "",
   results: {
     known: [],
     review: []
@@ -92,11 +93,27 @@ async function fetchWebDecks() {
       const date = new Date(deck.updated_at).toLocaleString();
       const tr = document.createElement("tr");
       tr.style.borderBottom = "1px solid var(--border-color, #333)";
-      
+
       const tdTitle = document.createElement("td");
       tdTitle.style.padding = "0.5rem";
-      tdTitle.textContent = deck.title || "Untitled";
-      
+      const titleWrap = document.createElement("div");
+      titleWrap.className = "web-deck-title";
+
+      const titleText = document.createElement("span");
+      titleText.textContent = deck.title || "Untitled";
+
+      const renameBtn = document.createElement("button");
+      renameBtn.className = "web-deck-rename";
+      renameBtn.type = "button";
+      renameBtn.title = "Rename web deck";
+      renameBtn.setAttribute("aria-label", `Rename ${deck.title || "Untitled"}`);
+      renameBtn.innerHTML = "&#9998;";
+      renameBtn.onclick = () => renameWebDeck(deck.id, deck.title || "Untitled");
+
+      titleWrap.appendChild(titleText);
+      titleWrap.appendChild(renameBtn);
+      tdTitle.appendChild(titleWrap);
+
       const tdDate = document.createElement("td");
       tdDate.style.padding = "0.5rem";
       tdDate.textContent = date;
@@ -131,6 +148,52 @@ async function fetchWebDecks() {
   } catch (error) {
     console.error("Failed to fetch web decks", error);
     setStatus("Failed to fetch web decks.", "error");
+  }
+}
+
+async function updateWebDeckTitle(deckId, title) {
+  if (!deckId || !supabaseClient) return false;
+
+  const { error } = await supabaseClient
+    .from("decks")
+    .update({
+      title,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", deckId);
+
+  if (error) throw error;
+  return true;
+}
+
+async function renameWebDeck(deckId, currentTitle = "") {
+  if (!deckId || !supabaseClient) return;
+
+  const nextTitle = prompt("Rename web deck", currentTitle || "Untitled");
+  if (nextTitle === null) return;
+
+  const title = nextTitle.trim();
+  if (!title) {
+    setStatus("Deck title cannot be empty.", "error");
+    return;
+  }
+
+  try {
+    setStatus("Renaming web deck...");
+    await updateWebDeckTitle(deckId, title);
+
+    if (state.deckId === deckId) {
+      state.deckTitle = title;
+      state.sourceTitle = title;
+      savePersistedDeck();
+      updateMeta();
+    }
+
+    setStatus("Web deck renamed.");
+    fetchWebDecks();
+  } catch (error) {
+    console.error("Failed to rename web deck", error);
+    setStatus("Failed to rename web deck.", "error");
   }
 }
 
@@ -196,6 +259,7 @@ async function loadWebDeck(deckId) {
     state.flipped = false;
     state.deckTitle = deckData.title || "";
     state.sourceTitle = deckData.title || "";
+    state.importTitleHint = deckData.title || "";
     
     syncResults();
     closeAllCardsPanel();
@@ -228,7 +292,7 @@ function showSyncModal() {
   
   content.innerHTML = `
     <p><strong>Action:</strong> ${actionText}</p>
-    <p><strong>Title:</strong> ${deckTitle}</p>
+    <p><strong>Title:</strong> ${escapeHtml(deckTitle)}</p>
     <p><strong>Cards:</strong> ${cardsCount} total (${knownCount} known, ${reviewCount} review)</p>
     <p><strong>Current Position:</strong> Card ${state.current + 1}</p>
     <br>
@@ -339,7 +403,9 @@ const el = {
   allCardsSummary: document.querySelector("#allCardsSummary"),
   closeAllCardsBtn: document.querySelector("#closeAllCardsBtn"),
   themeBtn: document.querySelector("#themeBtn"),
+  deckTitleWrap: document.querySelector("#deckTitleWrap"),
   deckTitle: document.querySelector("#deckTitle"),
+  editDeckTitleBtn: document.querySelector("#editDeckTitleBtn"),
   shuffleBtn: document.querySelector("#shuffleBtn"),
   resetBtn: document.querySelector("#resetBtn"),
   card: document.querySelector("#card"),
@@ -440,6 +506,48 @@ function setStatus(message, type = "info") {
   el.statusText.classList.toggle("error", type === "error");
 }
 
+function setDeckTitle(title, options = {}) {
+  const normalized = String(title || "").trim();
+  state.deckTitle = normalized;
+  if (options.updateSourceTitle || !state.sourceTitle) {
+    state.sourceTitle = normalized;
+  }
+  if (options.save !== false) savePersistedDeck();
+  updateMeta();
+}
+
+async function editCurrentDeckTitle() {
+  if (!state.masterCards.length) {
+    setStatus("Import a deck before editing its title.", "error");
+    return;
+  }
+
+  const nextTitle = prompt("Edit deck title", state.deckTitle || state.sourceTitle || "Untitled Deck");
+  if (nextTitle === null) return;
+
+  const title = nextTitle.trim();
+  if (!title) {
+    setStatus("Deck title cannot be empty.", "error");
+    return;
+  }
+
+  setDeckTitle(title, { updateSourceTitle: true });
+  if (!state.deckId || !supabaseClient) {
+    setStatus("Deck title updated.");
+    return;
+  }
+
+  try {
+    setStatus("Updating web deck title...");
+    await updateWebDeckTitle(state.deckId, title);
+    if (!document.getElementById("webDecksPanel")?.hidden) await fetchWebDecks();
+    setStatus("Deck title updated in the cloud.");
+  } catch (error) {
+    console.error("Failed to update web deck title", error);
+    setStatus("Deck title updated locally, but cloud rename failed.", "error");
+  }
+}
+
 function openImportPanel() {
   el.importPanel.classList.add("is-open");
 }
@@ -499,9 +607,15 @@ function sourceFileTitle(value) {
   })();
   return decoded
     .replace(/\.(md|markdown|mdown|mkdn|txt|json|zip)$/i, "")
+    .replace(/[-_\s]+[a-f0-9]{32}$/i, "")
+    .replace(/[-_\s]+[a-f0-9]{8,}$/i, "")
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function titleFromImportHint(titleHint = "") {
+  return sourceFileTitle(titleHint) || humanizeSourceTitle(titleHint);
 }
 
 function inferDeckTitle(markdown, fallback = "") {
@@ -1149,7 +1263,8 @@ function updateMeta() {
   syncResults();
   el.deckTitle.textContent = state.deckTitle;
   el.deckTitle.title = state.deckTitle;
-  el.deckTitle.hidden = !state.deckTitle;
+  el.deckTitleWrap.hidden = !state.deckTitle;
+  el.editDeckTitleBtn.disabled = state.masterCards.length === 0;
   el.positionText.textContent = state.previewCard ? "Preview" : total ? `${Math.min(state.current + 1, total)}/${total}` : "0/0";
   el.scoreText.textContent = `Known ${state.known} / Review ${state.review}`;
   el.knownStackCount.textContent = state.known;
@@ -1243,16 +1358,18 @@ function animateToCard(direction, updateState) {
   }, 210);
 }
 
-function buildCards(titleHint = "") {
+function buildCards(titleHint = state.importTitleHint || "") {
   const source = stripReaderMetadata(el.sourceInput.value);
   const cards = parseCards(source);
   const headingCount = countQuestionHeadings(source);
+  const importTitle = titleFromImportHint(titleHint);
   state.cards = cards;
   state.masterCards = cards.slice();
   state.deckId = null;
   state.current = 0;
-  state.deckTitle = cards.length ? inferDeckTitle(source, titleHint) : "";
-  state.sourceTitle = cards.length ? sourceFileTitle(titleHint) || state.deckTitle : "";
+  state.deckTitle = cards.length ? importTitle || inferDeckTitle(source, titleHint) : "";
+  state.sourceTitle = cards.length ? importTitle || state.deckTitle : "";
+  state.importTitleHint = titleHint;
   resetResults();
   closeAllCardsPanel();
 
@@ -1384,6 +1501,7 @@ function deckSnapshot() {
     exportedAt: new Date().toISOString(),
     deckTitle: state.deckTitle || "",
     sourceTitle: state.sourceTitle || state.deckTitle || "",
+    importTitleHint: state.importTitleHint || "",
     deckId: state.deckId,
     current: Number.isFinite(state.current) ? state.current : 0,
     cards: state.masterCards.map((card, index) => ({
@@ -1445,6 +1563,7 @@ function loadDeckSnapshot(payload, titleHint = "") {
   state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
   state.deckId = payload.deckId || null;
   state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
+  state.importTitleHint = String(payload.importTitleHint || "").trim() || titleHint;
   syncResults();
   closeAllCardsPanel();
   savePersistedDeck();
@@ -1686,6 +1805,7 @@ async function fetchUrl() {
     return;
   }
 
+  state.importTitleHint = url;
   el.fetchBtn.disabled = true;
   setStatus("Fetching source...");
 
@@ -1712,6 +1832,7 @@ async function fetchUrl() {
       state.deckId = null;
       state.deckTitle = "";
       state.sourceTitle = "";
+      state.importTitleHint = url;
       state.current = 0;
       resetResults();
       setStatus("This public Notion URL only exposes collapsed question headings, not answers. Use Export -> Markdown & CSV, then upload the zip or paste the exported Markdown.", "error");
@@ -1800,8 +1921,9 @@ async function loadZipFile(file) {
       .map((entry) => `<!-- Source: ${entry.name} -->\n\n${entry.text}`)
       .join("\n\n---\n\n");
     el.sourceInput.value = markdown;
+    state.importTitleHint = markdownFiles.length === 1 ? markdownFiles[0].name : file.name;
     setStatus(`Loaded ${markdownFiles.length} Markdown file${markdownFiles.length === 1 ? "" : "s"} from ${file.name}.`);
-    buildCards(markdownFiles.length === 1 ? markdownFiles[0].name : file.name);
+    buildCards(state.importTitleHint);
   } catch (error) {
     setStatus("Could not read this zip export.", "error");
   }
@@ -1832,8 +1954,9 @@ function loadFile(file) {
     }
 
     el.sourceInput.value = text;
+    state.importTitleHint = file.name;
     setStatus(`Loaded ${file.name}.`);
-    buildCards(file.name);
+    buildCards(state.importTitleHint);
   });
   reader.addEventListener("error", () => setStatus("Could not read the selected file.", "error"));
   reader.readAsText(file);
@@ -1841,8 +1964,9 @@ function loadFile(file) {
 
 function loadSample() {
   el.sourceInput.value = sampleMarkdown;
+  state.importTitleHint = "Sample flashcards";
   setStatus("Sample loaded.");
-  buildCards("Sample flashcards");
+  buildCards(state.importTitleHint);
 }
 
 function currentCardCanMove() {
@@ -2081,6 +2205,7 @@ el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
 el.importBtn.addEventListener("click", openImportPanel);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
+el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
 el.allCardsList.addEventListener("click", (event) => {

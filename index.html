@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="vendor/bulma.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260520-35">
+    <link rel="stylesheet" href="styles.css?v=20260520-36">
   </head>
   <body>
     <main class="app-shell">
@@ -39,7 +39,10 @@
         </div>
 
         <div class="deck-meta">
-          <span class="deck-title" id="deckTitle" hidden></span>
+          <span class="deck-title-wrap" id="deckTitleWrap" hidden>
+            <span class="deck-title" id="deckTitle"></span>
+            <button class="deck-title-edit" id="editDeckTitleBtn" type="button" title="Edit deck title" aria-label="Edit deck title">&#9998;</button>
+          </span>
           <span id="positionText">0/0</span>
           <strong id="scoreText">Known 0 / Review 0</strong>
         </div>
@@ -208,6 +211,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260520-35"></script>
+    <script src="app.js?v=20260520-36"></script>
   </body>
 </html>
