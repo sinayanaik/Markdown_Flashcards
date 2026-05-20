@@ -41,6 +41,8 @@ const state = {
   dragCurrentX: 0,
   dragCurrentY: 0,
   dragPointerId: null,
+  dragPointerType: "",
+  dragCaptured: false,
   dragStartTime: 0,
   dragLastX: 0,
   dragLastTime: 0,
@@ -109,7 +111,6 @@ const el = {
   replayReviewBtn: document.querySelector("#replayReviewBtn"),
   replayKnownBtn: document.querySelector("#replayKnownBtn"),
   replayAllBtn: document.querySelector("#replayAllBtn"),
-  clearProgressBtn: document.querySelector("#clearProgressBtn")
 };
 
 marked.setOptions({
@@ -750,7 +751,6 @@ function updateMeta() {
   el.replayKnownBtn.disabled = state.results.known.length === 0;
   el.replayReviewBtn.disabled = state.results.review.length === 0;
   el.replayAllBtn.disabled = state.masterCards.length === 0;
-  el.clearProgressBtn.disabled = state.results.known.length === 0 && state.results.review.length === 0;
 }
 
 async function showCard() {
@@ -859,14 +859,6 @@ function replayDeck(scope) {
   state.current = 0;
   state.previewCard = null;
   setStatus(scope === "all" ? "Studying all cards." : `Studying ${scope} cards.`);
-  showCard();
-}
-
-function clearProgress() {
-  resetResults();
-  state.cards = state.masterCards.slice();
-  state.current = 0;
-  setStatus("Cleared known and review marks.");
   showCard();
 }
 
@@ -1215,7 +1207,7 @@ function dragVelocity(clientX, time) {
   return (clientX - state.dragLastX) / elapsed;
 }
 
-function beginSwipe(clientX, clientY, pointerId = null) {
+function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   const time = performance.now();
   state.dragging = false;
   state.dragMoved = false;
@@ -1227,11 +1219,15 @@ function beginSwipe(clientX, clientY, pointerId = null) {
   state.dragStartTime = time;
   state.dragLastTime = time;
   state.dragPointerId = pointerId;
+  state.dragPointerType = pointerType;
+  state.dragCaptured = false;
 }
 
 function resetCardDrag() {
   state.dragging = false;
   state.dragPointerId = null;
+  state.dragPointerType = "";
+  state.dragCaptured = false;
   state.dragMoved = false;
   el.card.classList.remove("is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
@@ -1252,7 +1248,7 @@ function updateSwipe(clientX, clientY, event) {
   if (!state.dragging) {
     const verticalScroll = absY >= swipeConfig.verticalCancelDistance && absY > absX * swipeConfig.verticalCancelRatio;
     if (verticalScroll) {
-      if (event?.pointerId !== undefined) el.card.releasePointerCapture?.(event.pointerId);
+      if (event?.pointerId !== undefined && state.dragCaptured) el.card.releasePointerCapture?.(event.pointerId);
       resetCardDrag();
       return;
     }
@@ -1262,6 +1258,10 @@ function updateSwipe(clientX, clientY, event) {
       return;
     }
     state.dragging = true;
+    if (event?.pointerId !== undefined && !state.dragCaptured) {
+      el.card.setPointerCapture?.(event.pointerId);
+      state.dragCaptured = true;
+    }
     el.card.classList.add("is-dragging");
   }
 
@@ -1301,6 +1301,8 @@ function finishSwipe() {
     el.card.style.transform = "";
     state.dragging = false;
     state.dragPointerId = null;
+    state.dragPointerType = "";
+    state.dragCaptured = false;
     state.dragMoved = false;
     moveCard(dx > 0 ? "known" : "review");
     return;
@@ -1311,8 +1313,11 @@ function finishSwipe() {
 
 function handlePointerDown(event) {
   if (!currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
-  beginSwipe(event.clientX, event.clientY, event.pointerId);
-  el.card.setPointerCapture?.(event.pointerId);
+  beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
+  if (event.pointerType === "mouse") {
+    el.card.setPointerCapture?.(event.pointerId);
+    state.dragCaptured = true;
+  }
 }
 
 function handlePointerMove(event) {
@@ -1322,13 +1327,13 @@ function handlePointerMove(event) {
 
 function handlePointerUp(event) {
   if (state.dragPointerId !== event.pointerId) return;
-  el.card.releasePointerCapture?.(event.pointerId);
+  if (state.dragCaptured) el.card.releasePointerCapture?.(event.pointerId);
   finishSwipe();
 }
 
 function handlePointerCancel(event) {
   if (state.dragPointerId === event.pointerId) {
-    el.card.releasePointerCapture?.(event.pointerId);
+    if (state.dragCaptured) el.card.releasePointerCapture?.(event.pointerId);
     resetCardDrag();
   }
 }
@@ -1341,7 +1346,7 @@ function handleTouchStart(event) {
   if (window.PointerEvent || !currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
   const point = touchPoint(event);
   if (!point) return;
-  beginSwipe(point.clientX, point.clientY, "touch");
+  beginSwipe(point.clientX, point.clientY, "touch", "touch");
 }
 
 function handleTouchMove(event) {
@@ -1418,7 +1423,6 @@ el.reviewBrickList.addEventListener("click", (event) => {
 el.replayReviewBtn.addEventListener("click", () => replayDeck("review"));
 el.replayKnownBtn.addEventListener("click", () => replayDeck("known"));
 el.replayAllBtn.addEventListener("click", () => replayDeck("all"));
-el.clearProgressBtn.addEventListener("click", clearProgress);
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
 el.card.addEventListener("click", (event) => {
