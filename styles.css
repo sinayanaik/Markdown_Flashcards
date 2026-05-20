@@ -253,13 +253,13 @@ button:disabled {
     opacity 220ms ease,
     box-shadow 240ms ease;
   touch-action: pan-y;
-  user-select: none;
   will-change: transform, opacity;
 }
 
 .card.is-dragging {
   transition: none;
   cursor: grabbing;
+  user-select: none;
 }
 
 .card.drag-review {
@@ -445,6 +445,8 @@ button:disabled {
   hyphens: auto;
   font-size: clamp(1.04rem, 1.35vw, 1.2rem);
   line-height: 1.58;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .card-question .rendered {

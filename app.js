@@ -1210,6 +1210,27 @@ function currentCardCanMove() {
   return Boolean(state.previewCard || state.cards[state.current]);
 }
 
+function closestElement(target, selector) {
+  if (target instanceof Element) return target.closest(selector);
+  return target?.parentElement?.closest(selector) || null;
+}
+
+function isCardActionTarget(target) {
+  return Boolean(closestElement(target, "a, button, input, textarea"));
+}
+
+function isSelectableCardText(target) {
+  return Boolean(closestElement(target, ".rendered"));
+}
+
+function hasCardTextSelection() {
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+  const anchorNode = selection.anchorNode;
+  const focusNode = selection.focusNode;
+  return Boolean((anchorNode && el.card.contains(anchorNode)) || (focusNode && el.card.contains(focusNode)));
+}
+
 function swipeCommitDistance() {
   return Math.min(
     swipeConfig.maxCommitDistance,
@@ -1327,12 +1348,9 @@ function finishSwipe() {
 }
 
 function handlePointerDown(event) {
-  if (!currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
+  if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
+  if (event.pointerType === "mouse" && isSelectableCardText(event.target)) return;
   beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
-  if (event.pointerType === "mouse") {
-    el.card.setPointerCapture?.(event.pointerId);
-    state.dragCaptured = true;
-  }
 }
 
 function handlePointerMove(event) {
@@ -1358,7 +1376,7 @@ function touchPoint(event) {
 }
 
 function handleTouchStart(event) {
-  if (window.PointerEvent || !currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
+  if (window.PointerEvent || !currentCardCanMove() || isCardActionTarget(event.target)) return;
   const point = touchPoint(event);
   if (!point) return;
   beginSwipe(point.clientX, point.clientY, "touch", "touch");
@@ -1445,7 +1463,8 @@ el.card.addEventListener("click", (event) => {
     event.preventDefault();
     return;
   }
-  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && Math.abs(state.dragCurrentY - state.dragStartY) < 8 && event.target.closest("a, button") === null) flipCard();
+  if (hasCardTextSelection()) return;
+  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && Math.abs(state.dragCurrentY - state.dragStartY) < 8 && !isCardActionTarget(event.target)) flipCard();
 });
 el.card.addEventListener("pointerdown", handlePointerDown);
 el.card.addEventListener("pointermove", handlePointerMove);
