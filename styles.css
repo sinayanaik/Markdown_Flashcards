@@ -1042,7 +1042,7 @@ textarea {
   }
 
   .quiz-panel {
-    height: calc(70svh + 112px);
+    height: calc(78svh + 72px);
     min-height: 0;
     padding: 8px;
   }
@@ -1076,9 +1076,13 @@ textarea {
   }
 
   .deck {
-    height: 70svh;
+    height: 78svh;
     min-height: 0;
     padding: 8px 0;
+  }
+
+  .controls {
+    display: none;
   }
 
   .card-face {
@@ -1241,7 +1245,7 @@ textarea {
   }
 
   .quiz-panel {
-    height: calc(70svh + 124px);
+    height: calc(78svh + 76px);
     min-height: 0;
   }
 
