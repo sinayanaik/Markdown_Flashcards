@@ -1993,6 +1993,30 @@ function isSelectableCardText(target) {
   return Boolean(closestElement(target, ".rendered"));
 }
 
+function isHorizontallyScrollable(node) {
+  if (!(node instanceof Element)) return false;
+  const styles = window.getComputedStyle(node);
+  const allowsHorizontalScroll = !["hidden", "clip", "visible"].includes(styles.overflowX);
+  return allowsHorizontalScroll && node.scrollWidth > node.clientWidth + 2;
+}
+
+function horizontalScrollRegion(target) {
+  let node = target instanceof Element ? target : target?.parentElement;
+
+  while (node && node !== el.card) {
+    if (node.matches?.(".rendered pre, .math-display, .diagram-shell, .rendered table") && isHorizontallyScrollable(node)) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+
+  return null;
+}
+
+function isHorizontalScrollTarget(target) {
+  return Boolean(horizontalScrollRegion(target));
+}
+
 function hasCardTextSelection() {
   const selection = window.getSelection?.();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
@@ -2129,6 +2153,7 @@ function finishSwipe() {
 
 function handlePointerDown(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
+  if (isHorizontalScrollTarget(event.target)) return;
   if (event.pointerType === "mouse" && isSelectableCardText(event.target)) return;
   beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
 }
@@ -2157,6 +2182,7 @@ function touchPoint(event) {
 
 function handleTouchStart(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
+  if (isHorizontalScrollTarget(event.target)) return;
   const point = touchPoint(event);
   if (!point) return;
   beginSwipe(point.clientX, point.clientY, "touch", "touch");

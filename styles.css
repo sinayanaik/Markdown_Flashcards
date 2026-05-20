@@ -660,6 +660,8 @@ button:disabled {
   line-height: 1.55;
   tab-size: 2;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
 }
 
 .rendered :not(pre) > code {
@@ -785,6 +787,8 @@ button:disabled {
   display: block;
   overflow-x: auto;
   border-collapse: collapse;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
 }
 
 .rendered th,
@@ -797,7 +801,9 @@ button:disabled {
 .math-display {
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
   padding: 8px 0;
+  touch-action: pan-x pan-y;
 }
 
 .diagram-shell {
@@ -806,7 +812,9 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 72%, transparent);
+  overscroll-behavior-x: contain;
   padding: 10px;
+  touch-action: pan-x pan-y;
 }
 
 .diagram-shell .mermaid {
