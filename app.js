@@ -23,6 +23,7 @@ const sampleMarkdown = `> What is the derivative of $x^2$?
 > Each blockquote group becomes one flashcard. The first non-empty line is the question, and the remaining lines become the answer.`;
 
 const state = {
+  deckId: null,
   cards: [],
   masterCards: [],
   statusById: {},
@@ -55,6 +56,250 @@ const state = {
 };
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
+
+
+// Supabase Integration
+const supabaseUrl = "https://jxihukiaeqpkyatfdoso.supabase.co";
+const supabaseKey = "sb_publishable_DWc8wA59N2av1QpAfYqqpw_v4k5q7aY";
+const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+
+
+
+
+async function fetchWebDecks() {
+  if (!supabaseClient) return;
+  try {
+    setStatus("Fetching web decks...");
+    const { data, error } = await supabaseClient
+      .from("decks")
+      .select("id, title, updated_at")
+      .order("updated_at", { ascending: false });
+      
+    if (error) throw error;
+    
+    const tbody = document.getElementById("webDecksListTable");
+    if (!tbody) return;
+    
+    tbody.innerHTML = "";
+    
+    if (!data || data.length === 0) {
+      tbody.innerHTML = "<tr><td colspan=\"3\" style=\"text-align: center; padding: 1rem; color: var(--text-secondary);\">No web decks found.</td></tr>";
+      setStatus("Web decks loaded.");
+      return;
+    }
+    
+    data.forEach(deck => {
+      const date = new Date(deck.updated_at).toLocaleString();
+      const tr = document.createElement("tr");
+      tr.style.borderBottom = "1px solid var(--border-color, #333)";
+      
+      const tdTitle = document.createElement("td");
+      tdTitle.style.padding = "0.5rem";
+      tdTitle.textContent = deck.title || "Untitled";
+      
+      const tdDate = document.createElement("td");
+      tdDate.style.padding = "0.5rem";
+      tdDate.textContent = date;
+      
+      const tdActions = document.createElement("td");
+      tdActions.style.padding = "0.5rem";
+      tdActions.style.textAlign = "right";
+      
+      const loadBtn = document.createElement("button");
+      loadBtn.className = "button is-small";
+      loadBtn.textContent = "Load";
+      loadBtn.style.marginRight = "0.25rem";
+      loadBtn.onclick = () => loadWebDeck(deck.id);
+      
+      const delBtn = document.createElement("button");
+      delBtn.className = "button is-small";
+      delBtn.textContent = "Delete";
+      delBtn.style.background = "#e04f5f";
+      delBtn.style.color = "white";
+      delBtn.style.border = "none";
+      delBtn.onclick = () => deleteWebDeck(deck.id);
+      
+      tdActions.appendChild(loadBtn);
+      tdActions.appendChild(delBtn);
+      
+      tr.appendChild(tdTitle);
+      tr.appendChild(tdDate);
+      tr.appendChild(tdActions);
+      tbody.appendChild(tr);
+    });
+    setStatus("Web decks updated.");
+  } catch (error) {
+    console.error("Failed to fetch web decks", error);
+    setStatus("Failed to fetch web decks.", "error");
+  }
+}
+
+async function deleteWebDeck(deckId) {
+  if (!supabaseClient) return;
+  if (!confirm("Are you sure you want to delete this deck from the web?")) return;
+  
+  try {
+    setStatus("Deleting deck...");
+    const { error } = await supabaseClient.from("decks").delete().eq("id", deckId);
+    if (error) throw error;
+    
+    if (state.deckId === deckId) {
+      state.deckId = null;
+      savePersistedDeck();
+    }
+    
+    setStatus("Deck deleted successfully.");
+    fetchWebDecks();
+  } catch (error) {
+    console.error("Failed to delete web deck", error);
+    setStatus("Failed to delete web deck.", "error");
+  }
+}
+
+async function loadWebDeck(deckId) {
+  if (!deckId || !supabaseClient) return;
+
+  setStatus("Loading deck from web... (1/2) Fetching details");
+  
+  try {
+    const { data: deckData, error: deckError } = await supabaseClient
+      .from("decks")
+      .select("*")
+      .eq("id", deckId)
+      .single();
+
+    if (deckError) throw deckError;
+
+    setStatus("Loading deck from web... (2/2) Fetching cards");
+    const { data: cardsData, error: cardsError } = await supabaseClient
+      .from("cards")
+      .select("*")
+      .eq("deck_id", deckId)
+      .order("position", { ascending: true });
+
+    if (cardsError) throw cardsError;
+
+    const usedIds = new Set();
+    const statusById = {};
+    const cards = cardsData.map((rawCard, index) => {
+      const id = String(rawCard.id || `${index}-${rawCard.question.slice(0, 32)}`);
+      if (rawCard.status) statusById[id] = rawCard.status;
+      return { id, question: rawCard.question, answer: rawCard.answer };
+    });
+
+    state.deckId = deckData.id;
+    state.cards = cards.slice();
+    state.masterCards = cards.slice();
+    state.statusById = statusById;
+    state.current = Math.min(Math.max(Number(deckData.current_card_index) || 0, 0), cards.length);
+    state.previewCard = null;
+    state.flipped = false;
+    state.deckTitle = deckData.title || "";
+    state.sourceTitle = deckData.title || "";
+    
+    syncResults();
+    closeAllCardsPanel();
+    savePersistedDeck();
+    setStatus(`Loaded ${cards.length} cards from web successfully.`);
+    document.getElementById("webDecksPanel").hidden = true;
+    showCard();
+  } catch (error) {
+    setStatus("Failed to load deck from web.", "error");
+    console.error(error);
+  }
+}
+
+function showSyncModal() {
+  const modal = document.getElementById("syncModal");
+  const content = document.getElementById("syncDetailsContent");
+  
+  if (!state.masterCards.length) {
+    setStatus("No deck to sync.", "error");
+    return;
+  }
+  
+  const deckTitle = state.deckTitle || state.sourceTitle || "Untitled Deck";
+  const cardsCount = state.masterCards.length;
+  const knownCount = state.results.known.length;
+  const reviewCount = state.results.review.length;
+  
+  const isUpdate = !!state.deckId;
+  const actionText = isUpdate ? "Update existing web deck" : "Create new web deck";
+  
+  content.innerHTML = `
+    <p><strong>Action:</strong> ${actionText}</p>
+    <p><strong>Title:</strong> ${deckTitle}</p>
+    <p><strong>Cards:</strong> ${cardsCount} total (${knownCount} known, ${reviewCount} review)</p>
+    <p><strong>Current Position:</strong> Card ${state.current + 1}</p>
+    <br>
+    <p style="color: var(--text-secondary);">This will overwrite the web version with your local progress.</p>
+  `;
+  
+  modal.hidden = false;
+}
+
+async function syncDeckToWeb() {
+  if (!supabaseClient) return;
+  document.getElementById("syncModal").hidden = true;
+  
+  if (!state.masterCards.length) {
+    setStatus("No deck to sync.", "error");
+    return;
+  }
+
+  const syncBtn = document.getElementById("syncBtn");
+  if (syncBtn) syncBtn.disabled = true;
+
+  try {
+    if (!state.deckId) {
+      state.deckId = slugifyFileName(state.deckTitle || state.sourceTitle) || ("deck-" + Date.now());
+    }
+
+    setStatus(`Syncing... (1/2) Saving deck info "${state.deckTitle}"`);
+    
+    const deckData = {
+      id: state.deckId,
+      title: state.deckTitle || "Untitled Deck",
+      current_card_index: state.current,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error: deckError } = await supabaseClient
+      .from("decks")
+      .upsert(deckData);
+
+    if (deckError) throw deckError;
+
+    setStatus(`Syncing... (2/2) Saving ${state.masterCards.length} cards`);
+    const cardsData = state.masterCards.map((card, index) => ({
+      id: card.id,
+      deck_id: state.deckId,
+      question: card.question,
+      answer: card.answer,
+      position: index,
+      status: normalizeCardStatus(state.statusById[card.id]),
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error: cardsError } = await supabaseClient
+      .from("cards")
+      .upsert(cardsData);
+
+    if (cardsError) throw cardsError;
+
+    setStatus("Deck synced to web successfully.");
+    savePersistedDeck();
+  } catch (error) {
+    setStatus("Failed to sync deck to web.", "error");
+    console.error(error);
+  } finally {
+    if (syncBtn) syncBtn.disabled = false;
+  }
+}
+
+
+
+
 
 const swipeConfig = {
   intentDistance: 12,
@@ -920,6 +1165,7 @@ function buildCards(titleHint = "") {
   const headingCount = countQuestionHeadings(source);
   state.cards = cards;
   state.masterCards = cards.slice();
+  state.deckId = null;
   state.current = 0;
   state.deckTitle = cards.length ? inferDeckTitle(source, titleHint) : "";
   state.sourceTitle = cards.length ? sourceFileTitle(titleHint) || state.deckTitle : "";
@@ -1054,6 +1300,7 @@ function deckSnapshot() {
     exportedAt: new Date().toISOString(),
     deckTitle: state.deckTitle || "",
     sourceTitle: state.sourceTitle || state.deckTitle || "",
+    deckId: state.deckId,
     current: Number.isFinite(state.current) ? state.current : 0,
     cards: state.masterCards.map((card, index) => ({
       id: card.id || `${index}-${card.question.slice(0, 32)}`,
@@ -1112,6 +1359,7 @@ function loadDeckSnapshot(payload, titleHint = "") {
   state.previewCard = null;
   state.flipped = false;
   state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
+  state.deckId = payload.deckId || null;
   state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
   syncResults();
   closeAllCardsPanel();
@@ -1377,6 +1625,7 @@ async function fetchUrl() {
       state.masterCards = [];
       state.statusById = {};
       state.previewCard = null;
+      state.deckId = null;
       state.deckTitle = "";
       state.sourceTitle = "";
       state.current = 0;
@@ -1716,6 +1965,32 @@ function handleTouchCancel() {
   if (state.dragPointerId !== "touch") return;
   resetCardDrag();
 }
+
+
+
+if (document.getElementById("webDecksBtn")) {
+  document.getElementById("webDecksBtn").addEventListener("click", () => {
+    document.getElementById("webDecksPanel").hidden = false;
+  });
+}
+if (document.getElementById("closeWebDecksBtn")) {
+  document.getElementById("closeWebDecksBtn").addEventListener("click", () => {
+    document.getElementById("webDecksPanel").hidden = true;
+  });
+}
+if (document.getElementById("syncBtn")) {
+  document.getElementById("syncBtn").addEventListener("click", showSyncModal);
+}
+if (document.getElementById("cancelSyncBtn")) {
+  document.getElementById("cancelSyncBtn").addEventListener("click", () => {
+    document.getElementById("syncModal").hidden = true;
+  });
+}
+if (document.getElementById("confirmSyncBtn")) {
+  document.getElementById("confirmSyncBtn").addEventListener("click", syncDeckToWeb);
+}
+
+if (document.getElementById("refreshWebDecksBtn")) document.getElementById("refreshWebDecksBtn").addEventListener("click", fetchWebDecks);
 
 el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
