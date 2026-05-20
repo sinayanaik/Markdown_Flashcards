@@ -17,6 +17,7 @@ The first non-empty line becomes the question. Everything after it becomes the a
 The app also accepts:
 
 - `### Question?` followed by answer content until the next question heading
+- Study-note headings such as `### Explain ...`, `### Describe ...`, `### Summary ...`, or headings with labeled sections like `**Translation:**`, `**Meaning:**`, and `**Word Meanings:**`
 - `<details><summary>Question</summary>Answer</details>`
 - `Q: ...` / `A: ...` blocks
 

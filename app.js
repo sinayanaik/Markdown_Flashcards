@@ -299,15 +299,43 @@ function parseQACards(markdown) {
   return cards;
 }
 
-function parseHeadingCards(markdown) {
+function hasStructuredSectionLabels(lines) {
+  const studyLabelPattern = /^\*\*\s*(?:original(?:\s+sanskrit)?|(?:english\s+)?transliteration|(?:complete\s+)?translation|word(?:-by-word|\s+meanings?)?(?:\s+breakdown)?|(?:philosophical\s+)?meaning|memorization\s+tip|explanation|example|summary|notes)\s*:\*\*\s*$/i;
+  const labels = lines.filter((line) => studyLabelPattern.test(line.trim()));
+  return labels.length >= 2;
+}
+
+function hasMeaningfulContent(lines) {
+  return lines.some((line) => {
+    const trimmed = line.trim();
+    return trimmed
+      && !/^-{3,}$/.test(trimmed)
+      && !/^<alphaxiv-thinking-title\b/i.test(trimmed);
+  });
+}
+
+function isStudySectionTitle(title) {
+  return /^(?:what|how|why|when|where|which|who|can|does|do|is|are|explain|describe|summari[sz]e|summary|compare|contrast)\b/i.test(title);
+}
+
+function parseHeadingCards(markdown, options = {}) {
   const lines = normalizeMarkdown(markdown).split("\n");
   const cards = [];
   let current = null;
+  const includeStudySections = options.includeStudySections === true;
 
   const flush = () => {
     if (!current) return;
     const answer = cleanToggleContent(current.answer);
-    if (current.question && answer) {
+    const shouldKeep = current.isQuestion
+      || (
+        includeStudySections
+        && !current.hasNestedHeading
+        && hasMeaningfulContent(current.answer)
+        && (isStudySectionTitle(current.question) || hasStructuredSectionLabels(current.answer))
+      );
+
+    if (current.question && answer && shouldKeep) {
       cards.push({
         question: current.question,
         answer
@@ -319,17 +347,34 @@ function parseHeadingCards(markdown) {
     const heading = line.match(/^(#{2,6})\s+(.+?)\s*#*\s*$/);
 
     if (heading) {
-      if (line.trim().endsWith("?")) {
+      const level = heading[1].length;
+      const question = heading[2].trim();
+      const isQuestionHeading = question.endsWith("?");
+
+      if (isQuestionHeading || includeStudySections) {
+        if (current && level > current.level) {
+          if (current.isQuestion) {
+            current.answer.push(line);
+            continue;
+          }
+
+          current.hasNestedHeading = true;
+          flush();
+          current = null;
+        }
+
         flush();
         current = {
-          question: heading[2].trim(),
-          level: heading[1].length,
+          question,
+          level,
+          isQuestion: isQuestionHeading,
+          hasNestedHeading: false,
           answer: []
         };
         continue;
       }
 
-      if (current && heading[1].length <= current.level) {
+      if (current && level <= current.level) {
         flush();
         current = null;
       }
@@ -355,7 +400,7 @@ function parseCards(markdown) {
     ...parseDetailsCards(source),
     ...parseBlockquoteCards(source),
     ...parseQACards(source),
-    ...parseHeadingCards(source)
+    ...parseHeadingCards(source, { includeStudySections: true })
   ];
 
   return cards.map((card, index) => ({
@@ -796,7 +841,7 @@ function buildCards(titleHint = "") {
   } else {
     const message = headingCount
       ? `Found ${headingCount} question heading${headingCount === 1 ? "" : "s"}, but no answer text. This Notion page is exposing collapsed toggle titles only; export Markdown or paste expanded toggle content.`
-      : "No cards found. Use > toggle blocks with an answer under the first line.";
+      : "No cards found. Use > toggle blocks, Q:/A: blocks, question headings, or structured note sections with answer content.";
     setStatus(message, "error");
   }
 
@@ -918,13 +963,15 @@ function contentFits(node) {
 }
 
 function fitPrintNode(node) {
-  if (contentFits(node)) return;
-
   node.style.transform = "";
   node.style.width = "";
 
+  const shouldGrow = node.classList.contains("fit-question");
+
+  if (!shouldGrow && contentFits(node)) return;
+
   let low = 4;
-  let high = 88;
+  let high = shouldGrow ? 58 : 88;
   let best = low;
 
   for (let index = 0; index < 10; index += 1) {
@@ -979,11 +1026,11 @@ async function exportPdf(scope = "all") {
       pages.push(`
         <section class="print-page">
           <div class="page-kicker">Question ${index + 1}</div>
-          <div class="fit-content">${markdownToSafeHtml(card.question)}</div>
+          <div class="fit-content fit-question">${markdownToSafeHtml(card.question)}</div>
         </section>
         <section class="print-page">
           <div class="page-kicker">Answer ${index + 1}</div>
-          <div class="fit-content">${markdownToSafeHtml(card.answer)}</div>
+          <div class="fit-content fit-answer">${markdownToSafeHtml(card.answer)}</div>
         </section>
       `);
 

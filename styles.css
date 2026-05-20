@@ -1024,6 +1024,12 @@ textarea {
   line-height: 1.42;
 }
 
+.print-root.is-preparing .fit-question {
+  display: grid;
+  align-content: center;
+  line-height: 1.18;
+}
+
 .print-root.is-preparing .fit-content > :first-child {
   margin-top: 0;
 }
@@ -1365,6 +1371,12 @@ textarea {
     transform-origin: top left;
     font-size: 18px;
     line-height: 1.42;
+  }
+
+  .fit-question {
+    display: grid;
+    align-content: center;
+    line-height: 1.18;
   }
 
   .fit-content > :first-child {
