@@ -49,6 +49,7 @@ const state = {
   dragLastY: 0,
   dragLastTime: 0,
   dragAxis: "",
+  dragScrollNode: null,
   dragging: false,
   dragMoved: false,
   suppressClickUntil: 0,
@@ -952,12 +953,12 @@ function flipCard() {
   el.card.classList.toggle("is-flipped", state.flipped);
 }
 
-function navigateCard(direction) {
+function navigateCard(direction, animationDirection = direction) {
   if (state.previewCard || !state.cards.length) return;
   const nextIndex = Math.min(Math.max(state.current + direction, 0), state.cards.length - 1);
   if (nextIndex === state.current) return;
   setStatus(direction > 0 ? "Moved to next card." : "Moved to previous card.");
-  animateToCard(direction, () => {
+  animateToCard(animationDirection, () => {
     state.current = nextIndex;
     state.previewCard = null;
     state.flipped = false;
@@ -1523,7 +1524,9 @@ function currentCardCanMove() {
 
 function closestElement(target, selector) {
   if (target instanceof Element) return target.closest(selector);
-  return target?.parentElement?.closest(selector) || null;
+  if (typeof target?.closest === "function") return target.closest(selector);
+  if (typeof target?.parentElement?.closest === "function") return target.parentElement.closest(selector);
+  return null;
 }
 
 function isCardActionTarget(target) {
@@ -1554,7 +1557,17 @@ function dragVelocity(current, previous, time) {
   return (current - previous) / elapsed;
 }
 
-function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
+function scrollableCardFace(target) {
+  const face = closestElement(target, ".card-face");
+  if (!face) return null;
+  return face.scrollHeight > face.clientHeight + 2 ? face : null;
+}
+
+function shouldLetCardFaceScroll() {
+  return Boolean(state.dragScrollNode);
+}
+
+function beginSwipe(clientX, clientY, pointerId = null, pointerType = "", target = null) {
   const time = performance.now();
   state.dragging = false;
   state.dragMoved = false;
@@ -1570,6 +1583,7 @@ function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   state.dragPointerType = pointerType;
   state.dragCaptured = false;
   state.dragAxis = "";
+  state.dragScrollNode = scrollableCardFace(target);
 }
 
 function resetCardDrag() {
@@ -1579,6 +1593,7 @@ function resetCardDrag() {
   state.dragCaptured = false;
   state.dragMoved = false;
   state.dragAxis = "";
+  state.dragScrollNode = null;
   el.card.classList.remove("is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
   el.card.style.transform = "";
 }
@@ -1607,6 +1622,11 @@ function updateSwipe(clientX, clientY, event) {
       return;
     }
 
+    if (hasVerticalIntent && shouldLetCardFaceScroll()) {
+      resetCardDrag();
+      return;
+    }
+
     state.dragging = true;
     state.dragAxis = hasHorizontalIntent ? "x" : "y";
     if (event?.pointerId !== undefined && !state.dragCaptured) {
@@ -1616,7 +1636,7 @@ function updateSwipe(clientX, clientY, event) {
     el.card.classList.add("is-dragging");
   }
 
-  if (event?.cancelable) event.preventDefault();
+  if (event?.cancelable && typeof event.preventDefault === "function") event.preventDefault();
 
   if (state.dragAxis === "y") {
     const direction = dy > 0 ? 1 : -1;
@@ -1624,8 +1644,8 @@ function updateSwipe(clientX, clientY, event) {
     const progress = Math.min(absY / swipeCommitDistance(), 1);
     const flicking = absY >= swipeConfig.flickDistance && Math.abs(velocityY) >= swipeConfig.flickVelocity;
     const choosing = progress > 0.45 || flicking;
-    el.card.classList.toggle("drag-next", dy > 0 && choosing);
-    el.card.classList.toggle("drag-prev", dy < 0 && choosing);
+    el.card.classList.toggle("drag-next", dy < 0 && choosing);
+    el.card.classList.toggle("drag-prev", dy > 0 && choosing);
     el.card.classList.remove("drag-known", "drag-review");
     el.card.style.transform = `translateY(${resisted}px) scale(${1 - progress * 0.01})`;
   } else {
@@ -1675,9 +1695,10 @@ function finishSwipe() {
     state.dragCaptured = false;
     state.dragMoved = false;
     state.dragAxis = "";
+    state.dragScrollNode = null;
 
     if (axis === "y") {
-      navigateCard(dy < 0 ? 1 : -1);
+      navigateCard(dy < 0 ? 1 : -1, dy < 0 ? -1 : 1);
     } else {
       moveCard(dx > 0 ? "known" : "review");
     }
@@ -1690,7 +1711,7 @@ function finishSwipe() {
 function handlePointerDown(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   if (event.pointerType === "mouse" && isSelectableCardText(event.target)) return;
-  beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
+  beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType, event.target);
 }
 
 function handlePointerMove(event) {
@@ -1719,7 +1740,7 @@ function handleTouchStart(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   const point = touchPoint(event);
   if (!point) return;
-  beginSwipe(point.clientX, point.clientY, "touch", "touch");
+  beginSwipe(point.clientX, point.clientY, "touch", "touch", event.target);
 }
 
 function handleTouchMove(event) {
