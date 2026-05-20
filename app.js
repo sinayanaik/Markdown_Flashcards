@@ -1677,7 +1677,7 @@ function finishSwipe() {
     state.dragAxis = "";
 
     if (axis === "y") {
-      navigateCard(dy > 0 ? 1 : -1);
+      navigateCard(dy < 0 ? 1 : -1);
     } else {
       moveCard(dx > 0 ? "known" : "review");
     }
