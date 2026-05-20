@@ -41,18 +41,27 @@ const state = {
   dragCurrentX: 0,
   dragCurrentY: 0,
   dragPointerId: null,
-  dragging: false
+  dragStartTime: 0,
+  dragLastX: 0,
+  dragLastTime: 0,
+  dragging: false,
+  dragMoved: false,
+  suppressClickUntil: 0
 };
 
 const swipeConfig = {
-  intentDistance: 18,
-  intentRatio: 1.35,
-  commitRatio: 1.6,
-  minCommitDistance: 110,
-  maxCommitDistance: 190,
-  widthCommitRatio: 0.22,
-  resistance: 0.46,
-  maxPreviewOffset: 92
+  intentDistance: 12,
+  intentRatio: 1.12,
+  verticalCancelDistance: 18,
+  verticalCancelRatio: 1.28,
+  commitRatio: 1.18,
+  minCommitDistance: 66,
+  maxCommitDistance: 142,
+  widthCommitRatio: 0.18,
+  flickDistance: 34,
+  flickVelocity: 0.42,
+  resistance: 0.74,
+  maxPreviewOffset: 128
 };
 
 let allCardsRenderId = 0;
@@ -624,7 +633,11 @@ function closeAllCardsPanel() {
 }
 
 function setAllCardStatus(cardId, status) {
-  state.statusById[cardId] = status;
+  if (state.statusById[cardId] === status) {
+    delete state.statusById[cardId];
+  } else {
+    state.statusById[cardId] = status;
+  }
   syncResults();
   updateMeta();
   updateAllCardStatuses();
@@ -1197,66 +1210,98 @@ function swipeCommitDistance() {
   );
 }
 
+function dragVelocity(clientX, time) {
+  const elapsed = Math.max(time - state.dragLastTime, 1);
+  return (clientX - state.dragLastX) / elapsed;
+}
+
+function beginSwipe(clientX, clientY, pointerId = null) {
+  const time = performance.now();
+  state.dragging = false;
+  state.dragMoved = false;
+  state.dragStartX = clientX;
+  state.dragStartY = clientY;
+  state.dragCurrentX = clientX;
+  state.dragCurrentY = clientY;
+  state.dragLastX = clientX;
+  state.dragStartTime = time;
+  state.dragLastTime = time;
+  state.dragPointerId = pointerId;
+}
+
 function resetCardDrag() {
   state.dragging = false;
   state.dragPointerId = null;
+  state.dragMoved = false;
   el.card.classList.remove("is-dragging", "drag-review", "drag-known");
   el.card.style.transform = "";
 }
 
-function handlePointerDown(event) {
-  if (!currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
-  state.dragging = false;
-  state.dragStartX = event.clientX;
-  state.dragStartY = event.clientY;
-  state.dragCurrentX = event.clientX;
-  state.dragCurrentY = event.clientY;
-  state.dragPointerId = event.pointerId;
-  el.card.setPointerCapture?.(event.pointerId);
-}
-
-function handlePointerMove(event) {
-  if (state.dragPointerId !== event.pointerId) return;
-  state.dragCurrentX = event.clientX;
-  state.dragCurrentY = event.clientY;
+function updateSwipe(clientX, clientY, event) {
+  const time = performance.now();
+  const velocity = dragVelocity(clientX, time);
+  state.dragCurrentX = clientX;
+  state.dragCurrentY = clientY;
 
   const dx = state.dragCurrentX - state.dragStartX;
   const dy = state.dragCurrentY - state.dragStartY;
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
+  state.dragMoved = state.dragMoved || absX > 6 || absY > 6;
 
   if (!state.dragging) {
-    if (absX < swipeConfig.intentDistance || absX < absY * swipeConfig.intentRatio) return;
+    const verticalScroll = absY >= swipeConfig.verticalCancelDistance && absY > absX * swipeConfig.verticalCancelRatio;
+    if (verticalScroll) {
+      if (event?.pointerId !== undefined) el.card.releasePointerCapture?.(event.pointerId);
+      resetCardDrag();
+      return;
+    }
+    if (absX < swipeConfig.intentDistance || absX < absY * swipeConfig.intentRatio) {
+      state.dragLastX = clientX;
+      state.dragLastTime = time;
+      return;
+    }
     state.dragging = true;
     el.card.classList.add("is-dragging");
   }
 
-  event.preventDefault();
+  if (event?.cancelable) event.preventDefault();
   const direction = dx > 0 ? 1 : -1;
   const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
   const progress = Math.min(absX / swipeCommitDistance(), 1);
-  el.card.classList.toggle("drag-known", dx > 0 && progress > 0.65);
-  el.card.classList.toggle("drag-review", dx < 0 && progress > 0.65);
-  el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 1.4}deg) scale(${1 - progress * 0.008})`;
+  const flicking = absX >= swipeConfig.flickDistance && Math.abs(velocity) >= swipeConfig.flickVelocity;
+  const choosing = progress > 0.45 || flicking;
+  el.card.classList.toggle("drag-known", dx > 0 && choosing);
+  el.card.classList.toggle("drag-review", dx < 0 && choosing);
+  el.card.style.transform = `translateX(${resisted}px) rotate(${direction * progress * 2.2}deg) scale(${1 - progress * 0.01})`;
+  state.dragLastX = clientX;
+  state.dragLastTime = time;
 }
 
-function handlePointerUp(event) {
-  if (state.dragPointerId !== event.pointerId) return;
-  el.card.releasePointerCapture?.(event.pointerId);
-
+function finishSwipe() {
   const dx = state.dragCurrentX - state.dragStartX;
   const dy = state.dragCurrentY - state.dragStartY;
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
+  const elapsed = Math.max(performance.now() - state.dragStartTime, 1);
+  const averageVelocity = absX / elapsed;
   const committed = state.dragging
-    && absX >= swipeCommitDistance()
-    && absX >= absY * swipeConfig.commitRatio;
+    && absX >= absY * swipeConfig.commitRatio
+    && (
+      absX >= swipeCommitDistance()
+      || (absX >= swipeConfig.flickDistance && averageVelocity >= swipeConfig.flickVelocity)
+    );
+
+  if (state.dragMoved || state.dragging) {
+    state.suppressClickUntil = performance.now() + 360;
+  }
 
   if (committed) {
     el.card.classList.remove("is-dragging", "drag-review", "drag-known");
     el.card.style.transform = "";
     state.dragging = false;
     state.dragPointerId = null;
+    state.dragMoved = false;
     moveCard(dx > 0 ? "known" : "review");
     return;
   }
@@ -1264,11 +1309,56 @@ function handlePointerUp(event) {
   resetCardDrag();
 }
 
+function handlePointerDown(event) {
+  if (!currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
+  beginSwipe(event.clientX, event.clientY, event.pointerId);
+  el.card.setPointerCapture?.(event.pointerId);
+}
+
+function handlePointerMove(event) {
+  if (state.dragPointerId !== event.pointerId) return;
+  updateSwipe(event.clientX, event.clientY, event);
+}
+
+function handlePointerUp(event) {
+  if (state.dragPointerId !== event.pointerId) return;
+  el.card.releasePointerCapture?.(event.pointerId);
+  finishSwipe();
+}
+
 function handlePointerCancel(event) {
   if (state.dragPointerId === event.pointerId) {
     el.card.releasePointerCapture?.(event.pointerId);
     resetCardDrag();
   }
+}
+
+function touchPoint(event) {
+  return event.changedTouches?.[0] || event.touches?.[0] || null;
+}
+
+function handleTouchStart(event) {
+  if (window.PointerEvent || !currentCardCanMove() || event.target.closest("a, button, input, textarea")) return;
+  const point = touchPoint(event);
+  if (!point) return;
+  beginSwipe(point.clientX, point.clientY, "touch");
+}
+
+function handleTouchMove(event) {
+  if (window.PointerEvent || state.dragPointerId !== "touch") return;
+  const point = touchPoint(event);
+  if (!point) return;
+  updateSwipe(point.clientX, point.clientY, event);
+}
+
+function handleTouchEnd() {
+  if (window.PointerEvent || state.dragPointerId !== "touch") return;
+  finishSwipe();
+}
+
+function handleTouchCancel() {
+  if (window.PointerEvent || state.dragPointerId !== "touch") return;
+  resetCardDrag();
 }
 
 el.parseBtn.addEventListener("click", () => buildCards());
@@ -1332,12 +1422,20 @@ el.clearProgressBtn.addEventListener("click", clearProgress);
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
 el.card.addEventListener("click", (event) => {
-  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && event.target.closest("a, button") === null) flipCard();
+  if (performance.now() < state.suppressClickUntil) {
+    event.preventDefault();
+    return;
+  }
+  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && Math.abs(state.dragCurrentY - state.dragStartY) < 8 && event.target.closest("a, button") === null) flipCard();
 });
 el.card.addEventListener("pointerdown", handlePointerDown);
 el.card.addEventListener("pointermove", handlePointerMove);
 el.card.addEventListener("pointerup", handlePointerUp);
 el.card.addEventListener("pointercancel", handlePointerCancel);
+el.card.addEventListener("touchstart", handleTouchStart, { passive: true });
+el.card.addEventListener("touchmove", handleTouchMove, { passive: false });
+el.card.addEventListener("touchend", handleTouchEnd);
+el.card.addEventListener("touchcancel", handleTouchCancel);
 
 document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea")) return;
