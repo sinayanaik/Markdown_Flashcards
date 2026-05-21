@@ -55,7 +55,9 @@ const state = {
   suppressClickUntil: 0,
   transitionToken: 0,
   styleSettings: {},
-  styleTouched: false
+  styleTouched: false,
+  stylePanelScrollY: 0,
+  stylePanelTouchY: 0
 };
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
@@ -437,6 +439,7 @@ async function loadWebDeck(deckId) {
     savePersistedDeck();
     setStatus(`Loaded ${cards.length} cards from web successfully.`);
     document.getElementById("webDecksPanel").hidden = true;
+    unlockPageScroll();
     closeImportPanel();
     showCard();
   } catch (error) {
@@ -923,13 +926,32 @@ function applyCurrentStyleSettings(statusMessage = "Style applied") {
   setStyleStatus(statusMessage);
 }
 
+function lockPageScroll() {
+  if (document.documentElement.classList.contains("modal-scroll-lock")) return;
+  state.stylePanelScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  document.body.style.top = `-${state.stylePanelScrollY}px`;
+  document.documentElement.classList.add("modal-scroll-lock");
+  document.body.classList.add("modal-scroll-lock");
+}
+
+function unlockPageScroll() {
+  if (!document.documentElement.classList.contains("modal-scroll-lock")) return;
+  const scrollY = state.stylePanelScrollY || 0;
+  document.documentElement.classList.remove("modal-scroll-lock");
+  document.body.classList.remove("modal-scroll-lock");
+  document.body.style.top = "";
+  window.scrollTo(0, scrollY);
+}
+
 function openStylePanel() {
+  lockPageScroll();
   el.stylePanel.hidden = false;
   updateStyleControls();
 }
 
 function closeStylePanel() {
   el.stylePanel.hidden = true;
+  unlockPageScroll();
 }
 
 async function loadStyleFromWeb() {
@@ -1044,6 +1066,7 @@ async function editCurrentDeckTitle() {
 }
 
 function openImportPanel() {
+  lockPageScroll();
   el.importPanel.classList.add("is-open");
 }
 
@@ -1051,12 +1074,14 @@ function openWebDecksPanel() {
   const panel = document.getElementById("webDecksPanel");
   if (!panel) return;
 
+  lockPageScroll();
   panel.hidden = false;
 }
 
 function closeImportPanel() {
   if (state.cards.length) {
     el.importPanel.classList.remove("is-open");
+    unlockPageScroll();
   }
 }
 
@@ -1658,6 +1683,7 @@ function addDiagramZoomControl(node) {
 }
 
 function openDiagramModal(node) {
+  lockPageScroll();
   el.diagramModalBody.innerHTML = node.innerHTML;
   el.diagramModal.hidden = false;
 }
@@ -1665,11 +1691,13 @@ function openDiagramModal(node) {
 function closeDiagramModal() {
   el.diagramModal.hidden = true;
   el.diagramModalBody.innerHTML = "";
+  unlockPageScroll();
 }
 
 function closeAllCardsPanel() {
   allCardsRenderId += 1;
   el.allCardsPanel.hidden = true;
+  unlockPageScroll();
 }
 
 function setAllCardStatus(cardId, status) {
@@ -1759,6 +1787,7 @@ function openAllCardsPanel() {
     return;
   }
 
+  lockPageScroll();
   allCardsRenderId += 1;
   el.allCardsPanel.hidden = false;
   renderAllCards();
@@ -2780,11 +2809,66 @@ function handleTouchCancel() {
   resetCardDrag();
 }
 
+function preventCancelableScroll(event) {
+  if (event.cancelable && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
+}
+
+function styleScrollRegion(target) {
+  return closestElement(target, ".style-grid, .all-cards-list, .import-card, .web-decks-shell, .diagram-modal-body");
+}
+
+function canScrollStyleRegion(region) {
+  return Boolean(region && region.scrollHeight > region.clientHeight + 1);
+}
+
+function isStyleRegionAtTop(region) {
+  return region.scrollTop <= 0;
+}
+
+function isStyleRegionAtBottom(region) {
+  return region.scrollTop + region.clientHeight >= region.scrollHeight - 1;
+}
+
+function containStylePanelScroll(event, deltaY) {
+  const region = styleScrollRegion(event.target);
+  if (!region || !canScrollStyleRegion(region)) {
+    preventCancelableScroll(event);
+    return;
+  }
+
+  if ((deltaY < 0 && isStyleRegionAtTop(region)) || (deltaY > 0 && isStyleRegionAtBottom(region))) {
+    preventCancelableScroll(event);
+  }
+}
+
+function handleStylePanelTouchStart(event) {
+  const point = event.touches?.[0];
+  state.stylePanelTouchY = point ? point.clientY : 0;
+}
+
+function handleStylePanelTouchMove(event) {
+  if (event.touches?.length !== 1) return;
+  if (closestElement(event.target, "input[type='range']")) return;
+
+  const point = event.touches[0];
+  const previousY = state.stylePanelTouchY || point.clientY;
+  const deltaY = previousY - point.clientY;
+  state.stylePanelTouchY = point.clientY;
+  containStylePanelScroll(event, deltaY);
+}
+
+function handleStylePanelWheel(event) {
+  containStylePanelScroll(event, event.deltaY);
+}
+
 
 
 if (document.getElementById("closeWebDecksBtn")) {
   document.getElementById("closeWebDecksBtn").addEventListener("click", () => {
     document.getElementById("webDecksPanel").hidden = true;
+    unlockPageScroll();
   });
 }
 if (document.getElementById("syncBtn")) {
@@ -2835,6 +2919,26 @@ el.styleControls.addEventListener("change", (event) => {
     handleStyleControlChange();
   }
 });
+el.stylePanel.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+el.stylePanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+el.stylePanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+
+el.allCardsPanel.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+el.allCardsPanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+el.allCardsPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+
+el.importPanel.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+el.importPanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+el.importPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+
+document.getElementById("webDecksPanel").addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+document.getElementById("webDecksPanel").addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+document.getElementById("webDecksPanel").addEventListener("wheel", handleStylePanelWheel, { passive: false });
+
+el.diagramModal.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+el.diagramModal.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+el.diagramModal.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
 el.allCardsList.addEventListener("click", (event) => {
@@ -2916,6 +3020,8 @@ document.addEventListener("keydown", (event) => {
     closeAllCardsPanel();
     closeStylePanel();
     closeImportPanel();
+    document.getElementById("webDecksPanel").hidden = true;
+    unlockPageScroll();
   }
   if (!el.allCardsPanel.hidden) return;
   if (event.key === " " || event.key === "Enter") {
