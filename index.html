@@ -15,6 +15,7 @@
     <main class="app-shell">
       <header class="appbar">
         <div class="toolbar">
+          <button class="tool-button button is-small" id="newDeckBtn" type="button">New Deck</button>
           <button class="tool-button button is-small" id="importBtn" type="button">Import</button>
           <button class="tool-button button is-small" id="webDecksBtn" type="button">Web Decks</button>
           <button class="tool-button button is-small" id="syncBtn" type="button" title="Sync current deck to Web">Sync</button>
@@ -69,12 +70,23 @@
           <div class="deck" id="deck">
             <article class="card" id="card" tabindex="0" aria-label="Current quiz card">
               <div class="card-face card-question">
-                <span class="face-label">Question</span>
+                <div class="face-header">
+                  <span class="face-label">Question</span>
+                  <div style="display: flex; gap: 4px;">
+                    <button class="edit-card-btn" id="deleteCardBtn" type="button" title="Delete card" aria-label="Delete card" style="color: #ff4a4a;">&#128465;</button>
+                    <button class="edit-card-btn" id="editQuestionBtn" type="button" title="Edit question" aria-label="Edit question">&#9998;</button>
+                  </div>
+                </div>
                 <div class="rendered" id="questionView"></div>
+                <textarea class="edit-textarea" id="questionEdit" hidden spellcheck="false"></textarea>
               </div>
               <div class="card-face card-answer">
-                <span class="face-label">Answer</span>
+                <div class="face-header">
+                  <span class="face-label">Answer</span>
+                  <button class="edit-card-btn" id="editAnswerBtn" type="button" title="Edit answer" aria-label="Edit answer">&#9998;</button>
+                </div>
                 <div class="rendered" id="answerView"></div>
+                <textarea class="edit-textarea" id="answerEdit" hidden spellcheck="false"></textarea>
               </div>
             </article>
           </div>
@@ -82,6 +94,7 @@
           <div class="controls" aria-label="Card actions">
             <button class="review" id="reviewBtn" type="button" title="Review" aria-label="Mark card for review"><span aria-hidden="true">❌</span><span>Review</span></button>
             <button class="nav-card" id="prevCardBtn" type="button" title="Previous card" aria-label="Previous card"><span aria-hidden="true">&#8592;</span><span>Prev</span></button>
+            <button class="nav-card" id="addCardBtn" type="button" title="Add card" aria-label="Add card"><span aria-hidden="true">+</span><span>Add</span></button>
             <button class="nav-card" id="nextCardBtn" type="button" title="Next card" aria-label="Next card"><span>Next</span><span aria-hidden="true">&#8594;</span></button>
             <button class="known" id="knownBtn" type="button" title="Known" aria-label="Mark card known"><span>Known</span><span aria-hidden="true">✅</span></button>
           </div>

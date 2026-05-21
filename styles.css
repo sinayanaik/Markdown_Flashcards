@@ -2294,3 +2294,53 @@ textarea {
     overflow: visible;
   }
 }
+
+/* Edit feature styles */
+.face-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.face-header .face-label {
+  margin-bottom: 0;
+}
+.edit-card-btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  z-index: 10;
+}
+.edit-card-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.edit-textarea {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 100px;
+  resize: none;
+  font-family: monospace;
+  font-size: 16px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  line-height: 1.5;
+}
+.edit-textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+[hidden] { display: none !important; }

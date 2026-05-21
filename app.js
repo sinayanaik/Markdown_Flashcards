@@ -370,7 +370,8 @@ async function renameWebDeck(deckId, currentTitle = "") {
       updateMeta();
     }
 
-    setStatus("Web deck renamed. Click Refresh List to reload web decks.");
+    setStatus("Web deck renamed.");
+    fetchWebDecks();
   } catch (error) {
     console.error("Failed to rename web deck", error);
     setStatus("Failed to rename web deck.", "error");
@@ -391,7 +392,8 @@ async function deleteWebDeck(deckId) {
       savePersistedDeck();
     }
     
-    setStatus("Deck deleted successfully. Click Refresh List to reload web decks.");
+    setStatus("Deck deleted successfully.");
+    fetchWebDecks();
   } catch (error) {
     console.error("Failed to delete web deck", error);
     setStatus("Failed to delete web deck.", "error");
@@ -454,9 +456,10 @@ async function loadWebDeck(deckId) {
   }
 }
 
-function showSyncModal() {
+async function showSyncModal() {
   const modal = document.getElementById("syncModal");
   const content = document.getElementById("syncDetailsContent");
+  const confirmBtn = document.getElementById("confirmSyncBtn");
   
   if (!state.masterCards.length) {
     setStatus("No deck to sync.", "error");
@@ -471,16 +474,91 @@ function showSyncModal() {
   const isUpdate = !!state.deckId;
   const actionText = isUpdate ? "Update existing web deck" : "Create new web deck";
   
+  modal.hidden = false;
+  if (confirmBtn) confirmBtn.disabled = true;
+  
   content.innerHTML = `
     <p><strong>Action:</strong> ${actionText}</p>
     <p><strong>Title:</strong> ${escapeHtml(deckTitle)}</p>
     <p><strong>Cards:</strong> ${cardsCount} total (${knownCount} known, ${reviewCount} review)</p>
     <p><strong>Current Position:</strong> Card ${state.current + 1}</p>
     <br>
-    <p style="color: var(--text-secondary);">This will overwrite the web version with your local progress.</p>
+    <p style="color: var(--text-secondary);">Calculating differences...</p>
   `;
   
-  modal.hidden = false;
+  let diffHtml = "";
+
+  if (!isUpdate || !supabaseClient) {
+    diffHtml = `<p style="color: var(--text-secondary);">This will create a new deck on the web with your ${cardsCount} cards.</p>`;
+  } else {
+    try {
+      const { data: webCards, error } = await supabaseClient
+        .from("cards")
+        .select("id, question, answer, status")
+        .eq("deck_id", state.deckId);
+
+      if (error) throw error;
+
+      let added = 0;
+      let deleted = 0;
+      let edited = 0;
+      let statusChanges = 0;
+
+      const localMap = new Map();
+      state.masterCards.forEach(c => localMap.set(c.id, c));
+
+      const webMap = new Map();
+      webCards.forEach(c => webMap.set(c.id, c));
+
+      for (const [id, localCard] of localMap.entries()) {
+        if (!webMap.has(id)) {
+          added++;
+        } else {
+          const webCard = webMap.get(id);
+          if (localCard.question !== webCard.question || localCard.answer !== webCard.answer) {
+            edited++;
+          }
+          const localStatus = normalizeCardStatus(state.statusById[id]);
+          const webStatus = normalizeCardStatus(webCard.status);
+          if (localStatus !== webStatus) {
+            statusChanges++;
+          }
+        }
+      }
+
+      for (const id of webMap.keys()) {
+        if (!localMap.has(id)) {
+          deleted++;
+        }
+      }
+
+      if (added === 0 && deleted === 0 && edited === 0 && statusChanges === 0) {
+        diffHtml = `<p style="color: var(--text-secondary);">No changes detected. The web deck is up to date.</p>`;
+      } else {
+        diffHtml = `<p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Changes to sync:</strong></p>
+        <ul style="color: var(--text-secondary); margin-left: 1.5rem; list-style-type: disc;">`;
+        if (added > 0) diffHtml += `<li>${added} card${added > 1 ? 's' : ''} added</li>`;
+        if (deleted > 0) diffHtml += `<li>${deleted} card${deleted > 1 ? 's' : ''} deleted</li>`;
+        if (edited > 0) diffHtml += `<li>${edited} card${edited > 1 ? 's' : ''} modified</li>`;
+        if (statusChanges > 0) diffHtml += `<li>${statusChanges} status update${statusChanges > 1 ? 's' : ''}</li>`;
+        diffHtml += `</ul>`;
+      }
+    } catch (err) {
+      console.error("Failed to calculate sync differences", err);
+      diffHtml = `<p style="color: #ff4a4a;">Could not calculate differences. Proceeding will overwrite web data.</p>`;
+    }
+  }
+
+  content.innerHTML = `
+    <p><strong>Action:</strong> ${actionText}</p>
+    <p><strong>Title:</strong> ${escapeHtml(deckTitle)}</p>
+    <p><strong>Cards:</strong> ${cardsCount} total (${knownCount} known, ${reviewCount} review)</p>
+    <p><strong>Current Position:</strong> Card ${state.current + 1}</p>
+    <br>
+    ${diffHtml}
+  `;
+  
+  if (confirmBtn) confirmBtn.disabled = false;
 }
 
 async function syncDeckToWeb() {
@@ -496,11 +574,12 @@ async function syncDeckToWeb() {
   if (syncBtn) syncBtn.disabled = true;
 
   try {
-    if (!state.deckId) {
+    const isNewDeck = !state.deckId;
+    if (isNewDeck) {
       state.deckId = slugifyFileName(state.deckTitle || state.sourceTitle) || ("deck-" + Date.now());
     }
 
-    setStatus(`Syncing... (1/2) Saving deck info "${state.deckTitle}"`);
+    setStatus(`Syncing... (1/3) Saving deck info "${state.deckTitle}"`);
     
     const deckData = {
       id: state.deckId,
@@ -515,7 +594,29 @@ async function syncDeckToWeb() {
 
     if (deckError) throw deckError;
 
-    setStatus(`Syncing... (2/2) Saving ${state.masterCards.length} cards`);
+    // Handle deletions if it's an update
+    if (!isNewDeck) {
+      setStatus("Syncing... (2/3) Cleaning up deleted cards");
+      const { data: webCards, error: fetchError } = await supabaseClient
+        .from("cards")
+        .select("id")
+        .eq("deck_id", state.deckId);
+      
+      if (!fetchError && webCards) {
+        const localIds = new Set(state.masterCards.map(c => c.id));
+        const idsToDelete = webCards.filter(wc => !localIds.has(wc.id)).map(wc => wc.id);
+        
+        if (idsToDelete.length > 0) {
+          const { error: deleteError } = await supabaseClient
+            .from("cards")
+            .delete()
+            .in("id", idsToDelete);
+          if (deleteError) throw deleteError;
+        }
+      }
+    }
+
+    setStatus(`Syncing... (3/3) Saving ${state.masterCards.length} cards`);
     const cardsData = state.masterCards.map((card, index) => ({
       id: card.id,
       deck_id: state.deckId,
@@ -526,11 +627,15 @@ async function syncDeckToWeb() {
       updated_at: new Date().toISOString()
     }));
 
-    const { error: cardsError } = await supabaseClient
-      .from("cards")
-      .upsert(cardsData);
-
-    if (cardsError) throw cardsError;
+    // Chunk upserts if there are many cards
+    const chunkSize = 50;
+    for (let i = 0; i < cardsData.length; i += chunkSize) {
+      const chunk = cardsData.slice(i, i + chunkSize);
+      const { error: cardsError } = await supabaseClient
+        .from("cards")
+        .upsert(chunk);
+      if (cardsError) throw cardsError;
+    }
 
     setStatus("Deck synced to web successfully.");
     savePersistedDeck();
@@ -603,6 +708,12 @@ const el = {
   card: document.querySelector("#card"),
   questionView: document.querySelector("#questionView"),
   answerView: document.querySelector("#answerView"),
+  editQuestionBtn: document.querySelector("#editQuestionBtn"),
+  editAnswerBtn: document.querySelector("#editAnswerBtn"),
+  questionEdit: document.querySelector("#questionEdit"),
+  answerEdit: document.querySelector("#answerEdit"),
+  deleteCardBtn: document.querySelector("#deleteCardBtn"),
+  addCardBtn: document.querySelector("#addCardBtn"),
   knownStackCount: document.querySelector("#knownStackCount"),
   reviewStackCount: document.querySelector("#reviewStackCount"),
   knownBrickList: document.querySelector("#knownBrickList"),
@@ -3093,7 +3204,151 @@ window.addEventListener("resize", scheduleLiveQuestionFit);
 
 applyStyleSettings(loadLocalStyleSettings(), { save: false });
 setTheme(localStorage.getItem("swipe-notes-theme") || "dark");
-localStorage.removeItem(deckStorageKey);
-setStatus("");
-showCard();
+if (!loadPersistedDeck()) {
+  setStatus("");
+  showCard();
+}
 loadStyleFromWeb();
+
+async function syncCardToWeb(card) {
+  if (!supabaseClient || !state.deckId) return;
+  try {
+    const { error } = await supabaseClient
+      .from("cards")
+      .upsert({
+        id: card.id,
+        deck_id: state.deckId,
+        question: card.question,
+        answer: card.answer,
+        position: state.masterCards.findIndex(c => c.id === card.id),
+        status: normalizeCardStatus(state.statusById[card.id]),
+        updated_at: new Date().toISOString()
+      });
+    if (error) throw error;
+  } catch(e) {
+    console.error("Failed to sync edited card to web", e);
+  }
+}
+
+function toggleEditMode(side) {
+  const isQuestion = side === 'question';
+  const btn = isQuestion ? el.editQuestionBtn : el.editAnswerBtn;
+  const view = isQuestion ? el.questionView : el.answerView;
+  const edit = isQuestion ? el.questionEdit : el.answerEdit;
+  const currentCard = state.cards[state.current];
+  
+  if (!currentCard) return;
+
+  const isEditing = view.hidden;
+  
+  if (!isEditing) {
+    view.hidden = true;
+    edit.hidden = false;
+    edit.value = isQuestion ? currentCard.question : currentCard.answer;
+    btn.innerHTML = '&#128190;';
+    btn.title = 'Save';
+    edit.focus();
+  } else {
+    const newValue = edit.value.trim();
+    if (isQuestion) {
+      currentCard.question = newValue;
+    } else {
+      currentCard.answer = newValue;
+    }
+    
+    const masterIndex = state.masterCards.findIndex(c => c.id === currentCard.id);
+    if (masterIndex > -1) {
+      if (isQuestion) state.masterCards[masterIndex].question = newValue;
+      else state.masterCards[masterIndex].answer = newValue;
+    }
+
+    view.hidden = false;
+    edit.hidden = true;
+    btn.innerHTML = '&#9998;';
+    btn.title = isQuestion ? 'Edit question' : 'Edit answer';
+    
+    renderMarkdown(view, newValue).then(() => {
+      if (isQuestion) scheduleLiveQuestionFit();
+    });
+    
+    savePersistedDeck();
+    syncCardToWeb(currentCard);
+    setStatus("Card updated.");
+  }
+}
+
+el.editQuestionBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleEditMode('question');
+});
+
+el.editAnswerBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleEditMode('answer');
+});
+
+el.questionEdit.addEventListener('click', (e) => e.stopPropagation());
+el.answerEdit.addEventListener('click', (e) => e.stopPropagation());
+
+if (el.newDeckBtn) {
+  el.newDeckBtn.addEventListener("click", () => {
+    if (state.masterCards.length > 0) {
+      if (!confirm("Create a new deck? Unsaved local progress will be lost.")) return;
+    }
+    state.deckId = null;
+    state.deckTitle = "New Deck";
+    state.sourceTitle = "New Deck";
+    state.importTitleHint = "New Deck";
+    state.masterCards = [{ id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' }];
+    state.cards = [...state.masterCards];
+    state.current = 0;
+    resetResults();
+    savePersistedDeck();
+    closeImportPanel();
+    closeAllCardsPanel();
+    showCard();
+    setStatus("Created new deck.");
+  });
+}
+
+if (el.addCardBtn) {
+  el.addCardBtn.addEventListener("click", () => {
+    if (!state.masterCards.length && !state.deckTitle) {
+      setStatus("Create a new deck or import one first.", "error");
+      return;
+    }
+    const newCard = { id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' };
+    state.masterCards.splice(state.current + 1, 0, newCard);
+    state.cards.splice(state.current + 1, 0, newCard);
+    savePersistedDeck();
+    navigateCard(1, "next");
+    setStatus("Card added. Click the edit icon to modify it.");
+  });
+}
+
+if (el.deleteCardBtn) {
+  el.deleteCardBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!state.masterCards.length) return;
+    if (!confirm("Delete this card?")) return;
+    const card = state.cards[state.current];
+    
+    if (supabaseClient && state.deckId) {
+      try {
+        await supabaseClient.from("cards").delete().eq("id", card.id);
+      } catch(err) { console.error(err); }
+    }
+    
+    state.masterCards = state.masterCards.filter(c => c.id !== card.id);
+    state.cards = state.cards.filter(c => c.id !== card.id);
+    delete state.statusById[card.id];
+    
+    if (state.current >= state.cards.length) {
+      state.current = Math.max(0, state.cards.length - 1);
+    }
+    
+    savePersistedDeck();
+    showCard();
+    setStatus("Card deleted.");
+  });
+}
