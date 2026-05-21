@@ -456,6 +456,88 @@ async function loadWebDeck(deckId) {
   }
 }
 
+function normalizeSyncText(value) {
+  return normalizeMarkdown(String(value || ""))
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function syncTextChanged(localValue, webValue) {
+  return normalizeSyncText(localValue) !== normalizeSyncText(webValue);
+}
+
+function sameSyncContent(localCard, webCard) {
+  return !syncTextChanged(localCard.question, webCard.question)
+    && !syncTextChanged(localCard.answer, webCard.answer);
+}
+
+function uniqueMatchingWebCard(webCards, predicate) {
+  const matches = webCards.filter(predicate);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function fallbackWebCardFor(localCard, localIndex, unmatchedWebCards, localIds) {
+  const candidates = unmatchedWebCards.filter((webCard) => !localIds.has(String(webCard.id)));
+
+  return uniqueMatchingWebCard(candidates, (webCard) => sameSyncContent(localCard, webCard))
+    || uniqueMatchingWebCard(candidates, (webCard) => Number(webCard.position) === localIndex)
+    || uniqueMatchingWebCard(candidates, (webCard) => (
+      normalizeSyncText(localCard.question)
+      && normalizeSyncText(localCard.question) === normalizeSyncText(webCard.question)
+    ))
+    || uniqueMatchingWebCard(candidates, (webCard) => (
+      normalizeSyncText(localCard.answer)
+      && normalizeSyncText(localCard.answer) === normalizeSyncText(webCard.answer)
+    ));
+}
+
+function calculateSyncDiff(localCards, webCards, statusById = {}) {
+  const unmatchedWeb = new Map(webCards.map((card) => [String(card.id), card]));
+  const localIds = new Set(localCards.map((card) => String(card.id)));
+  const changes = {
+    added: 0,
+    deleted: 0,
+    edited: 0,
+    moved: 0,
+    statusChanges: 0
+  };
+
+  localCards.forEach((localCard, index) => {
+    const id = String(localCard.id);
+    let webCard = unmatchedWeb.get(id) || null;
+
+    if (!webCard) {
+      webCard = fallbackWebCardFor(localCard, index, Array.from(unmatchedWeb.values()), localIds);
+    }
+
+    if (!webCard) {
+      changes.added += 1;
+      return;
+    }
+
+    unmatchedWeb.delete(String(webCard.id));
+
+    if (syncTextChanged(localCard.question, webCard.question) || syncTextChanged(localCard.answer, webCard.answer)) {
+      changes.edited += 1;
+    }
+
+    const webPosition = Number(webCard.position);
+    if (Number.isFinite(webPosition) && webPosition !== index) {
+      changes.moved += 1;
+    }
+
+    const localStatus = normalizeCardStatus(statusById[id]);
+    const webStatus = normalizeCardStatus(webCard.status);
+    if (localStatus !== webStatus) {
+      changes.statusChanges += 1;
+    }
+  });
+
+  changes.deleted = unmatchedWeb.size;
+  return changes;
+}
+
 async function showSyncModal() {
   const modal = document.getElementById("syncModal");
   const content = document.getElementById("syncDetailsContent");
@@ -494,45 +576,14 @@ async function showSyncModal() {
     try {
       const { data: webCards, error } = await supabaseClient
         .from("cards")
-        .select("id, question, answer, status")
+        .select("id, question, answer, status, position")
         .eq("deck_id", state.deckId);
 
       if (error) throw error;
 
-      let added = 0;
-      let deleted = 0;
-      let edited = 0;
-      let statusChanges = 0;
+      const { added, deleted, edited, moved, statusChanges } = calculateSyncDiff(state.masterCards, webCards || [], state.statusById);
 
-      const localMap = new Map();
-      state.masterCards.forEach(c => localMap.set(c.id, c));
-
-      const webMap = new Map();
-      webCards.forEach(c => webMap.set(c.id, c));
-
-      for (const [id, localCard] of localMap.entries()) {
-        if (!webMap.has(id)) {
-          added++;
-        } else {
-          const webCard = webMap.get(id);
-          if (localCard.question !== webCard.question || localCard.answer !== webCard.answer) {
-            edited++;
-          }
-          const localStatus = normalizeCardStatus(state.statusById[id]);
-          const webStatus = normalizeCardStatus(webCard.status);
-          if (localStatus !== webStatus) {
-            statusChanges++;
-          }
-        }
-      }
-
-      for (const id of webMap.keys()) {
-        if (!localMap.has(id)) {
-          deleted++;
-        }
-      }
-
-      if (added === 0 && deleted === 0 && edited === 0 && statusChanges === 0) {
+      if (added === 0 && deleted === 0 && edited === 0 && moved === 0 && statusChanges === 0) {
         diffHtml = `<p style="color: var(--text-secondary);">No changes detected. The web deck is up to date.</p>`;
       } else {
         diffHtml = `<p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Changes to sync:</strong></p>
@@ -540,6 +591,7 @@ async function showSyncModal() {
         if (added > 0) diffHtml += `<li>${added} card${added > 1 ? 's' : ''} added</li>`;
         if (deleted > 0) diffHtml += `<li>${deleted} card${deleted > 1 ? 's' : ''} deleted</li>`;
         if (edited > 0) diffHtml += `<li>${edited} card${edited > 1 ? 's' : ''} modified</li>`;
+        if (moved > 0) diffHtml += `<li>${moved} card position${moved > 1 ? 's' : ''} updated</li>`;
         if (statusChanges > 0) diffHtml += `<li>${statusChanges} status update${statusChanges > 1 ? 's' : ''}</li>`;
         diffHtml += `</ul>`;
       }
@@ -676,6 +728,10 @@ const el = {
   parseBtn: document.querySelector("#parseBtn"),
   openWebDecksFromImportBtn: document.querySelector("#openWebDecksFromImportBtn"),
   sampleBtn: document.querySelector("#sampleBtn"),
+  deckMenuBtn: document.querySelector("#deckMenuBtn"),
+  deckMenu: document.querySelector("#deckMenu"),
+  newDeckBtn: document.querySelector("#newDeckBtn"),
+  newDeckFromImportBtn: document.querySelector("#newDeckFromImportBtn"),
   importBtn: document.querySelector("#importBtn"),
   webDecksBtn: document.querySelector("#webDecksBtn"),
   closeImportBtn: document.querySelector("#closeImportBtn"),
@@ -2182,9 +2238,14 @@ function deckSnapshot() {
 
 function savePersistedDeck() {
   try {
-    localStorage.removeItem(deckStorageKey);
+    if (!state.masterCards.length) {
+      localStorage.removeItem(deckStorageKey);
+      return;
+    }
+
+    localStorage.setItem(deckStorageKey, JSON.stringify(deckSnapshot()));
   } catch (error) {
-    console.warn("Could not clear deck state", error);
+    console.warn("Could not save deck state", error);
   }
 }
 
@@ -3011,6 +3072,37 @@ function handleStylePanelWheel(event) {
   containStylePanelScroll(event, event.deltaY);
 }
 
+function setDeckMenuOpen(open) {
+  if (!el.deckMenu || !el.deckMenuBtn) return;
+  el.deckMenu.hidden = !open;
+  el.deckMenuBtn.setAttribute("aria-expanded", String(open));
+}
+
+function closeDeckMenu() {
+  setDeckMenuOpen(false);
+}
+
+function createNewDeck() {
+  closeDeckMenu();
+  if (state.masterCards.length > 0) {
+    if (!confirm("Create a new deck? Unsaved local progress will be lost.")) return;
+  }
+
+  state.deckId = null;
+  state.deckTitle = "New Deck";
+  state.sourceTitle = "New Deck";
+  state.importTitleHint = "New Deck";
+  state.masterCards = [{ id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' }];
+  state.cards = [...state.masterCards];
+  state.current = 0;
+  resetResults();
+  savePersistedDeck();
+  closeImportPanel();
+  closeAllCardsPanel();
+  showCard();
+  setStatus("Created new deck.");
+}
+
 
 
 if (document.getElementById("closeWebDecksBtn")) {
@@ -3036,8 +3128,21 @@ if (document.getElementById("refreshWebDecksBtn")) document.getElementById("refr
 el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
-el.importBtn.addEventListener("click", openImportPanel);
-el.webDecksBtn.addEventListener("click", openWebDecksPanel);
+if (el.deckMenuBtn) {
+  el.deckMenuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    el.exportMenu.hidden = true;
+    setDeckMenuOpen(el.deckMenu.hidden);
+  });
+}
+el.importBtn.addEventListener("click", () => {
+  closeDeckMenu();
+  openImportPanel();
+});
+el.webDecksBtn.addEventListener("click", () => {
+  closeDeckMenu();
+  openWebDecksPanel();
+});
 el.openWebDecksFromImportBtn.addEventListener("click", openWebDecksPanel);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
 el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
@@ -3112,6 +3217,7 @@ el.allCardsList.addEventListener("keydown", (event) => {
 });
 el.exportBtn.addEventListener("click", (event) => {
   event.stopPropagation();
+  closeDeckMenu();
   el.exportMenu.hidden = !el.exportMenu.hidden;
 });
 el.exportMenu.addEventListener("click", (event) => {
@@ -3164,6 +3270,7 @@ document.addEventListener("keydown", (event) => {
   if (event.target.matches("input, textarea")) return;
   if (event.key === "Escape") {
     el.exportMenu.hidden = true;
+    closeDeckMenu();
     closeDiagramModal();
     closeAllCardsPanel();
     closeStylePanel();
@@ -3185,6 +3292,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".menu-wrap")) {
     el.exportMenu.hidden = true;
+    closeDeckMenu();
   }
 });
 
@@ -3209,26 +3317,6 @@ if (!loadPersistedDeck()) {
   showCard();
 }
 loadStyleFromWeb();
-
-async function syncCardToWeb(card) {
-  if (!supabaseClient || !state.deckId) return;
-  try {
-    const { error } = await supabaseClient
-      .from("cards")
-      .upsert({
-        id: card.id,
-        deck_id: state.deckId,
-        question: card.question,
-        answer: card.answer,
-        position: state.masterCards.findIndex(c => c.id === card.id),
-        status: normalizeCardStatus(state.statusById[card.id]),
-        updated_at: new Date().toISOString()
-      });
-    if (error) throw error;
-  } catch(e) {
-    console.error("Failed to sync edited card to web", e);
-  }
-}
 
 function toggleEditMode(side) {
   const isQuestion = side === 'question';
@@ -3272,8 +3360,7 @@ function toggleEditMode(side) {
     });
     
     savePersistedDeck();
-    syncCardToWeb(currentCard);
-    setStatus("Card updated.");
+    setStatus(state.deckId ? "Card updated locally. Sync to update the web deck." : "Card updated.");
   }
 }
 
@@ -3291,24 +3378,11 @@ el.questionEdit.addEventListener('click', (e) => e.stopPropagation());
 el.answerEdit.addEventListener('click', (e) => e.stopPropagation());
 
 if (el.newDeckBtn) {
-  el.newDeckBtn.addEventListener("click", () => {
-    if (state.masterCards.length > 0) {
-      if (!confirm("Create a new deck? Unsaved local progress will be lost.")) return;
-    }
-    state.deckId = null;
-    state.deckTitle = "New Deck";
-    state.sourceTitle = "New Deck";
-    state.importTitleHint = "New Deck";
-    state.masterCards = [{ id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' }];
-    state.cards = [...state.masterCards];
-    state.current = 0;
-    resetResults();
-    savePersistedDeck();
-    closeImportPanel();
-    closeAllCardsPanel();
-    showCard();
-    setStatus("Created new deck.");
-  });
+  el.newDeckBtn.addEventListener("click", createNewDeck);
+}
+
+if (el.newDeckFromImportBtn) {
+  el.newDeckFromImportBtn.addEventListener("click", createNewDeck);
 }
 
 if (el.addCardBtn) {
@@ -3333,12 +3407,6 @@ if (el.deleteCardBtn) {
     if (!confirm("Delete this card?")) return;
     const card = state.cards[state.current];
     
-    if (supabaseClient && state.deckId) {
-      try {
-        await supabaseClient.from("cards").delete().eq("id", card.id);
-      } catch(err) { console.error(err); }
-    }
-    
     state.masterCards = state.masterCards.filter(c => c.id !== card.id);
     state.cards = state.cards.filter(c => c.id !== card.id);
     delete state.statusById[card.id];
@@ -3349,6 +3417,6 @@ if (el.deleteCardBtn) {
     
     savePersistedDeck();
     showCard();
-    setStatus("Card deleted.");
+    setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
   });
 }

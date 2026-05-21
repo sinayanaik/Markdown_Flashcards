@@ -15,9 +15,14 @@
     <main class="app-shell">
       <header class="appbar">
         <div class="toolbar">
-          <button class="tool-button button is-small" id="newDeckBtn" type="button">New Deck</button>
-          <button class="tool-button button is-small" id="importBtn" type="button">Import</button>
-          <button class="tool-button button is-small" id="webDecksBtn" type="button">Web Decks</button>
+          <div class="menu-wrap deck-menu-wrap">
+            <button class="tool-button button is-small" id="deckMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">Deck</button>
+            <div class="deck-menu" id="deckMenu" hidden>
+              <button id="newDeckBtn" type="button">New Deck</button>
+              <button id="importBtn" type="button">Import</button>
+              <button id="webDecksBtn" type="button">Web Decks</button>
+            </div>
+          </div>
           <button class="tool-button button is-small" id="syncBtn" type="button" title="Sync current deck to Web">Sync</button>
           <div class="menu-wrap">
             <button class="tool-button button is-small" id="exportBtn" type="button">Export</button>
@@ -32,12 +37,6 @@
           <button class="tool-button button is-small" id="allCardsBtn" type="button">All</button>
           <button class="icon-button button is-small" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">
             <span aria-hidden="true">Aa</span>
-          </button>
-          <button class="icon-button button is-small" id="shuffleBtn" type="button" title="Shuffle" aria-label="Shuffle cards">
-            <span aria-hidden="true">&#8644;</span>
-          </button>
-          <button class="icon-button button is-small" id="resetBtn" type="button" title="Restart" aria-label="Restart quiz">
-            <span aria-hidden="true">&#8635;</span>
           </button>
         </div>
 
@@ -98,6 +97,14 @@
             <button class="nav-card" id="nextCardBtn" type="button" title="Next card" aria-label="Next card"><span>Next</span><span aria-hidden="true">&#8594;</span></button>
             <button class="known" id="knownBtn" type="button" title="Known" aria-label="Mark card known"><span>Known</span><span aria-hidden="true">✅</span></button>
           </div>
+          <div class="deck-utility-actions" aria-label="Deck actions">
+            <button id="shuffleBtn" type="button" title="Shuffle" aria-label="Shuffle cards">
+              <span aria-hidden="true">&#8644;</span><span>Shuffle</span>
+            </button>
+            <button id="resetBtn" type="button" title="Restart" aria-label="Restart quiz">
+              <span aria-hidden="true">&#8635;</span><span>Restart</span>
+            </button>
+          </div>
           <div class="replay-actions" aria-label="Replay options">
             <button id="replayAllBtn" type="button">All cards</button>
             <button id="replayReviewBtn" type="button">Review only</button>
@@ -123,14 +130,23 @@
         <div class="import-head">
           <div>
             <h1>Import notes</h1>
-            <p>Load your flashcards via URL, Web Decks, or local files.</p>
+            <p>Create a deck, import notes, or load a synced web deck.</p>
           </div>
           <button class="icon-button" id="closeImportBtn" type="button" aria-label="Close import panel">&#215;</button>
         </div>
 
         <div class="columns is-mobile is-multiline" style="margin-top: 10px;">
+          <!-- New Deck Method -->
+          <div class="column is-one-third-tablet is-full-mobile">
+            <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem; text-align: center;">
+              <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">New Deck</h3>
+              <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Start with a blank editable flashcard.</p>
+              <button id="newDeckFromImportBtn" type="button" class="button is-fullwidth" style="background: var(--accent); color: #05110e; border: none; height: var(--input-height); font-weight: bold; width: 100%;">Create New Deck</button>
+            </div>
+          </div>
+
           <!-- URL Import Method -->
-          <div class="column is-half-tablet is-full-mobile">
+          <div class="column is-one-third-tablet is-full-mobile">
             <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem;">
               <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">Import via URL</h3>
               <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Fetch raw markdown from a public URL.</p>
@@ -142,7 +158,7 @@
           </div>
           
           <!-- Web Decks Import Method -->
-          <div class="column is-half-tablet is-full-mobile">
+          <div class="column is-one-third-tablet is-full-mobile">
             <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem; text-align: center;">
               <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">Web Decks</h3>
               <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Load previously synced decks from the web.</p>

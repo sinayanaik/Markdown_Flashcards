@@ -305,6 +305,7 @@ button:disabled {
 .tool-button,
 .icon-button,
 .export-menu button,
+.deck-menu button,
 .url-row button,
 .import-actions button,
 .file-pick span,
@@ -336,7 +337,8 @@ button:disabled {
   position: relative;
 }
 
-.export-menu {
+.export-menu,
+.deck-menu {
   position: absolute;
   z-index: 20;
   top: calc(100% + 8px);
@@ -351,7 +353,14 @@ button:disabled {
   box-shadow: var(--shadow);
 }
 
-.export-menu button {
+.deck-menu {
+  right: auto;
+  left: 0;
+  width: 170px;
+}
+
+.export-menu button,
+.deck-menu button {
   width: 100%;
   background: var(--panel-2);
   padding: 0 12px;
@@ -371,7 +380,7 @@ button:disabled {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto auto;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--quiz-panel-radius);
@@ -1016,12 +1025,10 @@ button:disabled {
   transform-origin: top left;
 }
 
-.controls button {
+.controls button,
+.deck-utility-actions button {
   display: inline-flex;
   width: auto;
-  min-width: var(--action-button-min-width);
-  height: var(--action-button-height);
-  min-height: var(--action-button-height);
   align-items: center;
   justify-content: center;
   gap: var(--action-button-gap);
@@ -1033,16 +1040,43 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.controls button {
+  min-width: var(--action-button-min-width);
+  height: var(--action-button-height);
+  min-height: var(--action-button-height);
+}
+
 .controls {
   gap: var(--toolbar-gap);
   justify-content: center;
+}
+
+.deck-utility-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--toolbar-gap);
+  margin-top: 8px;
+}
+
+.deck-utility-actions button {
+  min-width: 118px;
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--panel-2) 78%, transparent);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.deck-utility-actions button:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .replay-actions {
   display: flex;
   justify-content: center;
   gap: var(--toolbar-gap);
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .replay-actions button {
@@ -1774,7 +1808,7 @@ textarea {
 
   .toolbar {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     justify-content: stretch;
     overflow: visible;
     gap: 6px;
@@ -1791,6 +1825,11 @@ textarea {
     right: auto;
     left: 0;
     width: min(220px, calc(100vw - 16px));
+  }
+
+  .deck-menu {
+    top: calc(100% + 6px);
+    width: min(190px, calc(100vw - 16px));
   }
 
   .toolbar > .tool-button,
@@ -1857,8 +1896,10 @@ textarea {
 
   .controls {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas: "review known";
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-areas:
+      "review review review known known known"
+      "prev prev add add next next";
     gap: 8px;
   }
 
@@ -1887,23 +1928,40 @@ textarea {
     grid-area: prev;
   }
 
+  .controls #addCardBtn {
+    grid-area: add;
+  }
+
   .controls #nextCardBtn {
     grid-area: next;
   }
 
   .controls .nav-card {
-    display: none;
-  }
-
-  .controls .review,
-  .controls .known {
-    height: 54px;
-    font-size: 0.84rem;
+    display: inline-flex;
   }
 
   .controls .nav-card {
     height: 40px;
     font-size: 0.76rem;
+  }
+
+  .controls .review,
+  .controls .known {
+    height: 52px;
+    font-size: 0.84rem;
+  }
+
+  .deck-utility-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .deck-utility-actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
   }
 
   .replay-actions {
