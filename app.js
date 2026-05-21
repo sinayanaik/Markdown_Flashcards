@@ -86,8 +86,6 @@ const styleDefaults = {
   codeFontSize: "15px",
   codeLineHeight: "1.55",
   questionFillPercent: "58",
-  questionMinFontSize: "23px",
-  questionMaxFontSize: "150px",
   questionLineHeight: "1.18",
   questionAlign: "center",
   questionVerticalAlign: "center",
@@ -161,8 +159,6 @@ const styleControlGroups = [
     fields: [
       { key: "questionFontFamily", label: "Question font family", type: "select", options: ["system", "serif", "mono", "rounded"], hint: "Question-only font." },
       { key: "questionFillPercent", label: "Question fill %", type: "range", min: 10, max: 95, step: 1, hint: "How much vertical card space the question tries to occupy." },
-      { key: "questionMinFontSize", label: "Question minimum font size", type: "range", min: 8, max: 80, step: 1, unit: "px", hint: "Smallest question text size." },
-      { key: "questionMaxFontSize", label: "Question maximum font size", type: "range", min: 16, max: 240, step: 1, unit: "px", hint: "Largest question text size." },
       { key: "questionLineHeight", label: "Question line spacing", type: "range", min: 0.8, max: 2.4, step: 0.01, hint: "Line spacing for question text." },
       { key: "questionAlign", label: "Question horizontal align", type: "select", options: ["left", "center", "right", "justify"], hint: "Question text alignment." },
       { key: "questionVerticalAlign", label: "Question vertical align", type: "select", options: ["start", "center", "end"], hint: "Question vertical position." },
@@ -196,6 +192,13 @@ const styleControlGroups = [
   }
 ];
 
+const styleFieldByKey = styleControlGroups.reduce((fields, group) => {
+  group.fields.forEach((field) => {
+    fields[field.key] = field;
+  });
+  return fields;
+}, {});
+
 const styleCssVariables = {
   questionFontFamily: "--question-font-family",
   answerFontFamily: "--answer-font-family",
@@ -210,8 +213,6 @@ const styleCssVariables = {
   baseLineHeight: "--content-line-height",
   codeFontSize: "--code-font-size",
   codeLineHeight: "--code-line-height",
-  questionMinFontSize: "--question-font-min",
-  questionMaxFontSize: "--question-max-font-size",
   questionLineHeight: "--question-line-height",
   questionAlign: "--question-align",
   questionVerticalAlign: "--question-vertical-align",
@@ -234,7 +235,7 @@ const styleCssVariables = {
   inputCornerRadius: "--input-radius",
   toolbarButtonHeight: "--toolbar-button-height",
   actionButtonHeight: "--action-button-height",
-  buttonFontSize: "--action-button-font-size",
+  buttonFontSize: "--button-font-size",
   replayButtonHeight: "--replay-button-height",
   stackCardFontSize: "--brick-font-size",
   stackCardLineHeight: "--brick-line-height",
@@ -717,6 +718,7 @@ const swipeConfig = {
 };
 
 let allCardsRenderId = 0;
+let draggedAllCardId = "";
 let printTitleBeforeExport = "";
 let liveQuestionFitFrame = 0;
 
@@ -871,6 +873,39 @@ function styleValue(source, key) {
   return Object.prototype.hasOwnProperty.call(source, key) ? String(source[key]) : styleDefaults[key];
 }
 
+function decimalPlaces(value) {
+  const text = String(value);
+  return text.includes(".") ? text.split(".")[1].length : 0;
+}
+
+function formatStyleNumber(value, step) {
+  const precision = decimalPlaces(step || 1);
+  const fixed = value.toFixed(precision);
+  return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") || "0" : fixed;
+}
+
+function normalizeStyleValue(key, value) {
+  const field = styleFieldByKey[key];
+  const defaultValue = styleDefaults[key];
+  const raw = String(value ?? defaultValue ?? "").trim();
+
+  if (!field) return raw || defaultValue;
+
+  if (field.type === "select") {
+    return field.options.includes(raw) ? raw : defaultValue;
+  }
+
+  if (field.type !== "range") return raw || defaultValue;
+
+  const fallback = parseFloat(defaultValue);
+  const parsed = numericStyleValue(raw);
+  const min = Number(field.min);
+  const max = Number(field.max);
+  const number = Number.isFinite(parsed) ? parsed : fallback;
+  const bounded = Math.min(Math.max(number, min), max);
+  return `${formatStyleNumber(bounded, field.step)}${field.unit || ""}`;
+}
+
 function migrateLegacyStyleSettings(raw = {}) {
   const migrated = { ...raw };
   if (Object.prototype.hasOwnProperty.call(raw, "appMaxWidth")) migrated.appWidthPercent = "98";
@@ -879,7 +914,6 @@ function migrateLegacyStyleSettings(raw = {}) {
   if (Object.prototype.hasOwnProperty.call(raw, "modalWidth")) migrated.modalWidthPercent = "60";
   if (Object.prototype.hasOwnProperty.call(raw, "textareaMinHeight")) migrated.markdownBoxHeightPercent = "30";
   if (Object.prototype.hasOwnProperty.call(raw, "questionFill")) migrated.questionFillPercent = String(raw.questionFill);
-  if (Object.prototype.hasOwnProperty.call(raw, "questionMax")) migrated.questionMaxFontSize = `${raw.questionMax}px`;
   if (Object.prototype.hasOwnProperty.call(raw, "answerFont")) migrated.answerFontSize = `${Math.round(Number(raw.answerFont) * 16)}px`;
   if (Object.prototype.hasOwnProperty.call(raw, "bodyFont")) migrated.baseFontSize = `${Math.round(Number(raw.bodyFont) * 16)}px`;
   if (Object.prototype.hasOwnProperty.call(raw, "lineHeight")) {
@@ -890,8 +924,6 @@ function migrateLegacyStyleSettings(raw = {}) {
   if (Object.prototype.hasOwnProperty.call(raw, "cardPadding")) migrated.cardPadding = `${raw.cardPadding}px`;
   if (Object.prototype.hasOwnProperty.call(raw, "bodyFontSize")) migrated.baseFontSize = raw.bodyFontSize;
   if (Object.prototype.hasOwnProperty.call(raw, "bodyLineHeight")) migrated.baseLineHeight = raw.bodyLineHeight;
-  if (Object.prototype.hasOwnProperty.call(raw, "questionFontMin")) migrated.questionMinFontSize = raw.questionFontMin;
-  if (Object.prototype.hasOwnProperty.call(raw, "questionFontMax")) migrated.questionMaxFontSize = raw.questionFontMax;
   if (Object.prototype.hasOwnProperty.call(raw, "cardFacePadding")) migrated.cardPadding = raw.cardFacePadding;
   if (Object.prototype.hasOwnProperty.call(raw, "cardFaceGap")) migrated.cardContentGap = raw.cardFaceGap;
   if (Object.prototype.hasOwnProperty.call(raw, "toolbarGap")) migrated.buttonGap = raw.toolbarGap;
@@ -909,9 +941,9 @@ function migrateLegacyStyleSettings(raw = {}) {
 
 function normalizeStyleSettings(raw = {}) {
   const source = migrateLegacyStyleSettings(raw || {});
-  return Object.keys(styleDefaults).reduce((settings, key) => {
-    settings[key] = styleValue(source, key);
-    return settings;
+  return Object.keys(styleDefaults).reduce((normalized, key) => {
+    normalized[key] = normalizeStyleValue(key, styleValue(source, key));
+    return normalized;
   }, {});
 }
 
@@ -1041,6 +1073,7 @@ function applyStyleSettings(rawSettings, options = {}) {
   root.style.setProperty("--app-font-family", resolveFontFamily(settings.fontFamily));
   root.style.setProperty("--question-font-family", resolveFontFamily(settings.questionFontFamily));
   root.style.setProperty("--answer-font-family", resolveFontFamily(settings.answerFontFamily));
+  root.style.setProperty("--question-justify-items", questionJustifyItems(settings.questionAlign));
   Object.entries(styleCssVariables).forEach(([key, cssVariable]) => {
     if (key === "questionFontFamily" || key === "answerFontFamily") return;
     root.style.setProperty(cssVariable, settings[key]);
@@ -1070,6 +1103,13 @@ function hasMeaningfulStyleSettings(settings) {
   return Boolean(settings && typeof settings === "object" && Object.keys(settings).length > 0);
 }
 
+function questionJustifyItems(align) {
+  if (align === "right") return "end";
+  if (align === "center") return "center";
+  if (align === "justify") return "stretch";
+  return "start";
+}
+
 function styleSettingsFromControls() {
   const settings = {};
   el.styleControls?.querySelectorAll("[data-style-key]").forEach((input) => {
@@ -1090,6 +1130,7 @@ function forceStyleRefresh() {
     node.style.fontSize = "";
     node.style.transform = "";
     node.style.width = "";
+    node.style.removeProperty("--question-fit-font-size");
   });
   scheduleLiveQuestionFit();
   requestAnimationFrame(() => {
@@ -1893,6 +1934,179 @@ function setAllCardStatus(cardId, status) {
   updateAllCardStatuses();
 }
 
+function createBlankCard() {
+  return { id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' };
+}
+
+function refreshAllCardsAround(cardId, side = "question") {
+  allCardsRenderId += 1;
+  const renderId = allCardsRenderId;
+  return renderAllCards().then(async () => {
+    if (renderId !== allCardsRenderId) return null;
+    const item = Array.from(el.allCardsList.querySelectorAll(".all-card"))
+      .find((node) => node.dataset.cardId === cardId);
+    if (item && side === "answer") {
+      item.classList.add("is-flipped");
+      await ensureAllCardAnswer(item);
+    }
+    if (item) updateAllCardEditButton(item);
+    item?.scrollIntoView({ block: "nearest" });
+    item?.focus({ preventScroll: true });
+    return item || null;
+  });
+}
+
+function insertCardAfter(cardId) {
+  if (!state.masterCards.length && !state.deckTitle) {
+    setStatus("Create a new deck or import one first.", "error");
+    return;
+  }
+
+  const insertAfterIndex = state.masterCards.findIndex((card) => card.id === cardId);
+  if (insertAfterIndex < 0) return;
+
+  const currentCardId = state.cards[state.current]?.id || null;
+  const shouldRefreshActiveDeck = activeDeckMatchesMasterOrder();
+  const newCard = createBlankCard();
+  state.masterCards.splice(insertAfterIndex + 1, 0, newCard);
+
+  if (shouldRefreshActiveDeck) {
+    state.cards = state.masterCards.slice();
+    state.current = currentCardId
+      ? Math.max(0, state.cards.findIndex((item) => item.id === currentCardId))
+      : 0;
+  }
+
+  state.previewCard = null;
+  savePersistedDeck();
+  updateMeta();
+  showCard();
+  refreshAllCardsAround(newCard.id).then((item) => {
+    if (item) openAllCardEditor(item, "question");
+  });
+  setStatus(state.deckId ? "Card inserted locally. Sync to update the web deck." : "Card inserted.");
+}
+
+function activeDeckMatchesMasterOrder() {
+  if (state.cards.length !== state.masterCards.length) return false;
+  return state.cards.every((card, index) => card.id === state.masterCards[index]?.id);
+}
+
+function clearAllCardDropTargets() {
+  el.allCardsList.querySelectorAll(".all-card").forEach((item) => {
+    item.classList.remove("is-dragging", "drop-before", "drop-after");
+  });
+}
+
+function finishMasterCardReorder(cardId, shouldRefreshActiveDeck, currentCardId) {
+  if (shouldRefreshActiveDeck) {
+    state.cards = state.masterCards.slice();
+    state.current = currentCardId
+      ? Math.max(0, state.cards.findIndex((item) => item.id === currentCardId))
+      : Math.min(state.current, Math.max(state.cards.length - 1, 0));
+  }
+
+  state.previewCard = null;
+  syncResults();
+  savePersistedDeck();
+  updateMeta();
+  showCard();
+
+  allCardsRenderId += 1;
+  const renderId = allCardsRenderId;
+  renderAllCards().then(() => {
+    if (renderId !== allCardsRenderId) return;
+    const movedItem = Array.from(el.allCardsList.querySelectorAll(".all-card"))
+      .find((item) => item.dataset.cardId === cardId);
+    movedItem?.scrollIntoView({ block: "nearest" });
+    movedItem?.focus({ preventScroll: true });
+  });
+  setStatus(state.deckId ? "Card order updated locally. Sync to update the web deck." : "Card order updated.");
+}
+
+function reorderMasterCard(cardId, targetCardId, placement) {
+  if (!cardId || !targetCardId || cardId === targetCardId) return;
+
+  const fromIndex = state.masterCards.findIndex((card) => card.id === cardId);
+  const targetIndex = state.masterCards.findIndex((card) => card.id === targetCardId);
+
+  if (fromIndex < 0 || targetIndex < 0) return;
+
+  const currentCardId = state.cards[state.current]?.id || null;
+  const shouldRefreshActiveDeck = activeDeckMatchesMasterOrder();
+  const [card] = state.masterCards.splice(fromIndex, 1);
+  let insertIndex = targetIndex + (placement === "after" ? 1 : 0);
+  if (fromIndex < insertIndex) insertIndex -= 1;
+  insertIndex = Math.min(Math.max(insertIndex, 0), state.masterCards.length);
+
+  if (insertIndex === fromIndex) {
+    state.masterCards.splice(fromIndex, 0, card);
+    return;
+  }
+
+  state.masterCards.splice(insertIndex, 0, card);
+  finishMasterCardReorder(cardId, shouldRefreshActiveDeck, currentCardId);
+}
+
+function allCardDropPlacement(item, event) {
+  const rect = item.getBoundingClientRect();
+  return event.clientY > rect.top + rect.height / 2 ? "after" : "before";
+}
+
+function markAllCardDropTarget(item, placement) {
+  clearAllCardDropTargets();
+  item.classList.add(placement === "after" ? "drop-after" : "drop-before");
+  const draggedItem = Array.from(el.allCardsList.querySelectorAll(".all-card"))
+    .find((node) => node.dataset.cardId === draggedAllCardId);
+  draggedItem?.classList.add("is-dragging");
+}
+
+function handleAllCardDragStart(event) {
+  const item = closestElement(event.target, ".all-card");
+  if (!item || closestElement(event.target, "button, a, input, textarea")) {
+    event.preventDefault();
+    return;
+  }
+
+  draggedAllCardId = item.dataset.cardId;
+  item.classList.add("is-dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", draggedAllCardId);
+}
+
+function handleAllCardDragOver(event) {
+  if (!draggedAllCardId) return;
+  const item = closestElement(event.target, ".all-card");
+  if (!item) return;
+  if (item.dataset.cardId === draggedAllCardId) {
+    clearAllCardDropTargets();
+    item.classList.add("is-dragging");
+    return;
+  }
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  markAllCardDropTarget(item, allCardDropPlacement(item, event));
+}
+
+function handleAllCardDrop(event) {
+  if (!draggedAllCardId) return;
+  const item = closestElement(event.target, ".all-card");
+  if (!item || item.dataset.cardId === draggedAllCardId) return;
+
+  event.preventDefault();
+  const placement = allCardDropPlacement(item, event);
+  const droppedCardId = draggedAllCardId;
+  draggedAllCardId = "";
+  clearAllCardDropTargets();
+  reorderMasterCard(droppedCardId, item.dataset.cardId, placement);
+}
+
+function handleAllCardDragEnd() {
+  draggedAllCardId = "";
+  clearAllCardDropTargets();
+}
+
 function updateAllCardStatuses() {
   el.allCardsList.querySelectorAll(".all-card").forEach((node) => {
     const status = state.statusById[node.dataset.cardId] || "";
@@ -1901,6 +2115,95 @@ function updateAllCardStatuses() {
       button.classList.toggle("is-active", button.dataset.allStatus === status);
     });
   });
+}
+
+function allCardById(cardId) {
+  return state.masterCards.find((card) => card.id === cardId) || null;
+}
+
+function closeAllCardEditor(item) {
+  const editor = item?.querySelector(".all-card-editor");
+  if (!editor) return;
+  editor.hidden = true;
+  editor.dataset.side = "";
+  item.classList.remove("is-editing");
+  item.draggable = true;
+  updateAllCardEditButton(item);
+}
+
+function closeAllCardEditors(exceptItem = null) {
+  el.allCardsList.querySelectorAll(".all-card.is-editing").forEach((item) => {
+    if (item !== exceptItem) closeAllCardEditor(item);
+  });
+}
+
+function allCardVisibleSide(item) {
+  return item?.classList.contains("is-flipped") ? "answer" : "question";
+}
+
+function updateAllCardEditButton(item) {
+  const button = item?.querySelector("[data-all-edit-current]");
+  if (!button) return;
+  const editing = item.classList.contains("is-editing");
+  const side = editing
+    ? item.querySelector(".all-card-editor")?.dataset.side || allCardVisibleSide(item)
+    : allCardVisibleSide(item);
+  button.innerHTML = editing ? "&#128190;" : "&#9998;";
+  button.classList.toggle("is-saving", editing);
+  button.title = editing
+    ? `Save ${side}`
+    : `Edit ${side}`;
+  button.setAttribute("aria-label", button.title);
+}
+
+function openAllCardEditor(item, side = allCardVisibleSide(item)) {
+  const card = allCardById(item?.dataset.cardId);
+  const editor = item?.querySelector(".all-card-editor");
+  if (!card || !editor) return;
+
+  closeAllCardEditors(item);
+  item.classList.add("is-editing");
+  item.draggable = false;
+  editor.hidden = false;
+  editor.dataset.side = side;
+  editor.querySelector("[data-all-edit-label]").textContent = side === "answer" ? "Answer" : "Question";
+  editor.querySelector("[data-all-edit-value]").value = side === "answer" ? card.answer : card.question;
+  updateAllCardEditButton(item);
+  editor.querySelector("[data-all-edit-value]").focus();
+}
+
+function toggleAllCardEditor(item) {
+  if (!item) return;
+  const editor = item.querySelector(".all-card-editor");
+  if (item.classList.contains("is-editing")) {
+    saveAllCardEditor(item);
+    return;
+  }
+  openAllCardEditor(item, allCardVisibleSide(item));
+}
+
+function saveAllCardEditor(item) {
+  const card = allCardById(item?.dataset.cardId);
+  const editor = item?.querySelector(".all-card-editor");
+  if (!card || !editor) return;
+
+  const side = editor.dataset.side === "answer" ? "answer" : "question";
+  const value = editor.querySelector("[data-all-edit-value]").value.trim();
+
+  if (!value) {
+    setStatus(`${side === "answer" ? "Answer" : "Question"} cannot be empty.`, "error");
+    return;
+  }
+
+  card[side] = value;
+  savePersistedDeck();
+  updateMeta();
+  if (state.cards[state.current]?.id === card.id || state.previewCard?.id === card.id) {
+    showCard();
+  }
+
+  refreshAllCardsAround(card.id, side);
+  setStatus(state.deckId ? "Card updated locally. Sync to update the web deck." : "Card updated.");
 }
 
 async function ensureAllCardAnswer(item) {
@@ -1917,9 +2220,11 @@ async function ensureAllCardAnswer(item) {
 
 function flipAllCard(item) {
   if (item.dataset.answerRendered === "rendering") return;
+  if (item.classList.contains("is-editing")) return;
   const willShowAnswer = !item.classList.contains("is-flipped");
   item.classList.toggle("is-flipped", willShowAnswer);
   if (willShowAnswer) ensureAllCardAnswer(item);
+  updateAllCardEditButton(item);
 }
 
 async function renderAllCards() {
@@ -1934,6 +2239,7 @@ async function renderAllCards() {
     const item = document.createElement("article");
     item.className = "all-card";
     item.tabIndex = 0;
+    item.draggable = true;
     item.dataset.cardId = card.id;
     item.dataset.status = state.statusById[card.id] || "";
     item.dataset.answerRendered = "false";
@@ -1941,7 +2247,9 @@ async function renderAllCards() {
     item.innerHTML = `
       <div class="all-card-top">
         <span class="all-card-index">${index + 1}</span>
-        <div class="all-card-actions" aria-label="Categorize card">
+        <div class="all-card-actions" aria-label="Card controls">
+          <button class="all-card-add" type="button" data-all-add-after title="Insert card after this one" aria-label="Insert card after this one">+</button>
+          <button class="all-card-edit" type="button" data-all-edit-current title="Edit question" aria-label="Edit question">&#9998;</button>
           <button class="all-card-review" type="button" data-all-status="review">Review</button>
           <button class="all-card-known" type="button" data-all-status="known">Known</button>
         </div>
@@ -1955,6 +2263,16 @@ async function renderAllCards() {
         <div class="rendered"></div>
       </div>
     `;
+    const editor = document.createElement("div");
+    editor.className = "all-card-editor";
+    editor.hidden = true;
+    editor.innerHTML = `
+      <label>
+        <span data-all-edit-label>Question</span>
+        <textarea data-all-edit-value spellcheck="false"></textarea>
+      </label>
+    `;
+    item.appendChild(editor);
     el.allCardsList.appendChild(item);
     await renderMarkdown(item.querySelector(".all-card-question .rendered"), card.question);
   }
@@ -2045,6 +2363,7 @@ async function showCard(direction = 0) {
     await renderMarkdown(el.questionView, state.cards.length ? "Finished. Restart or shuffle to quiz again." : "Import a deck to begin.");
     await renderMarkdown(el.answerView, "");
     el.questionView.style.fontSize = "";
+    el.questionView.style.removeProperty("--question-fit-font-size");
     updateMeta();
     return;
   }
@@ -2369,47 +2688,96 @@ function contentFits(node) {
   return node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1;
 }
 
-function liveQuestionBounds() {
-  const settings = normalizeStyleSettings(state.styleSettings);
-  return {
-    min: 18,
-    max: parseFloat(settings.questionMaxFontSize) || parseFloat(styleDefaults.questionMaxFontSize),
-    targetRatio: (parseFloat(settings.questionFillPercent) || parseFloat(styleDefaults.questionFillPercent)) / 100
-  };
-}
-
 function fitLiveQuestion() {
   const node = el.questionView;
   const face = node?.closest(".card-question");
-  if (!node || !face || !node.textContent.trim()) return;
+  if (!node) return;
 
   node.style.fontSize = "";
   node.style.transform = "";
   node.style.width = "";
+  node.style.removeProperty("--question-fit-font-size");
 
-  if (face.clientHeight <= 0 || node.clientWidth <= 0 || node.clientHeight <= 0) return;
+  if (!face || !node.textContent.trim()) return;
+  if (face.clientHeight <= 0 || face.clientWidth <= 0) return;
 
-  const bounds = liveQuestionBounds();
-  const availableHeight = Math.max(node.clientHeight, bounds.min);
-  const targetHeight = Math.max(availableHeight * bounds.targetRatio, bounds.min * 1.25);
-  
-  const originalFlex = node.style.flex;
-  node.style.flex = "0 0 auto";
+  const settings = normalizeStyleSettings(state.styleSettings);
+  const faceStyle = getComputedStyle(face);
+  const paddingY = (parseFloat(faceStyle.paddingTop) || 0) + (parseFloat(faceStyle.paddingBottom) || 0);
+  const paddingX = (parseFloat(faceStyle.paddingLeft) || 0) + (parseFloat(faceStyle.paddingRight) || 0);
+  const rowGap = parseFloat(faceStyle.rowGap || faceStyle.gap) || 0;
+  const visibleItems = Array.from(face.children).filter((child) => {
+    if (child === node || child.hidden) return child === node;
+    return getComputedStyle(child).display !== "none";
+  });
+  const occupiedHeight = visibleItems.reduce((total, child) => {
+    if (child === node) return total;
+    const childStyle = getComputedStyle(child);
+    return total
+      + child.getBoundingClientRect().height
+      + (parseFloat(childStyle.marginTop) || 0)
+      + (parseFloat(childStyle.marginBottom) || 0);
+  }, 0);
+  const gapHeight = Math.max(visibleItems.length - 1, 0) * rowGap;
+  const lineHeight = parseFloat(settings.questionLineHeight) || parseFloat(styleDefaults.questionLineHeight) || 1.18;
+  const fillRatio = Math.min(Math.max((parseFloat(settings.questionFillPercent) || parseFloat(styleDefaults.questionFillPercent)) / 100, 0.1), 0.95);
+  const availableHeight = Math.max(face.clientHeight - paddingY - occupiedHeight - gapHeight, 1);
+  const availableWidth = Math.max(face.clientWidth - paddingX, 1);
+  const targetHeight = Math.max(availableHeight * fillRatio, 1);
+  const searchCeiling = Math.max(16, Math.min(360, targetHeight / Math.max(lineHeight, 0.1) * 2.2, availableWidth * 1.6));
+  let low = 1;
+  let high = searchCeiling;
+  let best = low;
 
-  const contentFitsTarget = () => (
-    node.scrollWidth <= node.clientWidth + 1
-    && node.scrollHeight <= targetHeight + 1
-    && node.scrollHeight <= availableHeight + 1
-  );
+  if (node.clientWidth <= 0) node.style.width = `${availableWidth}px`;
 
-  let low = bounds.min;
-  let high = bounds.max;
-  let best = 0;
+  const questionContentSize = () => {
+    const children = Array.from(node.children).filter((child) => getComputedStyle(child).display !== "none");
+    if (!children.length) {
+      const nodeStyle = getComputedStyle(node);
+      return {
+        width: Math.min(node.scrollWidth, Math.max(node.clientWidth, availableWidth)),
+        height: parseFloat(nodeStyle.lineHeight) || node.scrollHeight
+      };
+    }
 
-  for (let index = 0; index < 12; index += 1) {
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    let left = Infinity;
+    let width = 0;
+
+    children.forEach((child) => {
+      const childStyle = getComputedStyle(child);
+      const rect = child.getBoundingClientRect();
+      const marginTop = parseFloat(childStyle.marginTop) || 0;
+      const marginRight = parseFloat(childStyle.marginRight) || 0;
+      const marginBottom = parseFloat(childStyle.marginBottom) || 0;
+      const marginLeft = parseFloat(childStyle.marginLeft) || 0;
+      top = Math.min(top, rect.top - marginTop);
+      right = Math.max(right, rect.right + marginRight);
+      bottom = Math.max(bottom, rect.bottom + marginBottom);
+      left = Math.min(left, rect.left - marginLeft);
+      width = Math.max(width, rect.width + marginLeft + marginRight, child.scrollWidth + marginLeft + marginRight);
+    });
+
+    return {
+      width: Math.max(width, right - left),
+      height: Math.max(0, bottom - top)
+    };
+  };
+
+  const fits = () => {
+    const contentSize = questionContentSize();
+    return contentSize.width <= Math.max(node.clientWidth, availableWidth) + 1
+      && contentSize.height <= targetHeight + 1
+      && contentSize.height <= availableHeight + 1;
+  };
+
+  for (let index = 0; index < 14; index += 1) {
     const mid = (low + high) / 2;
-    node.style.fontSize = `${mid}px`;
-    if (contentFitsTarget()) {
+    node.style.setProperty("--question-fit-font-size", `${mid}px`);
+    if (fits()) {
       best = mid;
       low = mid;
     } else {
@@ -2417,34 +2785,7 @@ function fitLiveQuestion() {
     }
   }
 
-  if (best > 0) {
-    node.style.fontSize = `${Math.max(bounds.min, best - 0.5)}px`;
-    node.style.flex = originalFlex;
-    return;
-  }
-
-  low = 12;
-  high = bounds.max;
-  best = low;
-  
-  const contentFitsAvailable = () => (
-    node.scrollWidth <= node.clientWidth + 1
-    && node.scrollHeight <= availableHeight + 1
-  );
-
-  for (let index = 0; index < 12; index += 1) {
-    const mid = (low + high) / 2;
-    node.style.fontSize = `${mid}px`;
-    if (contentFitsAvailable()) {
-      best = mid;
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-  
-  node.style.fontSize = `${Math.max(12, best - 0.5)}px`;
-  node.style.flex = originalFlex;
+  node.style.setProperty("--question-fit-font-size", `${Math.max(1, best - 0.5)}px`);
 }
 
 function scheduleLiveQuestionFit() {
@@ -2459,11 +2800,16 @@ function fitPrintNode(node) {
   node.style.width = "";
 
   const shouldGrow = node.classList.contains("fit-question");
+  const settings = normalizeStyleSettings(state.styleSettings);
+  const answerFontSize = parseFloat(settings.answerFontSize) || parseFloat(styleDefaults.answerFontSize);
+  const fillRatio = Math.min(Math.max((parseFloat(settings.questionFillPercent) || parseFloat(styleDefaults.questionFillPercent)) / 100, 0.1), 0.95);
+  const lineHeight = parseFloat(settings.questionLineHeight) || parseFloat(styleDefaults.questionLineHeight) || 1.18;
+  const questionUpper = Math.max(8, Math.min(220, node.clientHeight * fillRatio / Math.max(lineHeight, 0.1), Math.max(node.clientWidth, 1)));
 
   if (!shouldGrow && contentFits(node)) return;
 
   let low = 4;
-  let high = shouldGrow ? 58 : 88;
+  let high = shouldGrow ? questionUpper : Math.max(4, answerFontSize);
   let best = low;
 
   for (let index = 0; index < 10; index += 1) {
@@ -2477,7 +2823,7 @@ function fitPrintNode(node) {
     }
   }
 
-  node.style.fontSize = `${Math.max(4, best - 0.5)}px`;
+  node.style.fontSize = `${Math.max(low, best - 0.5)}px`;
 
   if (!contentFits(node)) {
     const xScale = node.clientWidth / Math.max(node.scrollWidth, 1);
@@ -3092,7 +3438,7 @@ function createNewDeck() {
   state.deckTitle = "New Deck";
   state.sourceTitle = "New Deck";
   state.importTitleHint = "New Deck";
-  state.masterCards = [{ id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' }];
+  state.masterCards = [createBlankCard()];
   state.cards = [...state.masterCards];
   state.current = 0;
   resetResults();
@@ -3195,6 +3541,20 @@ el.diagramModal.addEventListener("wheel", handleStylePanelWheel, { passive: fals
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
 el.allCardsList.addEventListener("click", (event) => {
+  const addAfterButton = event.target.closest("[data-all-add-after]");
+  if (addAfterButton) {
+    event.stopPropagation();
+    insertCardAfter(addAfterButton.closest(".all-card").dataset.cardId);
+    return;
+  }
+
+  const editButton = event.target.closest("[data-all-edit-current]");
+  if (editButton) {
+    event.stopPropagation();
+    toggleAllCardEditor(editButton.closest(".all-card"));
+    return;
+  }
+
   const statusButton = event.target.closest("[data-all-status]");
   if (statusButton) {
     event.stopPropagation();
@@ -3204,9 +3564,19 @@ el.allCardsList.addEventListener("click", (event) => {
   }
 
   const item = event.target.closest(".all-card");
-  if (item && event.target.closest("a, button") === null) {
+  if (item && event.target.closest("a, button, textarea") === null) {
     flipAllCard(item);
   }
+});
+el.allCardsList.addEventListener("input", (event) => {
+  if (event.target.closest(".all-card-editor")) event.stopPropagation();
+});
+el.allCardsList.addEventListener("dragstart", handleAllCardDragStart);
+el.allCardsList.addEventListener("dragover", handleAllCardDragOver);
+el.allCardsList.addEventListener("drop", handleAllCardDrop);
+el.allCardsList.addEventListener("dragend", handleAllCardDragEnd);
+el.allCardsList.addEventListener("dragleave", (event) => {
+  if (!el.allCardsList.contains(event.relatedTarget)) clearAllCardDropTargets();
 });
 el.allCardsList.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
@@ -3391,7 +3761,7 @@ if (el.addCardBtn) {
       setStatus("Create a new deck or import one first.", "error");
       return;
     }
-    const newCard = { id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' };
+    const newCard = createBlankCard();
     state.masterCards.splice(state.current + 1, 0, newCard);
     state.cards.splice(state.current + 1, 0, newCard);
     savePersistedDeck();
