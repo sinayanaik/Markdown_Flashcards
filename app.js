@@ -84,7 +84,7 @@ async function fetchWebDecks() {
     tbody.innerHTML = "";
     
     if (!data || data.length === 0) {
-      tbody.innerHTML = "<tr><td colspan=\"3\" style=\"text-align: center; padding: 1rem; color: var(--text-secondary);\">No web decks found.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan=\"3\" class=\"web-decks-empty\">No web decks found.</td></tr>";
       setStatus("Web decks loaded.");
       return;
     }
@@ -92,10 +92,9 @@ async function fetchWebDecks() {
     data.forEach(deck => {
       const date = new Date(deck.updated_at).toLocaleString();
       const tr = document.createElement("tr");
-      tr.style.borderBottom = "1px solid var(--border-color, #333)";
 
       const tdTitle = document.createElement("td");
-      tdTitle.style.padding = "0.5rem";
+      tdTitle.dataset.label = "Title";
       const titleWrap = document.createElement("div");
       titleWrap.className = "web-deck-title";
 
@@ -115,29 +114,27 @@ async function fetchWebDecks() {
       tdTitle.appendChild(titleWrap);
 
       const tdDate = document.createElement("td");
-      tdDate.style.padding = "0.5rem";
+      tdDate.dataset.label = "Updated";
       tdDate.textContent = date;
       
       const tdActions = document.createElement("td");
-      tdActions.style.padding = "0.5rem";
-      tdActions.style.textAlign = "right";
+      tdActions.dataset.label = "Actions";
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "web-deck-actions";
       
       const loadBtn = document.createElement("button");
-      loadBtn.className = "button is-small";
+      loadBtn.className = "web-deck-action";
       loadBtn.textContent = "Load";
-      loadBtn.style.marginRight = "0.25rem";
       loadBtn.onclick = () => loadWebDeck(deck.id);
       
       const delBtn = document.createElement("button");
-      delBtn.className = "button is-small";
+      delBtn.className = "web-deck-action web-deck-delete";
       delBtn.textContent = "Delete";
-      delBtn.style.background = "#e04f5f";
-      delBtn.style.color = "white";
-      delBtn.style.border = "none";
       delBtn.onclick = () => deleteWebDeck(deck.id);
       
-      tdActions.appendChild(loadBtn);
-      tdActions.appendChild(delBtn);
+      actionsWrap.appendChild(loadBtn);
+      actionsWrap.appendChild(delBtn);
+      tdActions.appendChild(actionsWrap);
       
       tr.appendChild(tdTitle);
       tr.appendChild(tdDate);
@@ -381,6 +378,7 @@ const swipeConfig = {
 
 let allCardsRenderId = 0;
 let printTitleBeforeExport = "";
+let liveQuestionFitFrame = 0;
 
 const el = {
   sourceInput: document.querySelector("#sourceInput"),
@@ -427,6 +425,7 @@ const el = {
   reviewBtn: document.querySelector("#reviewBtn"),
   replayReviewBtn: document.querySelector("#replayReviewBtn"),
   replayKnownBtn: document.querySelector("#replayKnownBtn"),
+  replayUncategorizedBtn: document.querySelector("#replayUncategorizedBtn"),
   replayAllBtn: document.querySelector("#replayAllBtn"),
 };
 
@@ -498,7 +497,9 @@ function configureMermaid(theme) {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("swipe-notes-theme", theme);
-  el.themeBtn.textContent = theme === "dark" ? "Light" : "Dark";
+  el.themeBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+  el.themeBtn.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+  el.themeBtn.setAttribute("aria-label", el.themeBtn.title);
   configureMermaid(theme);
   if (state.cards[state.current]) showCard();
 }
@@ -852,6 +853,10 @@ function syncResults() {
   state.review = state.results.review.length;
 }
 
+function uncategorizedCards() {
+  return state.masterCards.filter((card) => !state.statusById[card.id]);
+}
+
 function resetResults() {
   state.statusById = {};
   state.previewCard = null;
@@ -885,6 +890,7 @@ async function previewCard(card) {
   el.card.style.transform = "";
   await renderMarkdown(el.questionView, card.question);
   await renderMarkdown(el.answerView, card.answer);
+  scheduleLiveQuestionFit();
   setStatus("Previewing saved card. Use Replay to study that pile again.");
   updateMeta();
 }
@@ -1293,6 +1299,7 @@ function updateMeta() {
   el.exportBtn.disabled = state.masterCards.length === 0 && state.results.known.length === 0 && state.results.review.length === 0;
   el.replayKnownBtn.disabled = state.results.known.length === 0;
   el.replayReviewBtn.disabled = state.results.review.length === 0;
+  el.replayUncategorizedBtn.disabled = uncategorizedCards().length === 0;
   el.replayAllBtn.disabled = state.masterCards.length === 0;
 }
 
@@ -1335,12 +1342,14 @@ async function showCard(direction = 0) {
   if (!card) {
     await renderMarkdown(el.questionView, state.cards.length ? "Finished. Restart or shuffle to quiz again." : "Import a deck to begin.");
     await renderMarkdown(el.answerView, "");
+    el.questionView.style.fontSize = "";
     updateMeta();
     return;
   }
 
   await renderMarkdown(el.questionView, card.question);
   await renderMarkdown(el.answerView, card.answer);
+  scheduleLiveQuestionFit();
   updateMeta();
   if (enterClass) {
     window.setTimeout(() => {
@@ -1461,10 +1470,12 @@ function replayDeck(scope) {
     ? state.results.known.slice()
     : scope === "review"
       ? state.results.review.slice()
-      : state.masterCards.slice();
+      : scope === "uncategorized"
+        ? uncategorizedCards()
+        : state.masterCards.slice();
 
   if (!selected.length) {
-    setStatus(`No ${scope} cards to replay.`, "error");
+    setStatus(scope === "uncategorized" ? "No uncategorized cards to replay." : `No ${scope} cards to replay.`, "error");
     return;
   }
 
@@ -1496,6 +1507,7 @@ function exportBaseName(scope = "all") {
   const base = slugifyFileName(state.deckTitle || state.sourceTitle || "flashcards");
   if (scope === "known") return `${base} - known`;
   if (scope === "review") return `${base} - review`;
+  if (scope === "uncategorized") return `${base} - uncategorized`;
   return base;
 }
 
@@ -1594,13 +1606,14 @@ function cardsForScope(scope) {
   syncResults();
   if (scope === "known") return state.results.known;
   if (scope === "review") return state.results.review;
+  if (scope === "uncategorized") return uncategorizedCards();
   return state.masterCards.length ? state.masterCards : state.cards;
 }
 
 function exportMarkdown(scope = "all") {
   const cards = cardsForScope(scope);
-  const title = scope === "known" ? "Known" : scope === "review" ? "Review" : "All Cards";
-  const unplayed = state.masterCards.filter((card) => !state.statusById[card.id]);
+  const title = scope === "known" ? "Known" : scope === "review" ? "Review" : scope === "uncategorized" ? "Uncategorized" : "All Cards";
+  const uncategorized = uncategorizedCards();
   const output = [
     "# Flashcard Export",
     "",
@@ -1612,7 +1625,7 @@ function exportMarkdown(scope = "all") {
     scope === "all" ? "" : null,
     scope === "all" ? formatCardList("Review", state.results.review) : null,
     scope === "all" ? "" : null,
-    scope === "all" ? formatCardList("Unplayed", unplayed) : null
+    scope === "all" ? formatCardList("Uncategorized", uncategorized) : null
   ].filter((line) => line !== null).join("\n");
 
   const blob = new Blob([output], { type: "text/markdown;charset=utf-8" });
@@ -1647,6 +1660,72 @@ function exportJson() {
 
 function contentFits(node) {
   return node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1;
+}
+
+function liveQuestionBounds() {
+  const viewport = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+  const compact = viewport > 0 && viewport <= 720;
+  return {
+    min: compact ? 20 : 24,
+    max: compact ? 86 : 116
+  };
+}
+
+function fitLiveQuestion() {
+  const node = el.questionView;
+  const face = node?.closest(".card-question");
+  if (!node || !face || !node.textContent.trim()) return;
+
+  node.style.fontSize = "";
+  node.style.transform = "";
+  node.style.width = "";
+
+  if (face.clientHeight <= 0 || node.clientWidth <= 0 || node.clientHeight <= 0) return;
+
+  const bounds = liveQuestionBounds();
+  let low = bounds.min;
+  let high = Math.min(
+    bounds.max,
+    Math.max(bounds.min, face.clientHeight * 0.42, node.clientWidth * 0.18)
+  );
+  let best = low;
+
+  for (let index = 0; index < 12; index += 1) {
+    const mid = (low + high) / 2;
+    node.style.fontSize = `${mid}px`;
+    if (contentFits(node)) {
+      best = mid;
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  node.style.fontSize = `${Math.max(bounds.min, best - 0.5)}px`;
+
+  if (!contentFits(node)) {
+    low = 12;
+    high = Math.max(12, best);
+    best = low;
+    for (let index = 0; index < 10; index += 1) {
+      const mid = (low + high) / 2;
+      node.style.fontSize = `${mid}px`;
+      if (contentFits(node)) {
+        best = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    node.style.fontSize = `${Math.max(12, best - 0.5)}px`;
+  }
+}
+
+function scheduleLiveQuestionFit() {
+  cancelAnimationFrame(liveQuestionFitFrame);
+  liveQuestionFitFrame = requestAnimationFrame(() => {
+    liveQuestionFitFrame = requestAnimationFrame(fitLiveQuestion);
+  });
 }
 
 function fitPrintNode(node) {
@@ -1695,7 +1774,7 @@ function afterPaint() {
 
 async function exportPdf(scope = "all") {
   const cards = cardsForScope(scope);
-  const title = scope === "known" ? "Known Cards" : scope === "review" ? "Review Cards" : "All Cards";
+  const title = scope === "known" ? "Known Cards" : scope === "review" ? "Review Cards" : scope === "uncategorized" ? "Uncategorized Cards" : "All Cards";
   if (!cards.length) {
     setStatus(`No ${scope === "review" ? "review" : scope} cards to export.`, "error");
     return;
@@ -2284,6 +2363,7 @@ el.reviewBrickList.addEventListener("click", (event) => {
 });
 el.replayReviewBtn.addEventListener("click", () => replayDeck("review"));
 el.replayKnownBtn.addEventListener("click", () => replayDeck("known"));
+el.replayUncategorizedBtn.addEventListener("click", () => replayDeck("uncategorized"));
 el.replayAllBtn.addEventListener("click", () => replayDeck("all"));
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
@@ -2340,6 +2420,8 @@ window.addEventListener("afterprint", () => {
   if (printTitleBeforeExport) document.title = printTitleBeforeExport;
   printTitleBeforeExport = "";
 });
+
+window.addEventListener("resize", scheduleLiveQuestionFit);
 
 setTheme(localStorage.getItem("swipe-notes-theme") || "dark");
 localStorage.removeItem(deckStorageKey);
