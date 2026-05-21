@@ -53,10 +53,186 @@ const state = {
   dragging: false,
   dragMoved: false,
   suppressClickUntil: 0,
-  transitionToken: 0
+  transitionToken: 0,
+  styleSettings: {},
+  styleTouched: false
 };
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
+const styleStorageKey = "swipe-notes-style-settings-v1";
+
+const fontFamilyChoices = {
+  system: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+  serif: "Georgia, \"Times New Roman\", Times, serif",
+  mono: "\"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo, monospace",
+  rounded: "ui-rounded, \"Avenir Next\", \"Nunito Sans\", Inter, ui-sans-serif, system-ui, sans-serif"
+};
+
+const styleDefaults = {
+  fontFamily: "system",
+  questionFontFamily: "system",
+  answerFontFamily: "system",
+  appWidthPercent: "98",
+  appHeightPercent: "100",
+  sidePanelWidthPercent: "16",
+  cardWidthPercent: "96",
+  cardMaxHeightPercent: "74",
+  modalWidthPercent: "60",
+  markdownBoxHeightPercent: "30",
+  baseFontSize: "18px",
+  baseLineHeight: "1.58",
+  codeFontSize: "15px",
+  codeLineHeight: "1.55",
+  questionFillPercent: "58",
+  questionMinFontSize: "23px",
+  questionMaxFontSize: "150px",
+  questionLineHeight: "1.18",
+  questionAlign: "center",
+  questionVerticalAlign: "center",
+  questionFontWeight: "700",
+  answerFontSize: "23px",
+  answerLineHeight: "1.58",
+  answerFontWeight: "400",
+  appGap: "10px",
+  panelPadding: "10px",
+  cardPadding: "24px",
+  cardContentGap: "16px",
+  buttonGap: "8px",
+  stackCardGap: "7px",
+  cardBorderWidth: "1px",
+  cardCornerRadius: "14px",
+  panelCornerRadius: "14px",
+  buttonCornerRadius: "8px",
+  inputCornerRadius: "8px",
+  toolbarButtonHeight: "38px",
+  actionButtonHeight: "42px",
+  buttonFontSize: "14px",
+  replayButtonHeight: "30px",
+  stackCardFontSize: "13px",
+  stackCardLineHeight: "1.28",
+  inputHeight: "40px",
+  modalPadding: "18px"
+};
+
+const styleControlGroups = [
+  {
+    title: "Typography",
+    fields: [
+      { key: "fontFamily", label: "Base font family", type: "select", options: ["system", "serif", "mono", "rounded"], hint: "Base app font." },
+      { key: "baseFontSize", label: "Base font size", type: "range", min: 10, max: 36, step: 1, unit: "px", hint: "General Markdown and interface text size." },
+      { key: "baseLineHeight", label: "Base line spacing", type: "range", min: 0.9, max: 2.6, step: 0.01, hint: "General reading spacing." },
+      { key: "codeFontSize", label: "Code font size", type: "range", min: 10, max: 28, step: 1, unit: "px", hint: "Text size inside code blocks." },
+      { key: "codeLineHeight", label: "Code line spacing", type: "range", min: 0.9, max: 2.6, step: 0.01, hint: "Line spacing inside code blocks." }
+    ]
+  },
+  {
+    title: "Layout Percentages",
+    fields: [
+      { key: "appWidthPercent", label: "App width %", type: "range", min: 50, max: 100, step: 1, hint: "Width of the whole app as a percent of screen width." },
+      { key: "appHeightPercent", label: "App height %", type: "range", min: 50, max: 100, step: 1, hint: "Height of the whole app as a percent of screen height." },
+      { key: "sidePanelWidthPercent", label: "Side panels width %", type: "range", min: 6, max: 35, step: 1, hint: "Each Known/Review column as a percent of total app width." },
+      { key: "cardWidthPercent", label: "Card width %", type: "range", min: 40, max: 100, step: 1, hint: "Flashcard width as a percent of the middle study area." },
+      { key: "cardMaxHeightPercent", label: "Card max height %", type: "range", min: 30, max: 100, step: 1, hint: "Maximum flashcard height as a percent of screen height." },
+      { key: "modalWidthPercent", label: "Modal width %", type: "range", min: 30, max: 100, step: 1, hint: "Import/Web/Style panel width as a percent of screen width." },
+      { key: "markdownBoxHeightPercent", label: "Markdown box height %", type: "range", min: 10, max: 80, step: 1, hint: "Import textarea height as a percent of screen height." }
+    ]
+  },
+  {
+    title: "Spacing And Shape",
+    fields: [
+      { key: "appGap", label: "Main gap", type: "range", min: 0, max: 40, step: 1, unit: "px", hint: "Space between major app sections." },
+      { key: "panelPadding", label: "Panel padding", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Inside spacing for study and side panels." },
+      { key: "cardPadding", label: "Card padding", type: "range", min: 0, max: 80, step: 1, unit: "px", hint: "Inside spacing on question and answer faces." },
+      { key: "cardContentGap", label: "Card label gap", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Space between the Question/Answer label and content." },
+      { key: "buttonGap", label: "Button gap", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Space between buttons." },
+      { key: "stackCardGap", label: "Stack card gap", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Space between mini cards in Known/Review stacks." },
+      { key: "cardCornerRadius", label: "Card corner radius", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Roundness of the flashcard corners." },
+      { key: "panelCornerRadius", label: "Panel corner radius", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Roundness of study, side, import, and style panels." },
+      { key: "buttonCornerRadius", label: "Button corner radius", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Roundness of buttons." },
+      { key: "inputCornerRadius", label: "Input corner radius", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Roundness of textboxes and selects." }
+    ]
+  },
+  {
+    title: "Question",
+    fields: [
+      { key: "questionFontFamily", label: "Question font family", type: "select", options: ["system", "serif", "mono", "rounded"], hint: "Question-only font." },
+      { key: "questionFillPercent", label: "Question fill %", type: "range", min: 10, max: 95, step: 1, hint: "How much vertical card space the question tries to occupy." },
+      { key: "questionMinFontSize", label: "Question minimum font size", type: "range", min: 8, max: 80, step: 1, unit: "px", hint: "Smallest question text size." },
+      { key: "questionMaxFontSize", label: "Question maximum font size", type: "range", min: 16, max: 240, step: 1, unit: "px", hint: "Largest question text size." },
+      { key: "questionLineHeight", label: "Question line spacing", type: "range", min: 0.8, max: 2.4, step: 0.01, hint: "Line spacing for question text." },
+      { key: "questionAlign", label: "Question horizontal align", type: "select", options: ["left", "center", "right", "justify"], hint: "Question text alignment." },
+      { key: "questionVerticalAlign", label: "Question vertical align", type: "select", options: ["start", "center", "end"], hint: "Question vertical position." },
+      { key: "questionFontWeight", label: "Question weight", type: "select", options: ["300", "400", "500", "600", "700", "800", "900"], hint: "Question text thickness." }
+    ]
+  },
+  {
+    title: "Answer And Card",
+    fields: [
+      { key: "answerFontFamily", label: "Answer font family", type: "select", options: ["system", "serif", "mono", "rounded"], hint: "Answer-only font." },
+      { key: "answerFontSize", label: "Answer font size", type: "range", min: 10, max: 64, step: 1, unit: "px", hint: "Main answer text size." },
+      { key: "answerLineHeight", label: "Answer line spacing", type: "range", min: 0.9, max: 2.6, step: 0.01, hint: "Reading spacing on the answer side." },
+      { key: "answerFontWeight", label: "Answer weight", type: "select", options: ["300", "400", "500", "600", "700", "800", "900"], hint: "Answer text thickness." },
+      { key: "cardBorderWidth", label: "Card border width", type: "range", min: 0, max: 8, step: 1, unit: "px", hint: "Border thickness around the flashcard." }
+    ]
+  },
+  {
+    title: "Buttons And Stacks",
+    fields: [
+      { key: "toolbarButtonHeight", label: "Toolbar button height", type: "range", min: 24, max: 72, step: 1, unit: "px", hint: "Height of Import, Web Decks, Sync, Export, All, and icon buttons." },
+      { key: "actionButtonHeight", label: "Action button height", type: "range", min: 28, max: 80, step: 1, unit: "px", hint: "Height of Review, Prev, Next, Known buttons." },
+      { key: "buttonFontSize", label: "Button font size", type: "range", min: 10, max: 28, step: 1, unit: "px", hint: "Text size inside buttons." },
+      { key: "replayButtonHeight", label: "Replay button height", type: "range", min: 20, max: 56, step: 1, unit: "px", hint: "Height of All cards / Review only replay buttons." },
+      { key: "stackCardFontSize", label: "Stack card font size", type: "range", min: 9, max: 24, step: 1, unit: "px", hint: "Text size inside mini Known/Review cards." },
+      { key: "stackCardLineHeight", label: "Stack card line spacing", type: "range", min: 0.9, max: 2.2, step: 0.01, hint: "Line spacing inside mini Known/Review cards." },
+      { key: "inputHeight", label: "Input height", type: "range", min: 24, max: 72, step: 1, unit: "px", hint: "Height of URL and style textboxes." },
+      { key: "modalPadding", label: "Modal padding", type: "range", min: 0, max: 64, step: 1, unit: "px", hint: "Inside spacing for import, web deck, and style panels." }
+    ]
+  }
+];
+
+const styleCssVariables = {
+  questionFontFamily: "--question-font-family",
+  answerFontFamily: "--answer-font-family",
+  appWidthPercent: "--app-width-percent",
+  appHeightPercent: "--app-height-percent",
+  sidePanelWidthPercent: "--side-panel-width-percent",
+  cardWidthPercent: "--card-width-percent",
+  cardMaxHeightPercent: "--card-max-height-percent",
+  modalWidthPercent: "--modal-width-percent",
+  markdownBoxHeightPercent: "--markdown-box-height-percent",
+  baseFontSize: "--content-font-size",
+  baseLineHeight: "--content-line-height",
+  codeFontSize: "--code-font-size",
+  codeLineHeight: "--code-line-height",
+  questionMinFontSize: "--question-font-min",
+  questionMaxFontSize: "--question-max-font-size",
+  questionLineHeight: "--question-line-height",
+  questionAlign: "--question-align",
+  questionVerticalAlign: "--question-vertical-align",
+  questionFontWeight: "--question-font-weight",
+  answerFontSize: "--answer-font-size",
+  answerLineHeight: "--answer-line-height",
+  answerFontWeight: "--answer-font-weight",
+  appGap: "--app-gap",
+  panelPadding: "--panel-padding",
+  cardPadding: "--card-face-padding",
+  cardContentGap: "--card-face-gap",
+  buttonGap: "--toolbar-gap",
+  stackCardGap: "--brick-gap",
+  cardBorderWidth: "--card-border-width",
+  cardCornerRadius: "--card-radius",
+  panelCornerRadius: "--panel-corner-radius",
+  buttonCornerRadius: "--toolbar-button-radius",
+  inputCornerRadius: "--input-radius",
+  toolbarButtonHeight: "--toolbar-button-height",
+  actionButtonHeight: "--action-button-height",
+  buttonFontSize: "--action-button-font-size",
+  replayButtonHeight: "--replay-button-height",
+  stackCardFontSize: "--brick-font-size",
+  stackCardLineHeight: "--brick-line-height",
+  inputHeight: "--input-height",
+  modalPadding: "--modal-padding"
+};
 
 
 // Supabase Integration
@@ -186,8 +362,7 @@ async function renameWebDeck(deckId, currentTitle = "") {
       updateMeta();
     }
 
-    setStatus("Web deck renamed.");
-    fetchWebDecks();
+    setStatus("Web deck renamed. Click Refresh List to reload web decks.");
   } catch (error) {
     console.error("Failed to rename web deck", error);
     setStatus("Failed to rename web deck.", "error");
@@ -208,8 +383,7 @@ async function deleteWebDeck(deckId) {
       savePersistedDeck();
     }
     
-    setStatus("Deck deleted successfully.");
-    fetchWebDecks();
+    setStatus("Deck deleted successfully. Click Refresh List to reload web decks.");
   } catch (error) {
     console.error("Failed to delete web deck", error);
     setStatus("Failed to delete web deck.", "error");
@@ -389,6 +563,7 @@ const el = {
   openWebDecksFromImportBtn: document.querySelector("#openWebDecksFromImportBtn"),
   sampleBtn: document.querySelector("#sampleBtn"),
   importBtn: document.querySelector("#importBtn"),
+  webDecksBtn: document.querySelector("#webDecksBtn"),
   closeImportBtn: document.querySelector("#closeImportBtn"),
   importPanel: document.querySelector("#importPanel"),
   printRoot: document.querySelector("#printRoot"),
@@ -402,6 +577,14 @@ const el = {
   allCardsList: document.querySelector("#allCardsList"),
   allCardsSummary: document.querySelector("#allCardsSummary"),
   closeAllCardsBtn: document.querySelector("#closeAllCardsBtn"),
+  styleBtn: document.querySelector("#styleBtn"),
+  stylePanel: document.querySelector("#stylePanel"),
+  styleControls: document.querySelector("#styleControls"),
+  closeStyleBtn: document.querySelector("#closeStyleBtn"),
+  syncStyleBtn: document.querySelector("#syncStyleBtn"),
+  applyStyleBtn: document.querySelector("#applyStyleBtn"),
+  resetStyleBtn: document.querySelector("#resetStyleBtn"),
+  styleSyncStatus: document.querySelector("#styleSyncStatus"),
   themeBtn: document.querySelector("#themeBtn"),
   deckTitleWrap: document.querySelector("#deckTitleWrap"),
   deckTitle: document.querySelector("#deckTitle"),
@@ -497,11 +680,321 @@ function configureMermaid(theme) {
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem("swipe-notes-theme", theme);
-  el.themeBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+  el.themeBtn.textContent = theme === "dark" ? "Light" : "Dark";
   el.themeBtn.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
   el.themeBtn.setAttribute("aria-label", el.themeBtn.title);
   configureMermaid(theme);
   if (state.cards[state.current]) showCard();
+}
+
+function resolveFontFamily(value) {
+  return fontFamilyChoices[value] || value;
+}
+
+function styleValue(source, key) {
+  return Object.prototype.hasOwnProperty.call(source, key) ? String(source[key]) : styleDefaults[key];
+}
+
+function migrateLegacyStyleSettings(raw = {}) {
+  const migrated = { ...raw };
+  if (Object.prototype.hasOwnProperty.call(raw, "appMaxWidth")) migrated.appWidthPercent = "98";
+  if (Object.prototype.hasOwnProperty.call(raw, "cardWidth")) migrated.cardWidthPercent = "96";
+  if (Object.prototype.hasOwnProperty.call(raw, "cardMaxHeight")) migrated.cardMaxHeightPercent = "74";
+  if (Object.prototype.hasOwnProperty.call(raw, "modalWidth")) migrated.modalWidthPercent = "60";
+  if (Object.prototype.hasOwnProperty.call(raw, "textareaMinHeight")) migrated.markdownBoxHeightPercent = "30";
+  if (Object.prototype.hasOwnProperty.call(raw, "questionFill")) migrated.questionFillPercent = String(raw.questionFill);
+  if (Object.prototype.hasOwnProperty.call(raw, "questionMax")) migrated.questionMaxFontSize = `${raw.questionMax}px`;
+  if (Object.prototype.hasOwnProperty.call(raw, "answerFont")) migrated.answerFontSize = `${Math.round(Number(raw.answerFont) * 16)}px`;
+  if (Object.prototype.hasOwnProperty.call(raw, "bodyFont")) migrated.baseFontSize = `${Math.round(Number(raw.bodyFont) * 16)}px`;
+  if (Object.prototype.hasOwnProperty.call(raw, "lineHeight")) {
+    migrated.baseLineHeight = String(raw.lineHeight);
+    migrated.answerLineHeight = String(raw.lineHeight);
+    migrated.questionLineHeight = String(raw.lineHeight);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, "cardPadding")) migrated.cardPadding = `${raw.cardPadding}px`;
+  if (Object.prototype.hasOwnProperty.call(raw, "bodyFontSize")) migrated.baseFontSize = raw.bodyFontSize;
+  if (Object.prototype.hasOwnProperty.call(raw, "bodyLineHeight")) migrated.baseLineHeight = raw.bodyLineHeight;
+  if (Object.prototype.hasOwnProperty.call(raw, "questionFontMin")) migrated.questionMinFontSize = raw.questionFontMin;
+  if (Object.prototype.hasOwnProperty.call(raw, "questionFontMax")) migrated.questionMaxFontSize = raw.questionFontMax;
+  if (Object.prototype.hasOwnProperty.call(raw, "cardFacePadding")) migrated.cardPadding = raw.cardFacePadding;
+  if (Object.prototype.hasOwnProperty.call(raw, "cardFaceGap")) migrated.cardContentGap = raw.cardFaceGap;
+  if (Object.prototype.hasOwnProperty.call(raw, "toolbarGap")) migrated.buttonGap = raw.toolbarGap;
+  if (Object.prototype.hasOwnProperty.call(raw, "quizPanelPadding")) migrated.panelPadding = raw.quizPanelPadding;
+  if (Object.prototype.hasOwnProperty.call(raw, "quizPanelRadius")) migrated.panelCornerRadius = raw.quizPanelRadius;
+  if (Object.prototype.hasOwnProperty.call(raw, "cardRadius")) migrated.cardCornerRadius = raw.cardRadius;
+  if (Object.prototype.hasOwnProperty.call(raw, "toolbarButtonRadius")) migrated.buttonCornerRadius = raw.toolbarButtonRadius;
+  if (Object.prototype.hasOwnProperty.call(raw, "inputRadius")) migrated.inputCornerRadius = raw.inputRadius;
+  if (Object.prototype.hasOwnProperty.call(raw, "actionButtonFontSize")) migrated.buttonFontSize = raw.actionButtonFontSize;
+  if (Object.prototype.hasOwnProperty.call(raw, "brickGap")) migrated.stackCardGap = raw.brickGap;
+  if (Object.prototype.hasOwnProperty.call(raw, "brickFontSize")) migrated.stackCardFontSize = raw.brickFontSize;
+  if (Object.prototype.hasOwnProperty.call(raw, "brickLineHeight")) migrated.stackCardLineHeight = raw.brickLineHeight;
+  return migrated;
+}
+
+function normalizeStyleSettings(raw = {}) {
+  const source = migrateLegacyStyleSettings(raw || {});
+  return Object.keys(styleDefaults).reduce((settings, key) => {
+    settings[key] = styleValue(source, key);
+    return settings;
+  }, {});
+}
+
+function setStyleStatus(message) {
+  if (el.styleSyncStatus) el.styleSyncStatus.textContent = message;
+}
+
+function renderStyleControls() {
+  if (!el.styleControls || el.styleControls.dataset.rendered === "true") return;
+  const themeField = el.styleControls.querySelector(".style-field");
+  el.styleControls.innerHTML = "";
+  if (themeField) el.styleControls.appendChild(themeField);
+
+  styleControlGroups.forEach((group, groupIndex) => {
+    const section = document.createElement("details");
+    section.className = "style-section";
+    section.open = groupIndex === 0;
+
+    const heading = document.createElement("summary");
+    heading.textContent = group.title;
+    section.appendChild(heading);
+
+    const body = document.createElement("div");
+    body.className = "style-section-body";
+
+    group.fields.forEach((field) => {
+      const label = document.createElement("label");
+      label.className = "style-field";
+
+      const name = document.createElement("span");
+      name.textContent = field.label;
+      label.appendChild(name);
+
+      let control;
+      if (field.type === "select") {
+        control = document.createElement("select");
+        field.options.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+          control.appendChild(option);
+        });
+        control.dataset.styleKey = field.key;
+        label.appendChild(control);
+      } else if (field.type === "range") {
+        const rangeRow = document.createElement("div");
+        rangeRow.className = "style-range-row";
+
+        const slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = String(field.min);
+        slider.max = String(field.max);
+        slider.step = String(field.step);
+        slider.dataset.styleSlider = field.key;
+        slider.dataset.unit = field.unit || "";
+        rangeRow.appendChild(slider);
+
+        control = document.createElement("input");
+        control.type = "text";
+        control.spellcheck = false;
+        control.placeholder = styleDefaults[field.key] || "";
+        control.dataset.styleKey = field.key;
+        control.dataset.unit = field.unit || "";
+        rangeRow.appendChild(control);
+        label.appendChild(rangeRow);
+      } else {
+        control = document.createElement("input");
+        control.type = "text";
+        control.spellcheck = false;
+        control.placeholder = styleDefaults[field.key] || "";
+        control.dataset.styleKey = field.key;
+        label.appendChild(control);
+      }
+
+      const hint = document.createElement("small");
+      hint.textContent = field.hint;
+      label.appendChild(hint);
+
+      body.appendChild(label);
+    });
+
+    section.appendChild(body);
+    el.styleControls.appendChild(section);
+  });
+
+  el.styleControls.dataset.rendered = "true";
+}
+
+function numericStyleValue(value) {
+  const number = parseFloat(String(value ?? "").replace("%", ""));
+  return Number.isFinite(number) ? number : null;
+}
+
+function sliderTextValue(slider) {
+  return `${slider.value}${slider.dataset.unit || ""}`;
+}
+
+function syncSliderFromText(input) {
+  const slider = el.styleControls?.querySelector(`[data-style-slider="${input.dataset.styleKey}"]`);
+  if (!slider) return;
+  const number = numericStyleValue(input.value);
+  if (number !== null) slider.value = String(number);
+}
+
+function updateStyleControls() {
+  const settings = normalizeStyleSettings(state.styleSettings);
+  renderStyleControls();
+  el.styleControls?.querySelectorAll("[data-style-key]").forEach((input) => {
+    input.value = settings[input.dataset.styleKey] ?? "";
+    syncSliderFromText(input);
+  });
+}
+
+function applyStyleSettings(rawSettings, options = {}) {
+  const settings = normalizeStyleSettings(rawSettings);
+  state.styleSettings = settings;
+
+  const root = document.documentElement;
+  root.style.setProperty("--app-font-family", resolveFontFamily(settings.fontFamily));
+  root.style.setProperty("--question-font-family", resolveFontFamily(settings.questionFontFamily));
+  root.style.setProperty("--answer-font-family", resolveFontFamily(settings.answerFontFamily));
+  Object.entries(styleCssVariables).forEach(([key, cssVariable]) => {
+    if (key === "questionFontFamily" || key === "answerFontFamily") return;
+    root.style.setProperty(cssVariable, settings[key]);
+  });
+  root.style.setProperty("--question-fill", `${settings.questionFillPercent}%`);
+
+  updateStyleControls();
+  scheduleLiveQuestionFit();
+  if (options.force) forceStyleRefresh();
+
+  if (options.save !== false) {
+    localStorage.setItem(styleStorageKey, JSON.stringify(settings));
+  }
+
+  return settings;
+}
+
+function loadLocalStyleSettings() {
+  try {
+    return normalizeStyleSettings(JSON.parse(localStorage.getItem(styleStorageKey) || "{}"));
+  } catch {
+    return normalizeStyleSettings();
+  }
+}
+
+function hasMeaningfulStyleSettings(settings) {
+  return Boolean(settings && typeof settings === "object" && Object.keys(settings).length > 0);
+}
+
+function styleSettingsFromControls() {
+  const settings = {};
+  el.styleControls?.querySelectorAll("[data-style-key]").forEach((input) => {
+    settings[input.dataset.styleKey] = input.value;
+  });
+  return normalizeStyleSettings(settings);
+}
+
+function handleStyleControlChange() {
+  state.styleTouched = true;
+  applyStyleSettings(styleSettingsFromControls());
+  setStyleStatus("Unsynced local style");
+}
+
+function forceStyleRefresh() {
+  [el.questionView, el.answerView].forEach((node) => {
+    if (!node) return;
+    node.style.fontSize = "";
+    node.style.transform = "";
+    node.style.width = "";
+  });
+  scheduleLiveQuestionFit();
+  requestAnimationFrame(() => {
+    scheduleLiveQuestionFit();
+    if (!el.allCardsPanel?.hidden) renderAllCards();
+  });
+}
+
+function applyCurrentStyleSettings(statusMessage = "Style applied") {
+  state.styleTouched = true;
+  applyStyleSettings(styleSettingsFromControls(), { force: true });
+  if (state.previewCard || state.cards[state.current]) {
+    showCard();
+  }
+  setStyleStatus(statusMessage);
+}
+
+function openStylePanel() {
+  el.stylePanel.hidden = false;
+  updateStyleControls();
+}
+
+function closeStylePanel() {
+  el.stylePanel.hidden = true;
+}
+
+async function loadStyleFromWeb() {
+  if (!supabaseClient) {
+    setStyleStatus("Local style");
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("app_style_settings")
+      .select("settings, updated_at")
+      .eq("id", "global")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!hasMeaningfulStyleSettings(data?.settings)) {
+      setStyleStatus("No synced style yet");
+      return;
+    }
+    if (state.styleTouched) {
+      setStyleStatus("Unsynced local style");
+      return;
+    }
+
+    applyStyleSettings(data.settings);
+    setStyleStatus(data.updated_at ? `Loaded ${new Date(data.updated_at).toLocaleString()}` : "Loaded synced style");
+  } catch (error) {
+    console.warn("Could not load synced style", error);
+    setStyleStatus("Style sync table not ready");
+  }
+}
+
+async function syncStyleToWeb() {
+  if (!supabaseClient) {
+    setStyleStatus("Supabase unavailable");
+    setStatus("Supabase is not available for style sync.", "error");
+    return;
+  }
+
+  const syncBtn = el.syncStyleBtn;
+  state.styleTouched = true;
+  const settings = applyStyleSettings(styleSettingsFromControls(), { force: true });
+  syncBtn.disabled = true;
+  setStyleStatus("Syncing style...");
+  try {
+    const { error } = await supabaseClient
+      .from("app_style_settings")
+      .upsert({
+        id: "global",
+        settings,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+    state.styleTouched = false;
+    setStyleStatus("Style synced");
+    setStatus("Style synced to web.");
+  } catch (error) {
+    console.error("Failed to sync style", error);
+    setStyleStatus("Sync failed");
+    setStatus("Failed to sync style. Create the app_style_settings table first.", "error");
+  } finally {
+    syncBtn.disabled = false;
+  }
 }
 
 function setStatus(message, type = "info") {
@@ -543,7 +1036,6 @@ async function editCurrentDeckTitle() {
   try {
     setStatus("Updating web deck title...");
     await updateWebDeckTitle(state.deckId, title);
-    if (!document.getElementById("webDecksPanel")?.hidden) await fetchWebDecks();
     setStatus("Deck title updated in the cloud.");
   } catch (error) {
     console.error("Failed to update web deck title", error);
@@ -1663,11 +2155,11 @@ function contentFits(node) {
 }
 
 function liveQuestionBounds() {
-  const viewport = Math.min(window.innerWidth || 0, window.innerHeight || 0);
-  const compact = viewport > 0 && viewport <= 720;
+  const settings = normalizeStyleSettings(state.styleSettings);
   return {
-    min: compact ? 20 : 24,
-    max: compact ? 86 : 116
+    min: 18,
+    max: parseFloat(settings.questionMaxFontSize) || parseFloat(styleDefaults.questionMaxFontSize),
+    targetRatio: (parseFloat(settings.questionFillPercent) || parseFloat(styleDefaults.questionFillPercent)) / 100
   };
 }
 
@@ -1683,13 +2175,36 @@ function fitLiveQuestion() {
   if (face.clientHeight <= 0 || node.clientWidth <= 0 || node.clientHeight <= 0) return;
 
   const bounds = liveQuestionBounds();
-  let low = bounds.min;
-  let high = Math.min(
-    bounds.max,
-    Math.max(bounds.min, face.clientHeight * 0.42, node.clientWidth * 0.18)
+  const targetHeight = Math.max(node.clientHeight * bounds.targetRatio, bounds.min * 1.25);
+  const availableHeight = Math.max(node.clientHeight, bounds.min);
+  const contentFitsTarget = () => (
+    node.scrollWidth <= node.clientWidth + 1
+    && node.scrollHeight <= targetHeight + 1
+    && node.scrollHeight <= availableHeight + 1
   );
-  let best = low;
+  let low = bounds.min;
+  let high = bounds.max;
+  let best = 0;
 
+  for (let index = 0; index < 12; index += 1) {
+    const mid = (low + high) / 2;
+    node.style.fontSize = `${mid}px`;
+    if (contentFitsTarget()) {
+      best = mid;
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  if (best > 0) {
+    node.style.fontSize = `${Math.max(bounds.min, best - 0.5)}px`;
+    return;
+  }
+
+  low = 12;
+  high = bounds.max;
+  best = low;
   for (let index = 0; index < 12; index += 1) {
     const mid = (low + high) / 2;
     node.style.fontSize = `${mid}px`;
@@ -1700,25 +2215,7 @@ function fitLiveQuestion() {
       high = mid;
     }
   }
-
-  node.style.fontSize = `${Math.max(bounds.min, best - 0.5)}px`;
-
-  if (!contentFits(node)) {
-    low = 12;
-    high = Math.max(12, best);
-    best = low;
-    for (let index = 0; index < 10; index += 1) {
-      const mid = (low + high) / 2;
-      node.style.fontSize = `${mid}px`;
-      if (contentFits(node)) {
-        best = mid;
-        low = mid;
-      } else {
-        high = mid;
-      }
-    }
-    node.style.fontSize = `${Math.max(12, best - 0.5)}px`;
-  }
+  node.style.fontSize = `${Math.max(12, best - 0.5)}px`;
 }
 
 function scheduleLiveQuestionFit() {
@@ -2308,9 +2805,36 @@ el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
 el.importBtn.addEventListener("click", openImportPanel);
+el.webDecksBtn.addEventListener("click", openWebDecksPanel);
 el.openWebDecksFromImportBtn.addEventListener("click", openWebDecksPanel);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
 el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
+el.styleBtn.addEventListener("click", openStylePanel);
+el.closeStyleBtn.addEventListener("click", closeStylePanel);
+el.applyStyleBtn.addEventListener("click", () => applyCurrentStyleSettings());
+el.syncStyleBtn.addEventListener("click", syncStyleToWeb);
+el.resetStyleBtn.addEventListener("click", () => {
+  state.styleTouched = true;
+  applyStyleSettings(styleDefaults, { force: true });
+  setStyleStatus("Reset locally");
+});
+el.styleControls.addEventListener("input", (event) => {
+  if (event.target.matches("[data-style-slider]")) {
+    const input = el.styleControls.querySelector(`[data-style-key="${event.target.dataset.styleSlider}"]`);
+    if (input) input.value = sliderTextValue(event.target);
+    handleStyleControlChange();
+  }
+  if (event.target.matches("[data-style-key]")) {
+    syncSliderFromText(event.target);
+    handleStyleControlChange();
+  }
+});
+el.styleControls.addEventListener("change", (event) => {
+  if (event.target.matches("[data-style-key]")) {
+    syncSliderFromText(event.target);
+    handleStyleControlChange();
+  }
+});
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
 el.allCardsList.addEventListener("click", (event) => {
@@ -2390,6 +2914,7 @@ document.addEventListener("keydown", (event) => {
     el.exportMenu.hidden = true;
     closeDiagramModal();
     closeAllCardsPanel();
+    closeStylePanel();
     closeImportPanel();
   }
   if (!el.allCardsPanel.hidden) return;
@@ -2423,7 +2948,9 @@ window.addEventListener("afterprint", () => {
 
 window.addEventListener("resize", scheduleLiveQuestionFit);
 
+applyStyleSettings(loadLocalStyleSettings(), { save: false });
 setTheme(localStorage.getItem("swipe-notes-theme") || "dark");
 localStorage.removeItem(deckStorageKey);
 setStatus("");
 showCard();
+loadStyleFromWeb();
