@@ -110,33 +110,44 @@
         <div class="import-head">
           <div>
             <h1>Import notes</h1>
-            <p>Use an exported Notion zip, Markdown file, pasted Markdown, or public raw Markdown URL.</p>
+            <p>Load your flashcards via URL, Web Decks, or local files.</p>
           </div>
           <button class="icon-button" id="closeImportBtn" type="button" aria-label="Close import panel">&#215;</button>
         </div>
 
-        <label class="file-pick">
+        <div class="columns is-mobile is-multiline" style="margin-top: 10px;">
+          <!-- URL Import Method -->
+          <div class="column is-half-tablet is-full-mobile">
+            <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem;">
+              <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">Import via URL</h3>
+              <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Fetch raw markdown from a public URL.</p>
+              <div class="url-row" style="display: flex; gap: 8px;">
+                <input id="urlInput" type="url" placeholder="https://..." autocomplete="off">
+                <button id="fetchBtn" type="button" class="button" style="background: var(--accent); color: #05110e; border: none; height: var(--input-height);">Fetch</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Web Decks Import Method -->
+          <div class="column is-half-tablet is-full-mobile">
+            <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem; text-align: center;">
+              <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">Web Decks</h3>
+              <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Load previously synced decks from the web.</p>
+              <button id="openWebDecksFromImportBtn" type="button" class="button is-fullwidth" style="background: var(--accent); color: #05110e; border: none; height: var(--input-height); font-weight: bold; width: 100%;">Open Web Decks</button>
+            </div>
+          </div>
+        </div>
+
+        <label class="file-pick" style="margin-top: 1rem;">
           <input id="fileInput" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
           <span>Open Markdown, JSON, or zip</span>
         </label>
 
-        <label class="field">
-          <span>URL</span>
-          <div class="url-row">
-            <input id="urlInput" type="url" placeholder="https://..." autocomplete="off">
-            <button id="fetchBtn" type="button">Fetch</button>
-          </div>
-        </label>
-
-        <label class="field">
-          <span>Markdown</span>
-          <textarea id="sourceInput" spellcheck="false" placeholder="### Question?&#10;&#10;Answer..."></textarea>
-        </label>
-
-        <div class="import-actions">
+        <!-- Hidden legacy fields for JS compatibility -->
+        <div hidden>
+          <textarea id="sourceInput" spellcheck="false"></textarea>
           <button id="parseBtn" type="button">Import</button>
-          <button id="openWebDecksFromImportBtn" type="button">Web Decks</button>
-          <button id="sampleBtn" type="button" hidden>Load sample</button>
+          <button id="sampleBtn" type="button">Load sample</button>
         </div>
 
         <p class="status" id="statusText" role="status" aria-live="polite"></p>
