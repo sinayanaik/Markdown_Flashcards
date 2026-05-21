@@ -2621,10 +2621,6 @@ function isCardActionTarget(target) {
   return Boolean(closestElement(target, "a, button, input, textarea"));
 }
 
-function isSelectableCardText(target) {
-  return Boolean(closestElement(target, ".rendered"));
-}
-
 function isHorizontallyScrollable(node) {
   if (!(node instanceof Element)) return false;
   const styles = window.getComputedStyle(node);
@@ -2636,7 +2632,7 @@ function horizontalScrollRegion(target) {
   let node = target instanceof Element ? target : target?.parentElement;
 
   while (node && node !== el.card) {
-    if (node.matches?.(".rendered pre, .math-display, .diagram-shell, .rendered table") && isHorizontallyScrollable(node)) {
+    if (isHorizontallyScrollable(node)) {
       return node;
     }
     node = node.parentElement;
@@ -2697,6 +2693,14 @@ function resetCardDrag() {
 }
 
 function updateSwipe(clientX, clientY, event) {
+  if (event?.pointerType === "mouse" && hasCardTextSelection()) {
+    if (state.dragCaptured && typeof state.dragPointerId === "number") {
+      el.card.releasePointerCapture?.(state.dragPointerId);
+    }
+    resetCardDrag();
+    return;
+  }
+
   const time = performance.now();
   const velocityX = dragVelocity(clientX, state.dragLastX, time);
   state.dragCurrentX = clientX;
@@ -2727,13 +2731,19 @@ function updateSwipe(clientX, clientY, event) {
 
     state.dragging = true;
     if (event?.pointerId !== undefined && !state.dragCaptured) {
-      el.card.setPointerCapture?.(event.pointerId);
-      state.dragCaptured = true;
+      if (event.pointerType !== "mouse" || !hasCardTextSelection()) {
+        el.card.setPointerCapture?.(event.pointerId);
+        state.dragCaptured = true;
+      }
     }
     el.card.classList.add("is-dragging");
   }
 
-  if (event?.cancelable && typeof event.preventDefault === "function") event.preventDefault();
+  if (event?.cancelable && typeof event.preventDefault === "function") {
+    if (event.pointerType !== "mouse" || state.dragCaptured) {
+      event.preventDefault();
+    }
+  }
 
   const direction = dx > 0 ? 1 : -1;
   const resisted = direction * Math.min(absX * swipeConfig.resistance, swipeConfig.maxPreviewOffset);
@@ -2786,7 +2796,6 @@ function finishSwipe() {
 function handlePointerDown(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   if (isHorizontalScrollTarget(event.target)) return;
-  if (event.pointerType === "mouse" && isSelectableCardText(event.target)) return;
   beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
 }
 
