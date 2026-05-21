@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+.style-grid {
+  display: grid;
+  gap: 14px;
+  height: 400px; /* simulated container height */
+  overflow-y: auto;
+  border: 1px solid black;
+}
+.style-section {
+  border: 1px solid red;
+  overflow: hidden;
+}
+.style-section-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+.item { height: 40px; background: #eee; }
+</style>
+</head>
+<body>
+<div class="style-grid">
+  <details class="style-section" open>
+    <summary>One</summary>
+    <div class="style-section-body">
+      <div class="item">Item 1</div>
+      <div class="item">Item 2</div>
+      <div class="item">Item 3</div>
+    </div>
+  </details>
+  <details class="style-section">
+    <summary>Two</summary>
+    <div class="style-section-body">
+      <div class="item">Item 1</div>
+    </div>
+  </details>
+  <details class="style-section">
+    <summary>Three</summary>
+    <div class="style-section-body">
+      <div class="item">Item 1</div>
+    </div>
+  </details>
+</div>
+</body>
+</html>

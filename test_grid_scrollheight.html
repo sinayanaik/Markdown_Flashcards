@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .card-question {
+    display: flex;
+    flex-direction: column;
+    height: 400px;
+    width: 400px;
+    border: 1px solid black;
+  }
+  .rendered {
+    display: grid;
+    flex: 1 1 auto;
+    align-content: center;
+    background: #f0f0f0;
+  }
+</style>
+</head>
+<body>
+  <div class="card-question">
+    <div class="rendered" id="test">
+      <p>Short text</p>
+    </div>
+  </div>
+  <script>
+    const el = document.getElementById('test');
+    console.log("clientHeight:", el.clientHeight);
+    console.log("scrollHeight:", el.scrollHeight);
+  </script>
+</body>
+</html>

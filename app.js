@@ -92,9 +92,11 @@ const styleDefaults = {
   questionAlign: "center",
   questionVerticalAlign: "center",
   questionFontWeight: "700",
+  questionPadding: "2px",
   answerFontSize: "23px",
   answerLineHeight: "1.58",
   answerFontWeight: "400",
+  answerPadding: "0px",
   appGap: "10px",
   panelPadding: "10px",
   cardPadding: "24px",
@@ -164,7 +166,8 @@ const styleControlGroups = [
       { key: "questionLineHeight", label: "Question line spacing", type: "range", min: 0.8, max: 2.4, step: 0.01, hint: "Line spacing for question text." },
       { key: "questionAlign", label: "Question horizontal align", type: "select", options: ["left", "center", "right", "justify"], hint: "Question text alignment." },
       { key: "questionVerticalAlign", label: "Question vertical align", type: "select", options: ["start", "center", "end"], hint: "Question vertical position." },
-      { key: "questionFontWeight", label: "Question weight", type: "select", options: ["300", "400", "500", "600", "700", "800", "900"], hint: "Question text thickness." }
+      { key: "questionFontWeight", label: "Question weight", type: "select", options: ["300", "400", "500", "600", "700", "800", "900"], hint: "Question text thickness." },
+      { key: "questionPadding", label: "Question padding", type: "range", min: 0, max: 120, step: 1, unit: "px", hint: "Internal padding for the question text." }
     ]
   },
   {
@@ -174,6 +177,7 @@ const styleControlGroups = [
       { key: "answerFontSize", label: "Answer font size", type: "range", min: 10, max: 64, step: 1, unit: "px", hint: "Main answer text size." },
       { key: "answerLineHeight", label: "Answer line spacing", type: "range", min: 0.9, max: 2.6, step: 0.01, hint: "Reading spacing on the answer side." },
       { key: "answerFontWeight", label: "Answer weight", type: "select", options: ["300", "400", "500", "600", "700", "800", "900"], hint: "Answer text thickness." },
+      { key: "answerPadding", label: "Answer padding", type: "range", min: 0, max: 120, step: 1, unit: "px", hint: "Internal padding for the answer text." },
       { key: "cardBorderWidth", label: "Card border width", type: "range", min: 0, max: 8, step: 1, unit: "px", hint: "Border thickness around the flashcard." }
     ]
   },
@@ -212,9 +216,11 @@ const styleCssVariables = {
   questionAlign: "--question-align",
   questionVerticalAlign: "--question-vertical-align",
   questionFontWeight: "--question-font-weight",
+  questionPadding: "--question-padding",
   answerFontSize: "--answer-font-size",
   answerLineHeight: "--answer-line-height",
   answerFontWeight: "--answer-font-weight",
+  answerPadding: "--answer-padding",
   appGap: "--app-gap",
   panelPadding: "--panel-padding",
   cardPadding: "--card-face-padding",
@@ -755,7 +761,15 @@ function renderStyleControls() {
   styleControlGroups.forEach((group, groupIndex) => {
     const section = document.createElement("details");
     section.className = "style-section";
+    section.name = "style-accordion";
     section.open = groupIndex === 0;
+    section.addEventListener("toggle", () => {
+      if (section.open) {
+        el.styleControls.querySelectorAll("details").forEach((node) => {
+          if (node !== section) node.open = false;
+        });
+      }
+    });
 
     const heading = document.createElement("summary");
     heading.textContent = group.title;
@@ -2204,13 +2218,18 @@ function fitLiveQuestion() {
   if (face.clientHeight <= 0 || node.clientWidth <= 0 || node.clientHeight <= 0) return;
 
   const bounds = liveQuestionBounds();
-  const targetHeight = Math.max(node.clientHeight * bounds.targetRatio, bounds.min * 1.25);
   const availableHeight = Math.max(node.clientHeight, bounds.min);
+  const targetHeight = Math.max(availableHeight * bounds.targetRatio, bounds.min * 1.25);
+  
+  const originalFlex = node.style.flex;
+  node.style.flex = "0 0 auto";
+
   const contentFitsTarget = () => (
     node.scrollWidth <= node.clientWidth + 1
     && node.scrollHeight <= targetHeight + 1
     && node.scrollHeight <= availableHeight + 1
   );
+
   let low = bounds.min;
   let high = bounds.max;
   let best = 0;
@@ -2228,23 +2247,32 @@ function fitLiveQuestion() {
 
   if (best > 0) {
     node.style.fontSize = `${Math.max(bounds.min, best - 0.5)}px`;
+    node.style.flex = originalFlex;
     return;
   }
 
   low = 12;
   high = bounds.max;
   best = low;
+  
+  const contentFitsAvailable = () => (
+    node.scrollWidth <= node.clientWidth + 1
+    && node.scrollHeight <= availableHeight + 1
+  );
+
   for (let index = 0; index < 12; index += 1) {
     const mid = (low + high) / 2;
     node.style.fontSize = `${mid}px`;
-    if (contentFits(node)) {
+    if (contentFitsAvailable()) {
       best = mid;
       low = mid;
     } else {
       high = mid;
     }
   }
+  
   node.style.fontSize = `${Math.max(12, best - 0.5)}px`;
+  node.style.flex = originalFlex;
 }
 
 function scheduleLiveQuestionFit() {

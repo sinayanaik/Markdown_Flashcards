@@ -33,6 +33,8 @@
   --question-align: center;
   --question-vertical-align: center;
   --question-font-weight: 700;
+  --question-padding: 2px;
+  --answer-padding: 0px;
   --card-face-padding: clamp(18px, 3vw, 42px);
   --card-face-gap: 16px;
   --card-width-percent: 96;
@@ -133,13 +135,11 @@ body {
   font-family: var(--app-font-family);
 }
 
-html.style-panel-scroll-lock,
 html.modal-scroll-lock {
   overflow: hidden;
   overscroll-behavior: none;
 }
 
-body.style-panel-scroll-lock,
 body.modal-scroll-lock {
   position: fixed;
   top: 0;
@@ -701,6 +701,7 @@ button:disabled {
   font-size: clamp(var(--question-font-min), var(--question-font-preferred), var(--question-max-font-size));
   line-height: var(--question-line-height);
   font-weight: var(--question-font-weight);
+  padding: var(--question-padding);
 }
 
 .card-question .rendered {
@@ -723,6 +724,7 @@ button:disabled {
   font-size: var(--answer-font-size);
   line-height: var(--answer-line-height);
   font-weight: var(--answer-font-weight);
+  padding: var(--answer-padding);
 }
 
 .card-question .rendered :is(h1, h2, h3, p) {
@@ -986,6 +988,7 @@ button:disabled {
   grid-template-rows: auto 1fr;
   background: color-mix(in srgb, var(--bg) 94%, black);
   padding: 14px;
+  touch-action: none;
 }
 
 .diagram-modal-head {
@@ -1003,6 +1006,8 @@ button:disabled {
 .diagram-modal-body {
   overflow: auto;
   padding: 18px;
+  touch-action: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .diagram-modal-body svg {
@@ -1065,6 +1070,7 @@ button:disabled {
   justify-content: center;
   background: rgba(0, 0, 0, 0.5);
   padding: 18px;
+  touch-action: none;
 }
 
 .web-decks-shell {
@@ -1080,6 +1086,7 @@ button:disabled {
   color: var(--text);
   padding: var(--modal-padding);
   box-shadow: var(--shadow);
+  touch-action: auto;
 }
 
 .web-decks-head {
@@ -1107,6 +1114,8 @@ button:disabled {
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .web-decks-table {
@@ -1158,7 +1167,6 @@ button:disabled {
   justify-content: center;
   background: rgba(0, 0, 0, 0.5);
   overflow: hidden;
-  overscroll-behavior: contain;
   padding: 18px;
   touch-action: none;
 }
@@ -1166,8 +1174,8 @@ button:disabled {
 .style-shell {
   display: grid;
   width: min(920px, 100%);
-  max-height: min(86vh, 720px);
-  max-height: min(86dvh, 720px);
+  max-height: min(90vh, 720px);
+  max-height: min(90dvh, 720px);
   grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid var(--line);
   border-radius: var(--modal-radius);
@@ -1175,7 +1183,7 @@ button:disabled {
   color: var(--text);
   box-shadow: var(--shadow);
   overflow: hidden;
-  touch-action: none;
+  touch-action: auto;
 }
 
 .style-head {
@@ -1201,7 +1209,8 @@ button:disabled {
 }
 
 .style-grid {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   min-height: 0;
   overflow-y: auto;
@@ -1257,6 +1266,7 @@ button:disabled {
 }
 
 .style-section {
+  flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel-2) 50%, transparent);
@@ -1289,7 +1299,7 @@ button:disabled {
 
 .style-section-body {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
   border-top: 1px solid var(--line);
   padding: 12px;
@@ -1354,7 +1364,6 @@ button:disabled {
   display: none;
   align-items: center;
   justify-content: center;
-  overflow: auto;
   background: rgba(0, 0, 0, 0.46);
   padding: 18px;
   touch-action: none;
@@ -1375,7 +1384,7 @@ button:disabled {
   background: var(--panel);
   padding: var(--modal-padding);
   box-shadow: var(--shadow);
-  touch-action: pan-y;
+  touch-action: auto;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1535,7 +1544,7 @@ textarea {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   box-shadow: var(--shadow);
   overflow: hidden;
-  touch-action: none;
+  touch-action: auto;
 }
 
 .all-cards-head {
@@ -1986,12 +1995,12 @@ textarea {
   }
 
   .web-decks-panel {
-    align-items: flex-start;
+    align-items: center;
     padding: 10px;
   }
 
   .style-panel {
-    align-items: flex-start;
+    align-items: center;
     padding: 10px;
   }
 
