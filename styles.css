@@ -1428,6 +1428,63 @@ button:disabled {
   line-height: 1.35;
 }
 
+.style-profile-field {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel-2) 62%, transparent);
+  padding: 12px;
+}
+
+.style-profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.style-profile-head strong {
+  color: var(--accent);
+}
+
+.style-profile-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.style-profile-toggle button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--toolbar-button-radius);
+  background: var(--card);
+  color: var(--text);
+  font-size: var(--button-font-size);
+  font-weight: 900;
+}
+
+.style-profile-toggle button.is-device:not(.is-active) {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+}
+
+.style-profile-toggle button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  color: var(--accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+}
+
+.style-profile-field small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .style-field strong {
   color: var(--text);
   font-weight: 900;

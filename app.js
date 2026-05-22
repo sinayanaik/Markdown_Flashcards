@@ -22,6 +22,10 @@ const sampleMarkdown = `> What is the derivative of $x^2$?
 >
 > Each blockquote group becomes one flashcard. The first non-empty line is the question, and the remaining lines become the answer.`;
 
+const styleProfiles = ["desktop", "mobile"];
+const styleMobileQuery = "(max-width: 720px)";
+const styleMobileMedia = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(styleMobileQuery) : null;
+
 const state = {
   deckId: null,
   cards: [],
@@ -55,6 +59,13 @@ const state = {
   suppressClickUntil: 0,
   transitionToken: 0,
   styleSettings: {},
+  styleProfiles: {
+    desktop: {},
+    mobile: {}
+  },
+  activeStyleProfile: "desktop",
+  styleEditProfile: "desktop",
+  styleEditProfileFollowsDevice: true,
   styleTouched: false,
   stylePanelScrollY: 0,
   stylePanelTouchY: 0,
@@ -960,6 +971,65 @@ function normalizeStyleSettings(raw = {}) {
   }, {});
 }
 
+function detectStyleProfile() {
+  return styleMobileMedia?.matches ? "mobile" : "desktop";
+}
+
+function styleProfileLabel(profile) {
+  return profile === "mobile" ? "Mobile" : "Desktop";
+}
+
+function normalizeStyleProfiles(raw = {}) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const profileSource = source.profiles && typeof source.profiles === "object" ? source.profiles : source;
+  const hasProfiles = Boolean(profileSource.desktop || profileSource.mobile);
+
+  if (!hasProfiles) {
+    const legacy = normalizeStyleSettings(source);
+    return {
+      desktop: { ...legacy },
+      mobile: { ...legacy }
+    };
+  }
+
+  const desktopSource = profileSource.desktop || profileSource.mobile || styleDefaults;
+  const mobileSource = profileSource.mobile || profileSource.desktop || styleDefaults;
+  return {
+    desktop: normalizeStyleSettings(desktopSource),
+    mobile: normalizeStyleSettings(mobileSource)
+  };
+}
+
+function setStyleProfiles(raw = {}) {
+  state.styleProfiles = normalizeStyleProfiles(raw);
+  return state.styleProfiles;
+}
+
+function getStyleProfileSettings(profile = state.styleEditProfile) {
+  const normalizedProfile = styleProfiles.includes(profile) ? profile : detectStyleProfile();
+  const settings = state.styleProfiles?.[normalizedProfile] || styleDefaults;
+  return normalizeStyleSettings(settings);
+}
+
+function setStyleProfileSettings(profile, rawSettings) {
+  const normalizedProfile = styleProfiles.includes(profile) ? profile : detectStyleProfile();
+  const settings = normalizeStyleSettings(rawSettings);
+  state.styleProfiles = {
+    ...state.styleProfiles,
+    [normalizedProfile]: settings
+  };
+  if (normalizedProfile === state.activeStyleProfile) state.styleSettings = settings;
+  return settings;
+}
+
+function styleProfilesPayload() {
+  return {
+    version: 2,
+    desktop: getStyleProfileSettings("desktop"),
+    mobile: getStyleProfileSettings("mobile")
+  };
+}
+
 function setStyleStatus(message) {
   if (el.styleSyncStatus) el.styleSyncStatus.textContent = message;
 }
@@ -969,6 +1039,35 @@ function renderStyleControls() {
   const themeField = el.styleControls.querySelector(".style-field");
   el.styleControls.innerHTML = "";
   if (themeField) el.styleControls.appendChild(themeField);
+
+  const profileField = document.createElement("section");
+  profileField.className = "style-profile-field";
+  profileField.setAttribute("aria-label", "Style profile");
+
+  const profileHeader = document.createElement("div");
+  profileHeader.className = "style-profile-head";
+  const profileTitle = document.createElement("span");
+  profileTitle.textContent = "Editing profile";
+  const profileBadge = document.createElement("strong");
+  profileBadge.id = "styleProfileBadge";
+  profileHeader.append(profileTitle, profileBadge);
+  profileField.appendChild(profileHeader);
+
+  const profileButtons = document.createElement("div");
+  profileButtons.className = "style-profile-toggle";
+  styleProfiles.forEach((profile) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.styleProfile = profile;
+    button.textContent = styleProfileLabel(profile);
+    profileButtons.appendChild(button);
+  });
+  profileField.appendChild(profileButtons);
+
+  const profileHint = document.createElement("small");
+  profileHint.id = "styleProfileHint";
+  profileField.appendChild(profileHint);
+  el.styleControls.appendChild(profileField);
 
   styleControlGroups.forEach((group, groupIndex) => {
     const section = document.createElement("details");
@@ -1069,9 +1168,34 @@ function syncSliderFromText(input) {
   if (number !== null) slider.value = String(number);
 }
 
+function updateStyleProfileUi() {
+  if (!el.styleControls) return;
+  const activeProfile = detectStyleProfile();
+  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : activeProfile;
+  const badge = el.styleControls.querySelector("#styleProfileBadge");
+  const hint = el.styleControls.querySelector("#styleProfileHint");
+  if (badge) badge.textContent = styleProfileLabel(editProfile);
+  if (hint) {
+    const activeLabel = styleProfileLabel(activeProfile);
+    const editLabel = styleProfileLabel(editProfile);
+    hint.textContent = editProfile === activeProfile
+      ? `${activeLabel} values are active on this screen.`
+      : `Editing ${editLabel} values. This screen is currently using ${activeLabel}.`;
+  }
+  el.styleControls.querySelectorAll("[data-style-profile]").forEach((button) => {
+    const isEditProfile = button.dataset.styleProfile === editProfile;
+    const isActiveProfile = button.dataset.styleProfile === activeProfile;
+    button.classList.toggle("is-active", isEditProfile);
+    button.classList.toggle("is-device", isActiveProfile);
+    button.setAttribute("aria-pressed", String(isEditProfile));
+  });
+}
+
 function updateStyleControls() {
-  const settings = normalizeStyleSettings(state.styleSettings);
   renderStyleControls();
+  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
+  const settings = getStyleProfileSettings(editProfile);
+  updateStyleProfileUi();
   el.styleControls?.querySelectorAll("[data-style-key]").forEach((input) => {
     input.value = settings[input.dataset.styleKey] ?? "";
     syncSliderFromText(input);
@@ -1111,11 +1235,22 @@ function applyStyleSettings(rawSettings, options = {}) {
   root.style.setProperty("--modal-width", `${modalWidthPercent}vw`);
   root.style.setProperty("--textarea-min-height", `${markdownBoxHeightPercent}vh`);
 
-  updateStyleControls();
+  if (!el.stylePanel || el.stylePanel.hidden || state.styleEditProfile === state.activeStyleProfile) {
+    updateStyleControls();
+  } else {
+    updateStyleProfileUi();
+  }
   scheduleLiveQuestionFit();
   if (options.force) forceStyleRefresh();
 
   return settings;
+}
+
+function applyActiveStyleSettings(options = {}) {
+  const activeProfile = detectStyleProfile();
+  state.activeStyleProfile = activeProfile;
+  document.documentElement.dataset.styleProfile = activeProfile;
+  return applyStyleSettings(getStyleProfileSettings(activeProfile), options);
 }
 
 function loadLocalStyleSettings() {
@@ -1144,8 +1279,12 @@ function styleSettingsFromControls() {
 
 function handleStyleControlChange() {
   state.styleTouched = true;
-  applyStyleSettings(styleSettingsFromControls());
-  setStyleStatus("Unsynced local style");
+  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
+  const settings = setStyleProfileSettings(editProfile, styleSettingsFromControls());
+  if (editProfile === detectStyleProfile()) applyActiveStyleSettings();
+  else updateStyleProfileUi();
+  setStyleStatus(`Unsynced ${styleProfileLabel(editProfile).toLowerCase()} style`);
+  return settings;
 }
 
 function forceStyleRefresh() {
@@ -1165,11 +1304,17 @@ function forceStyleRefresh() {
 
 function applyCurrentStyleSettings(statusMessage = "Style applied") {
   state.styleTouched = true;
-  applyStyleSettings(styleSettingsFromControls(), { force: true });
+  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
+  setStyleProfileSettings(editProfile, styleSettingsFromControls());
+  if (editProfile === detectStyleProfile()) {
+    applyActiveStyleSettings({ force: true });
+  } else {
+    updateStyleProfileUi();
+  }
   if (state.previewCard || state.cards[state.current]) {
     showCard();
   }
-  setStyleStatus(statusMessage);
+  setStyleStatus(`${styleProfileLabel(editProfile)} ${statusMessage.toLowerCase()}`);
 }
 
 function lockPageScroll() {
@@ -1191,6 +1336,8 @@ function unlockPageScroll() {
 
 function openStylePanel() {
   lockPageScroll();
+  state.styleEditProfile = detectStyleProfile();
+  state.styleEditProfileFollowsDevice = true;
   el.stylePanel.hidden = false;
   updateStyleControls();
 }
@@ -1198,6 +1345,24 @@ function openStylePanel() {
 function closeStylePanel() {
   el.stylePanel.hidden = true;
   unlockPageScroll();
+}
+
+function switchStyleEditProfile(profile, options = {}) {
+  if (!styleProfiles.includes(profile)) return;
+  state.styleEditProfile = profile;
+  state.styleEditProfileFollowsDevice = options.followDevice ?? false;
+  updateStyleControls();
+  setStyleStatus(`Editing ${styleProfileLabel(profile).toLowerCase()} style`);
+}
+
+function handleStyleEnvironmentChange() {
+  const previousProfile = state.activeStyleProfile;
+  applyActiveStyleSettings({ force: true });
+  if (!el.stylePanel?.hidden && (state.styleEditProfileFollowsDevice || state.styleEditProfile === previousProfile)) {
+    switchStyleEditProfile(detectStyleProfile(), { followDevice: true });
+  } else {
+    updateStyleProfileUi();
+  }
 }
 
 async function loadStyleFromWeb() {
@@ -1224,8 +1389,10 @@ async function loadStyleFromWeb() {
       return;
     }
 
-    applyStyleSettings(data.settings, { force: true });
+    setStyleProfiles(data.settings);
+    applyActiveStyleSettings({ force: true });
     state.styleTouched = false;
+    updateStyleControls();
     setStyleStatus(data.updated_at ? `Loaded ${new Date(data.updated_at).toLocaleString()}` : "Loaded synced style");
   } catch (error) {
     console.warn("Could not load synced style", error);
@@ -1242,7 +1409,10 @@ async function syncStyleToWeb() {
 
   const syncBtn = el.syncStyleBtn;
   state.styleTouched = true;
-  const settings = applyStyleSettings(styleSettingsFromControls(), { force: true });
+  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
+  setStyleProfileSettings(editProfile, styleSettingsFromControls());
+  if (editProfile === detectStyleProfile()) applyActiveStyleSettings({ force: true });
+  const settings = styleProfilesPayload();
   syncBtn.disabled = true;
   setStyleStatus("Syncing style...");
   try {
@@ -3566,8 +3736,16 @@ el.applyStyleBtn.addEventListener("click", () => applyCurrentStyleSettings());
 el.syncStyleBtn.addEventListener("click", syncStyleToWeb);
 el.resetStyleBtn.addEventListener("click", () => {
   state.styleTouched = true;
-  applyStyleSettings(styleDefaults, { force: true });
-  setStyleStatus("Reset locally");
+  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
+  setStyleProfileSettings(editProfile, styleDefaults);
+  if (editProfile === detectStyleProfile()) applyActiveStyleSettings({ force: true });
+  else updateStyleControls();
+  setStyleStatus(`Reset ${styleProfileLabel(editProfile).toLowerCase()} locally`);
+});
+el.styleControls.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-style-profile]");
+  if (!button) return;
+  switchStyleEditProfile(button.dataset.styleProfile);
 });
 el.styleControls.addEventListener("input", (event) => {
   if (event.target.matches("[data-style-slider]")) {
@@ -3761,9 +3939,18 @@ window.addEventListener("afterprint", () => {
 });
 
 window.addEventListener("resize", scheduleLiveQuestionFit);
+if (styleMobileMedia?.addEventListener) {
+  styleMobileMedia.addEventListener("change", handleStyleEnvironmentChange);
+} else if (styleMobileMedia?.addListener) {
+  styleMobileMedia.addListener(handleStyleEnvironmentChange);
+}
 
 clearBrowserPersistence();
-applyStyleSettings(styleDefaults, { save: false });
+setStyleProfiles({
+  desktop: styleDefaults,
+  mobile: styleDefaults
+});
+applyActiveStyleSettings({ force: true });
 setTheme("dark");
 setStatus("");
 showCard();
