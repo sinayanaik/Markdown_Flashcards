@@ -57,7 +57,12 @@ const state = {
   styleSettings: {},
   styleTouched: false,
   stylePanelScrollY: 0,
-  stylePanelTouchY: 0
+  stylePanelTouchY: 0,
+  diagramPanPointerId: null,
+  diagramPanStartX: 0,
+  diagramPanStartY: 0,
+  diagramPanScrollLeft: 0,
+  diagramPanScrollTop: 0
 };
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
@@ -1929,11 +1934,18 @@ function openDiagramModal(node) {
   lockPageScroll();
   el.diagramModalBody.innerHTML = node.innerHTML;
   el.diagramModal.hidden = false;
+  requestAnimationFrame(() => {
+    const body = el.diagramModalBody;
+    body.scrollLeft = Math.max(0, (body.scrollWidth - body.clientWidth) / 2);
+    body.scrollTop = Math.max(0, (body.scrollHeight - body.clientHeight) / 2);
+  });
 }
 
 function closeDiagramModal() {
   el.diagramModal.hidden = true;
   el.diagramModalBody.innerHTML = "";
+  el.diagramModalBody.classList.remove("is-panning");
+  state.diagramPanPointerId = null;
   unlockPageScroll();
 }
 
@@ -3386,7 +3398,7 @@ function preventCancelableScroll(event) {
 }
 
 function styleScrollRegion(target) {
-  return closestElement(target, ".style-grid, .all-cards-list, .import-card, .web-decks-shell, .diagram-modal-body");
+  return closestElement(target, ".style-grid, .all-cards-list, .import-card, .web-decks-table-wrap, .diagram-modal-body");
 }
 
 function canScrollStyleRegion(region) {
@@ -3431,6 +3443,36 @@ function handleStylePanelTouchMove(event) {
 
 function handleStylePanelWheel(event) {
   containStylePanelScroll(event, event.deltaY);
+}
+
+function handleDiagramPanStart(event) {
+  if (event.button !== 0 || event.target.closest("button, a")) return;
+  const body = el.diagramModalBody;
+  if (!body || body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight) return;
+
+  state.diagramPanPointerId = event.pointerId;
+  state.diagramPanStartX = event.clientX;
+  state.diagramPanStartY = event.clientY;
+  state.diagramPanScrollLeft = body.scrollLeft;
+  state.diagramPanScrollTop = body.scrollTop;
+  body.classList.add("is-panning");
+  body.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+}
+
+function handleDiagramPanMove(event) {
+  if (state.diagramPanPointerId !== event.pointerId) return;
+  const body = el.diagramModalBody;
+  body.scrollLeft = state.diagramPanScrollLeft - (event.clientX - state.diagramPanStartX);
+  body.scrollTop = state.diagramPanScrollTop - (event.clientY - state.diagramPanStartY);
+  event.preventDefault();
+}
+
+function stopDiagramPan(event) {
+  if (state.diagramPanPointerId !== event.pointerId) return;
+  el.diagramModalBody.releasePointerCapture?.(event.pointerId);
+  el.diagramModalBody.classList.remove("is-panning");
+  state.diagramPanPointerId = null;
 }
 
 function setDeckMenuOpen(open) {
@@ -3552,6 +3594,10 @@ document.getElementById("webDecksPanel").addEventListener("wheel", handleStylePa
 el.diagramModal.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
 el.diagramModal.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
 el.diagramModal.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+el.diagramModalBody.addEventListener("pointerdown", handleDiagramPanStart);
+el.diagramModalBody.addEventListener("pointermove", handleDiagramPanMove);
+el.diagramModalBody.addEventListener("pointerup", stopDiagramPan);
+el.diagramModalBody.addEventListener("pointercancel", stopDiagramPan);
 
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);

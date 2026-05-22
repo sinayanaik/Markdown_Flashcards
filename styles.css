@@ -1104,6 +1104,12 @@ button:disabled {
   min-width: max-content;
 }
 
+.diagram-shell .mermaid svg {
+  width: max(100%, 760px) !important;
+  max-width: none !important;
+  height: auto !important;
+}
+
 .diagram-zoom {
   position: sticky;
   right: 0;
@@ -1143,15 +1149,26 @@ button:disabled {
 }
 
 .diagram-modal-body {
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   padding: 18px;
+  cursor: grab;
+  overscroll-behavior: contain;
   touch-action: auto;
   -webkit-overflow-scrolling: touch;
 }
 
+.diagram-modal-body.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
 .diagram-modal-body svg {
-  width: max(100%, 1400px);
-  height: auto;
+  display: block;
+  width: max(1600px, 140vw) !important;
+  max-width: none !important;
+  height: auto !important;
   transform-origin: top left;
 }
 
@@ -1242,12 +1259,15 @@ button:disabled {
 }
 
 .web-decks-shell {
-  display: flex;
+  display: grid;
   width: min(var(--modal-width), 100%);
+  height: min(82vh, 760px);
+  height: min(82dvh, 760px);
   max-height: min(82vh, 760px);
   max-height: min(82dvh, 760px);
   min-width: 0;
-  flex-direction: column;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid var(--line);
   border-radius: var(--modal-radius);
   background: var(--panel);
@@ -1280,9 +1300,9 @@ button:disabled {
 
 .web-decks-table-wrap {
   min-height: 0;
-  flex: 1 1 auto;
   overflow: auto;
-  touch-action: pan-y;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -2483,7 +2503,10 @@ textarea {
 
   .web-decks-shell {
     width: 100%;
+    height: calc(100vh - 20px);
+    height: calc(100dvh - 20px);
     max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
     padding: 14px;
   }
 
