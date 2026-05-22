@@ -1,7 +1,11 @@
 :root {
   color-scheme: light;
-  --app-width-percent: 98;
+  --app-width-percent: 100;
   --app-height-percent: 100;
+  --app-width: 100vw;
+  --app-height: 100vh;
+  --app-mobile-width: 100vw;
+  --app-mobile-height: 100dvh;
   --app-pad: clamp(6px, 1.4vw, 14px);
   --app-gap: 10px;
   --bg: #f4f2ec;
@@ -37,7 +41,11 @@
   --card-face-padding: clamp(18px, 3vw, 42px);
   --card-face-gap: 16px;
   --card-width-percent: 96;
+  --card-width: 96%;
+  --card-mobile-width: 96%;
   --card-max-height-percent: 74;
+  --card-max-height: 74vh;
+  --card-mobile-max-height: 74dvh;
   --card-border-width: 1px;
   --card-radius: 14px;
   --card-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
@@ -51,6 +59,7 @@
   --quiz-panel-radius: var(--panel-corner-radius);
   --side-panel-min-width: 180px;
   --side-panel-width-percent: 16;
+  --side-panel-width: 16%;
   --side-panel-padding: var(--panel-padding);
   --side-panel-radius: var(--panel-corner-radius);
   --progress-height: 5px;
@@ -84,9 +93,9 @@
   --input-radius: 8px;
   --input-padding: 0 11px;
   --markdown-box-height-percent: 30;
-  --textarea-min-height: calc(var(--markdown-box-height-percent) * 1dvh);
+  --textarea-min-height: 30vh;
   --modal-width-percent: 60;
-  --modal-width: calc(var(--modal-width-percent) * 1vw);
+  --modal-width: 60vw;
   --modal-radius: var(--panel-corner-radius);
   --modal-padding: 18px;
   --all-cards-item-radius: 10px;
@@ -170,12 +179,13 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  width: min(calc(var(--app-width-percent) * 1%), 1680px);
-  height: calc(var(--app-height-percent) * 1dvh);
-  min-height: calc(var(--app-height-percent) * 1dvh);
+  width: min(var(--app-width), 100vw);
+  height: var(--app-height);
+  min-height: var(--app-height);
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--app-gap);
   margin: 0 auto;
+  min-width: 0;
   overflow: hidden;
   padding: var(--app-pad) 0;
 }
@@ -293,6 +303,7 @@ button:disabled {
 .toolbar,
 .url-row,
 .controls,
+.import-methods,
 .import-actions {
   display: flex;
   gap: var(--toolbar-gap);
@@ -300,6 +311,7 @@ button:disabled {
 
 .toolbar {
   min-width: 0;
+  align-items: center;
   justify-content: center;
 }
 
@@ -309,6 +321,10 @@ button:disabled {
 .deck-menu button,
 .url-row button,
 .import-actions button,
+.import-method-btn,
+.sync-modal-btn,
+.web-decks-refresh,
+.web-deck-action,
 .file-pick span,
 .controls button {
   min-height: var(--toolbar-button-height);
@@ -317,22 +333,126 @@ button:disabled {
   background: var(--panel);
   color: var(--text);
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--button-font-size);
+  line-height: 1;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.22);
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
+}
+
+.tool-button:hover,
+.icon-button:hover,
+.import-method-btn:hover,
+.sync-modal-btn:hover,
+.web-decks-refresh:hover,
+.web-deck-action:hover,
+.file-pick span:hover {
+  background-color: var(--panel-2);
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 3px 9px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.tool-button:active,
+.icon-button:active,
+.import-method-btn:active,
+.sync-modal-btn:active,
+.web-decks-refresh:active,
+.web-deck-action:active,
+.file-pick span:active,
+.controls button:active {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.22);
+  transform: translateY(0);
 }
 
 .tool-button {
   flex: 0 0 auto;
-  min-height: var(--toolbar-button-height);
-  padding: var(--toolbar-button-padding);
-  font-size: var(--button-font-size);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 94%, #fff), var(--panel));
+  letter-spacing: 0;
 }
 
 .icon-button {
-  display: grid;
-  flex: 0 0 auto;
   width: var(--toolbar-button-height);
-  min-height: var(--toolbar-button-height);
-  place-items: center;
   padding: 0;
+  font-weight: 900;
+}
+
+.import-methods {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.import-method-item {
+  display: flex;
+}
+
+.import-method-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--panel-corner-radius);
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.import-method-title {
+  color: var(--text);
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.import-method-subtitle {
+  color: var(--muted);
+  margin: 0 0 1rem 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.import-method-btn {
+  width: 100%;
+  background: var(--accent);
+  color: #05110e;
+  border: none;
+  height: var(--input-height);
+  font-weight: bold;
+}
+
+
+.import-method-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.sync-modal-btn {
+  min-width: 80px;
+}
+
+.sync-modal-btn.is-primary {
+  background: #4fc3b1;
+  color: #16201c;
+  border: none;
 }
 
 .menu-wrap {
@@ -352,7 +472,7 @@ button:disabled {
   border-radius: 10px;
   background: var(--panel);
   padding: 8px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
 }
 
 .deck-menu {
@@ -374,15 +494,17 @@ button:disabled {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(140px, calc(var(--side-panel-width-percent) * 1%)) minmax(0, 1fr) minmax(140px, calc(var(--side-panel-width-percent) * 1%));
+  grid-template-columns: minmax(140px, var(--side-panel-width)) minmax(0, 1fr) minmax(140px, var(--side-panel-width));
   gap: var(--app-gap);
   overflow: hidden;
 }
 
 .quiz-panel {
   display: grid;
+  width: 100%;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   grid-template-rows: auto 1fr auto auto auto;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -419,9 +541,9 @@ button:disabled {
 
 .card {
   position: relative;
-  width: calc(var(--card-width-percent) * 1%);
+  width: var(--card-width);
   height: 100%;
-  max-height: calc(var(--card-max-height-percent) * 1dvh);
+  max-height: var(--card-max-height);
   min-height: 0;
   border: var(--card-border-width) solid var(--line);
   border-radius: var(--card-radius);
@@ -463,6 +585,7 @@ button:disabled {
   height: 100%;
   max-height: none;
   min-height: 0;
+  min-width: 0;
   flex-direction: column;
   gap: var(--toolbar-gap);
   overflow: hidden;
@@ -471,6 +594,10 @@ button:disabled {
   background: color-mix(in srgb, var(--panel) 78%, transparent);
   box-shadow: var(--shadow);
   padding: var(--side-panel-padding);
+}
+
+.mobile-stack-toggle {
+  display: none;
 }
 
 .result-head {
@@ -1068,11 +1195,13 @@ button:disabled {
   background: color-mix(in srgb, var(--panel-2) 78%, transparent);
   color: var(--text);
   font-size: var(--button-font-size);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
 }
 
 .deck-utility-actions button:not(:disabled):hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
 }
 
 .replay-actions {
@@ -1086,15 +1215,17 @@ button:disabled {
   min-height: var(--replay-button-height);
   border: 1px solid var(--line);
   border-radius: var(--replay-button-radius);
-  background: transparent;
+  background: color-mix(in srgb, var(--panel) 58%, transparent);
   color: var(--muted);
   padding: 0 12px;
   font-size: var(--button-font-size);
   font-weight: 800;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
 }
 
 .replay-actions button:not(:disabled):hover {
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
   color: var(--accent);
 }
 
@@ -1212,7 +1343,6 @@ button:disabled {
   display: grid;
   width: min(920px, 100%);
   max-height: min(90vh, 720px);
-  max-height: min(90dvh, 720px);
   grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid var(--line);
   border-radius: var(--modal-radius);
@@ -1887,6 +2017,7 @@ textarea {
   padding: var(--answer-padding);
 }
 
+
 .print-root.is-preparing .fit-content > :first-child {
   margin-top: 0;
 }
@@ -1895,14 +2026,55 @@ textarea {
   margin-bottom: 0;
 }
 
+.fit-content h1,
+.fit-content h2,
+.fit-content h3 {
+  margin-top: 0;
+}
+
+.fit-content pre {
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f5f5f5;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.fit-content code {
+  border-radius: 4px;
+  background: #f1f1f1;
+  padding: 0.1em 0.3em;
+}
+
+.fit-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fit-content th,
+.fit-content td {
+  border: 1px solid #ddd;
+  padding: 6px 8px;
+}
+
+.fit-content svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.fit-content .katex-display {
+  overflow: visible;
+}
+
 @media (max-width: 720px) {
   .app-shell {
-    width: calc(100% - 10px);
+    width: min(var(--app-mobile-width), 100vw);
+    max-width: 100vw;
     height: auto;
-    min-height: 100vh;
-    min-height: 100svh;
-    overflow: visible;
-    padding: 6px 0;
+    min-height: var(--app-mobile-height);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 6px;
   }
 
   .appbar {
@@ -1933,12 +2105,17 @@ textarea {
   }
 
   .toolbar {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    justify-content: stretch;
+    display: flex;
+    justify-content: center;
     overflow: visible;
     gap: 6px;
     padding-bottom: 2px;
+    width: 100%;
+  }
+
+  .toolbar > * {
+    flex: 0 0 min(60px, 14vw);
+    min-width: 0;
   }
 
   .menu-wrap {
@@ -1965,8 +2142,9 @@ textarea {
     min-height: var(--toolbar-button-height);
     min-width: 0;
     justify-self: stretch;
-    padding: 0 6px;
+    padding: 0 4px;
     font-size: var(--button-font-size);
+    border-color: color-mix(in srgb, var(--line) 82%, var(--accent));
   }
 
   .toolbar > .tool-button,
@@ -1983,50 +2161,127 @@ textarea {
   .quiz-panel {
     height: auto;
     min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-self: center;
+    grid-template-rows: auto auto auto auto auto;
+    gap: 8px;
     padding: var(--quiz-panel-padding);
+    box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
   }
 
   .study-layout {
-    display: flex;
+    display: grid;
+    width: 100%;
     height: auto;
     min-height: 0;
-    flex-direction: column;
+    grid-template-rows: auto auto minmax(96px, 24dvh);
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     overflow: visible;
   }
 
   .result-panel {
-    height: 150px;
-    max-height: 150px;
-    min-height: 92px;
-    order: 2;
-    padding: var(--side-panel-padding);
+    width: min(100%, calc(100vw - 12px));
+    max-width: 100%;
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    justify-self: center;
+    order: 3;
+    padding: 8px;
   }
 
-  .known-panel {
-    order: 4;
+  .quiz-panel {
+    height: auto;
+    min-height: 0;
+    order: 1;
+  }
+
+  .mobile-stack-toggle {
+    display: grid;
+    width: min(100%, calc(100vw - 12px));
+    max-width: 100%;
+    justify-self: center;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    order: 2;
+    gap: 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--toolbar-button-radius);
+    background: color-mix(in srgb, var(--panel) 72%, transparent);
+    padding: 4px;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  }
+
+  .mobile-stack-toggle button {
+    display: inline-flex;
+    min-width: 0;
+    min-height: 32px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    border-radius: calc(var(--toolbar-button-radius) - 2px);
+    background: transparent;
+    color: var(--muted);
+    padding: 0 8px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .mobile-stack-toggle button.is-active {
+    border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+  }
+
+  .mobile-stack-toggle strong {
+    display: grid;
+    min-width: 24px;
+    height: 22px;
+    place-items: center;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 16%, transparent);
+    font-size: 0.78rem;
+  }
+
+  .study-layout[data-mobile-stack="known"] .review-panel,
+  .study-layout:not([data-mobile-stack="known"]) .known-panel {
+    display: none;
   }
 
   .card {
-    height: 100%;
-    max-height: none;
+    width: var(--card-mobile-width);
+    max-width: 100%;
+    height: var(--card-mobile-max-height);
+    max-height: var(--card-mobile-max-height);
     min-height: 0;
     border-radius: var(--card-radius);
   }
 
   .deck {
-    height: 90svh;
-    min-height: 460px;
-    padding: 8px 0;
+    width: 100%;
+    height: var(--card-mobile-max-height);
+    max-height: none;
+    min-height: 0;
+    align-self: center;
+    align-items: center;
+    justify-items: center;
+    padding: 0;
   }
 
   .controls {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    width: min(100%, calc(100vw - 12px));
+    max-width: 100%;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     grid-template-areas:
-      "review review review known known known"
-      "prev prev add add next next";
-    gap: 8px;
+      "review prev add next known";
+    gap: 4px;
+    justify-self: center;
+    margin-top: 0;
   }
 
   .card-face {
@@ -2037,9 +2292,17 @@ textarea {
   .controls button {
     width: auto;
     min-width: 0;
-    height: var(--action-button-height);
-    padding: 0 10px;
-    font-size: var(--button-font-size);
+    height: 34px;
+    min-height: 34px;
+    overflow: hidden;
+    padding: 0 6px;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .controls button span:not([aria-hidden]) {
+    display: none;
   }
 
   .controls .review {
@@ -2067,42 +2330,68 @@ textarea {
   }
 
   .controls .nav-card {
-    height: var(--action-button-height);
-    font-size: var(--button-font-size);
+    height: 34px;
+    font-size: 0.72rem;
   }
 
   .controls .review,
   .controls .known {
-    height: var(--action-button-height);
-    font-size: var(--button-font-size);
+    height: 34px;
+    font-size: 0.72rem;
   }
 
   .deck-utility-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 8px;
+    display: flex;
+    width: min(100%, calc(100vw - 12px));
+    max-width: 100%;
+    gap: 4px;
+    justify-self: center;
+    margin-top: 0;
   }
 
   .deck-utility-actions button {
-    width: 100%;
+    width: auto;
+    flex: 1 1 0;
     min-width: 0;
-    min-height: 38px;
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 0.72rem;
   }
 
   .replay-actions {
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
+    display: flex;
+    width: min(100%, calc(100vw - 12px));
+    max-width: 100%;
+    justify-self: center;
+    gap: 4px;
+    margin-top: 0;
   }
 
   .replay-actions button {
-    min-height: 28px;
-    padding: 0 10px;
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 24px;
+    overflow: hidden;
+    padding: 0 4px;
+    font-size: 0.62rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .rendered {
     font-size: var(--content-font-size);
+  }
+
+  .card-question .rendered {
+    font-size: clamp(16px, var(--question-fit-font-size, var(--content-font-size)), 26px);
+    padding-inline: 6px;
+  }
+
+  .card-question .rendered > * {
+    width: 100%;
+    max-width: min(100%, calc(100vw - 72px));
+    white-space: normal;
   }
 
   .card-answer .rendered {
@@ -2154,7 +2443,7 @@ textarea {
 
   .import-card {
     width: min(100%, calc(100vw - 20px));
-    max-height: calc(100svh - 20px);
+    max-height: calc(100vh - 20px);
     padding: var(--modal-padding);
   }
 
@@ -2185,7 +2474,7 @@ textarea {
   }
 
   .style-shell {
-    max-height: calc(100svh - 20px);
+    max-height: calc(100vh - 20px);
   }
 
   .style-section-body {
@@ -2194,7 +2483,7 @@ textarea {
 
   .web-decks-shell {
     width: 100%;
-    max-height: calc(100svh - 20px);
+    max-height: calc(100vh - 20px);
     padding: 14px;
   }
 
@@ -2281,7 +2570,6 @@ textarea {
   .app-shell {
     height: auto;
     min-height: 100vh;
-    min-height: 100svh;
     overflow: visible;
   }
 
@@ -2300,7 +2588,7 @@ textarea {
   }
 
   .quiz-panel {
-    height: min(760px, calc(100svh - 86px));
+    height: min(760px, calc(100vh - 86px));
     min-height: 520px;
     order: 1;
   }
@@ -2324,7 +2612,7 @@ textarea {
 
 @media (max-width: 420px) {
   .app-shell {
-    width: calc(100% - 8px);
+    width: min(var(--app-mobile-width), 100vw);
   }
 
   .deck-meta {
@@ -2342,19 +2630,20 @@ textarea {
   }
 
   .deck {
-    min-height: 430px;
+    min-height: 0;
   }
 
   .controls button {
     width: auto;
     min-width: 0;
-    height: var(--action-button-height);
-    padding: 0 8px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 5px;
   }
 
   .controls .review,
   .controls .known {
-    height: var(--action-button-height);
+    height: 32px;
   }
 }
 
@@ -2485,36 +2774,79 @@ textarea {
   }
 }
 
-/* Edit feature styles */
 .face-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 8px;
 }
+
 .face-header .face-label {
   margin-bottom: 0;
 }
-.edit-card-btn {
+
+.face-header > div {
   display: flex;
-  justify-content: center;
   align-items: center;
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0;
-  border: 1px solid var(--line);
+  gap: 6px;
+}
+
+.edit-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, var(--accent));
   border-radius: var(--toolbar-button-radius);
-  background: transparent;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 84%, transparent), color-mix(in srgb, var(--panel) 86%, transparent));
   color: var(--muted);
-  font-size: var(--button-font-size);
+  padding: 0;
+  font-size: 0.9rem;
+  line-height: 1;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 9%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.18);
   cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.12s ease;
   z-index: 10;
 }
+
 .edit-card-btn:hover {
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
   color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
 }
+
+.edit-card-btn:active {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.22);
+  transform: translateY(0);
+}
+
+#deleteCardBtn {
+  border-color: color-mix(in srgb, var(--review) 48%, var(--line));
+  background: color-mix(in srgb, var(--review) 13%, var(--panel));
+  color: var(--review) !important;
+}
+
+#deleteCardBtn:hover {
+  border-color: var(--review);
+  background: color-mix(in srgb, var(--review) 22%, var(--panel));
+  color: color-mix(in srgb, var(--review) 88%, var(--text)) !important;
+}
+
 .edit-textarea {
   flex: 1 1 auto;
   width: 100%;
@@ -2533,4 +2865,3 @@ textarea {
   border-color: var(--accent);
   outline: none;
 }
-[hidden] { display: none !important; }

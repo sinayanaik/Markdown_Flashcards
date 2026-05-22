@@ -62,6 +62,7 @@ const state = {
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
 const styleStorageKey = "swipe-notes-style-settings-v1";
+const themeStorageKey = "swipe-notes-theme";
 
 const fontFamilyChoices = {
   system: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
@@ -74,7 +75,7 @@ const styleDefaults = {
   fontFamily: "system",
   questionFontFamily: "system",
   answerFontFamily: "system",
-  appWidthPercent: "98",
+  appWidthPercent: "100",
   appHeightPercent: "100",
   sidePanelWidthPercent: "16",
   cardWidthPercent: "96",
@@ -774,6 +775,9 @@ const el = {
   addCardBtn: document.querySelector("#addCardBtn"),
   knownStackCount: document.querySelector("#knownStackCount"),
   reviewStackCount: document.querySelector("#reviewStackCount"),
+  mobileKnownCount: document.querySelector("#mobileKnownCount"),
+  mobileReviewCount: document.querySelector("#mobileReviewCount"),
+  mobileStackToggle: document.querySelector(".mobile-stack-toggle"),
   knownBrickList: document.querySelector("#knownBrickList"),
   reviewBrickList: document.querySelector("#reviewBrickList"),
   positionText: document.querySelector("#positionText"),
@@ -857,7 +861,6 @@ function configureMermaid(theme) {
 
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem("swipe-notes-theme", theme);
   el.themeBtn.textContent = theme === "dark" ? "Light" : "Dark";
   el.themeBtn.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
   el.themeBtn.setAttribute("aria-label", el.themeBtn.title);
@@ -884,6 +887,10 @@ function formatStyleNumber(value, step) {
   return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") || "0" : fixed;
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function normalizeStyleValue(key, value) {
   const field = styleFieldByKey[key];
   const defaultValue = styleDefaults[key];
@@ -897,18 +904,19 @@ function normalizeStyleValue(key, value) {
 
   if (field.type !== "range") return raw || defaultValue;
 
-  const fallback = parseFloat(defaultValue);
-  const parsed = numericStyleValue(raw);
-  const min = Number(field.min);
-  const max = Number(field.max);
-  const number = Number.isFinite(parsed) ? parsed : fallback;
-  const bounded = Math.min(Math.max(number, min), max);
-  return `${formatStyleNumber(bounded, field.step)}${field.unit || ""}`;
+  if (!raw) return defaultValue;
+  if (!field.unit) return raw;
+
+  const repeatedUnit = new RegExp(`^(-?\\d*\\.?\\d+)(${escapeRegExp(field.unit)})+$`, "i");
+  const repeatedUnitMatch = raw.match(repeatedUnit);
+  if (repeatedUnitMatch) return `${repeatedUnitMatch[1]}${field.unit}`;
+
+  return /^-?\d*\.?\d+$/.test(raw) ? `${raw}${field.unit}` : raw;
 }
 
 function migrateLegacyStyleSettings(raw = {}) {
   const migrated = { ...raw };
-  if (Object.prototype.hasOwnProperty.call(raw, "appMaxWidth")) migrated.appWidthPercent = "98";
+  if (Object.prototype.hasOwnProperty.call(raw, "appMaxWidth")) migrated.appWidthPercent = "100";
   if (Object.prototype.hasOwnProperty.call(raw, "cardWidth")) migrated.cardWidthPercent = "96";
   if (Object.prototype.hasOwnProperty.call(raw, "cardMaxHeight")) migrated.cardMaxHeightPercent = "74";
   if (Object.prototype.hasOwnProperty.call(raw, "modalWidth")) migrated.modalWidthPercent = "60";
@@ -1041,7 +1049,7 @@ function renderStyleControls() {
 }
 
 function numericStyleValue(value) {
-  const number = parseFloat(String(value ?? "").replace("%", ""));
+  const number = parseFloat(String(value ?? "").match(/-?\d*\.?\d+/)?.[0] ?? "");
   return Number.isFinite(number) ? number : null;
 }
 
@@ -1068,6 +1076,13 @@ function updateStyleControls() {
 function applyStyleSettings(rawSettings, options = {}) {
   const settings = normalizeStyleSettings(rawSettings);
   state.styleSettings = settings;
+  const appWidthPercent = numericStyleValue(settings.appWidthPercent) ?? 100;
+  const appHeightPercent = numericStyleValue(settings.appHeightPercent) ?? 100;
+  const sidePanelWidthPercent = numericStyleValue(settings.sidePanelWidthPercent) ?? 16;
+  const cardWidthPercent = numericStyleValue(settings.cardWidthPercent) ?? 96;
+  const cardMaxHeightPercent = numericStyleValue(settings.cardMaxHeightPercent) ?? 74;
+  const modalWidthPercent = numericStyleValue(settings.modalWidthPercent) ?? 60;
+  const markdownBoxHeightPercent = numericStyleValue(settings.markdownBoxHeightPercent) ?? 30;
 
   const root = document.documentElement;
   root.style.setProperty("--app-font-family", resolveFontFamily(settings.fontFamily));
@@ -1079,24 +1094,28 @@ function applyStyleSettings(rawSettings, options = {}) {
     root.style.setProperty(cssVariable, settings[key]);
   });
   root.style.setProperty("--question-fill", `${settings.questionFillPercent}%`);
+  root.style.setProperty("--app-width", `${appWidthPercent}vw`);
+  root.style.setProperty("--app-height", `${appHeightPercent}vh`);
+  root.style.setProperty("--app-mobile-width", `${appWidthPercent}vw`);
+  root.style.setProperty("--app-mobile-height", `${appHeightPercent}dvh`);
+  root.style.setProperty("--side-panel-width", `${sidePanelWidthPercent}%`);
+  root.style.setProperty("--card-width", `${cardWidthPercent}%`);
+  root.style.setProperty("--card-mobile-width", `${cardWidthPercent}%`);
+  root.style.setProperty("--card-max-height", `${cardMaxHeightPercent}vh`);
+  root.style.setProperty("--card-mobile-max-height", `${cardMaxHeightPercent}dvh`);
+  root.style.setProperty("--modal-width", `${modalWidthPercent}vw`);
+  root.style.setProperty("--textarea-min-height", `${markdownBoxHeightPercent}vh`);
 
   updateStyleControls();
   scheduleLiveQuestionFit();
   if (options.force) forceStyleRefresh();
 
-  if (options.save !== false) {
-    localStorage.setItem(styleStorageKey, JSON.stringify(settings));
-  }
-
   return settings;
 }
 
 function loadLocalStyleSettings() {
-  try {
-    return normalizeStyleSettings(JSON.parse(localStorage.getItem(styleStorageKey) || "{}"));
-  } catch {
-    return normalizeStyleSettings();
-  }
+  clearBrowserPersistence();
+  return normalizeStyleSettings();
 }
 
 function hasMeaningfulStyleSettings(settings) {
@@ -1182,6 +1201,7 @@ async function loadStyleFromWeb() {
     return;
   }
 
+  setStyleStatus("Loading synced style...");
   try {
     const { data, error } = await supabaseClient
       .from("app_style_settings")
@@ -1199,7 +1219,8 @@ async function loadStyleFromWeb() {
       return;
     }
 
-    applyStyleSettings(data.settings);
+    applyStyleSettings(data.settings, { force: true });
+    state.styleTouched = false;
     setStyleStatus(data.updated_at ? `Loaded ${new Date(data.updated_at).toLocaleString()}` : "Loaded synced style");
   } catch (error) {
     console.warn("Could not load synced style", error);
@@ -1226,7 +1247,7 @@ async function syncStyleToWeb() {
         id: "global",
         settings,
         updated_at: new Date().toISOString()
-      });
+      }, { onConflict: "id" });
 
     if (error) throw error;
     state.styleTouched = false;
@@ -2304,6 +2325,8 @@ function updateMeta() {
   el.scoreText.textContent = `Known ${state.known} / Review ${state.review}`;
   el.knownStackCount.textContent = state.known;
   el.reviewStackCount.textContent = state.review;
+  if (el.mobileKnownCount) el.mobileKnownCount.textContent = state.known;
+  if (el.mobileReviewCount) el.mobileReviewCount.textContent = state.review;
   renderBrickList(el.knownBrickList, state.results.known, "known");
   renderBrickList(el.reviewBrickList, state.results.review, "review");
   el.progressBar.style.width = total ? `${(finished / total) * 100}%` : "0";
@@ -2363,6 +2386,7 @@ async function showCard(direction = 0) {
     await renderMarkdown(el.questionView, state.cards.length ? "Finished. Restart or shuffle to quiz again." : "Import a deck to begin.");
     await renderMarkdown(el.answerView, "");
     el.questionView.style.fontSize = "";
+    el.questionView.style.width = "";
     el.questionView.style.removeProperty("--question-fit-font-size");
     updateMeta();
     return;
@@ -2555,17 +2579,18 @@ function deckSnapshot() {
   };
 }
 
-function savePersistedDeck() {
+function clearBrowserPersistence() {
   try {
-    if (!state.masterCards.length) {
-      localStorage.removeItem(deckStorageKey);
-      return;
-    }
-
-    localStorage.setItem(deckStorageKey, JSON.stringify(deckSnapshot()));
+    localStorage.removeItem(deckStorageKey);
+    localStorage.removeItem(styleStorageKey);
+    localStorage.removeItem(themeStorageKey);
   } catch (error) {
-    console.warn("Could not save deck state", error);
+    console.warn("Could not clear browser persistence", error);
   }
+}
+
+function savePersistedDeck() {
+  clearBrowserPersistence();
 }
 
 function loadDeckSnapshot(payload, titleHint = "") {
@@ -2613,19 +2638,8 @@ function loadDeckSnapshot(payload, titleHint = "") {
 }
 
 function loadPersistedDeck() {
-  try {
-    const stored = localStorage.getItem(deckStorageKey);
-    if (!stored) return false;
-
-    loadDeckSnapshot(JSON.parse(stored), "Saved deck");
-    setStatus(`Restored ${state.masterCards.length} saved card${state.masterCards.length === 1 ? "" : "s"}.`);
-    closeImportPanel();
-    return true;
-  } catch (error) {
-    console.warn("Could not restore saved deck", error);
-    localStorage.removeItem(deckStorageKey);
-    return false;
-  }
+  clearBrowserPersistence();
+  return false;
 }
 
 function cardsForScope(scope) {
@@ -2770,6 +2784,7 @@ function fitLiveQuestion() {
   const fits = () => {
     const contentSize = questionContentSize();
     return contentSize.width <= Math.max(node.clientWidth, availableWidth) + 1
+      && node.scrollWidth <= availableWidth + 1
       && contentSize.height <= targetHeight + 1
       && contentSize.height <= availableHeight + 1;
   };
@@ -3619,6 +3634,16 @@ el.replayUncategorizedBtn.addEventListener("click", () => replayDeck("uncategori
 el.replayAllBtn.addEventListener("click", () => replayDeck("all"));
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
+el.mobileStackToggle?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-mobile-stack]");
+  if (!button) return;
+  const stack = button.dataset.mobileStack === "known" ? "known" : "review";
+  const studyLayout = document.querySelector(".study-layout");
+  if (studyLayout) studyLayout.dataset.mobileStack = stack;
+  el.mobileStackToggle.querySelectorAll("[data-mobile-stack]").forEach((item) => {
+    item.classList.toggle("is-active", item === button);
+  });
+});
 el.card.addEventListener("click", (event) => {
   if (performance.now() < state.suppressClickUntil) {
     event.preventDefault();
@@ -3680,12 +3705,11 @@ window.addEventListener("afterprint", () => {
 
 window.addEventListener("resize", scheduleLiveQuestionFit);
 
-applyStyleSettings(loadLocalStyleSettings(), { save: false });
-setTheme(localStorage.getItem("swipe-notes-theme") || "dark");
-if (!loadPersistedDeck()) {
-  setStatus("");
-  showCard();
-}
+clearBrowserPersistence();
+applyStyleSettings(styleDefaults, { save: false });
+setTheme("dark");
+setStatus("");
+showCard();
 loadStyleFromWeb();
 
 function toggleEditMode(side) {

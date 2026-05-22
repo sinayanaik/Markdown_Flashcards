@@ -6,7 +6,6 @@
     <title>Flashcards</title>
     <link rel="icon" type="image/png" href="fevicon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="stylesheet" href="vendor/bulma.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="styles.css?v=20260521-16">
@@ -16,16 +15,16 @@
       <header class="appbar">
         <div class="toolbar">
           <div class="menu-wrap deck-menu-wrap">
-            <button class="tool-button button is-small" id="deckMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">Deck</button>
+            <button class="tool-button" id="deckMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">Deck</button>
             <div class="deck-menu" id="deckMenu" hidden>
               <button id="newDeckBtn" type="button">New Deck</button>
               <button id="importBtn" type="button">Import</button>
               <button id="webDecksBtn" type="button">Web Decks</button>
             </div>
           </div>
-          <button class="tool-button button is-small" id="syncBtn" type="button" title="Sync current deck to Web">Sync</button>
+          <button class="tool-button" id="syncBtn" type="button" title="Sync current deck to Web">Sync</button>
           <div class="menu-wrap">
-            <button class="tool-button button is-small" id="exportBtn" type="button">Export</button>
+            <button class="tool-button" id="exportBtn" type="button">Export</button>
             <div class="export-menu" id="exportMenu" hidden>
               <button type="button" data-export="pdf" data-scope="known">Known PDF</button>
               <button type="button" data-export="pdf" data-scope="review">Review PDF</button>
@@ -34,8 +33,8 @@
               <button type="button" data-export="json" data-scope="all">All JSON</button>
             </div>
           </div>
-          <button class="tool-button button is-small" id="allCardsBtn" type="button">All</button>
-          <button class="icon-button button is-small" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">
+          <button class="tool-button" id="allCardsBtn" type="button">All</button>
+          <button class="icon-button" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">
             <span aria-hidden="true">Aa</span>
           </button>
         </div>
@@ -71,7 +70,7 @@
               <div class="card-face card-question">
                 <div class="face-header">
                   <span class="face-label">Question</span>
-                  <div style="display: flex; gap: 4px;">
+                  <div>
                     <button class="edit-card-btn" id="deleteCardBtn" type="button" title="Delete card" aria-label="Delete card" style="color: #ff4a4a;">&#128465;</button>
                     <button class="edit-card-btn" id="editQuestionBtn" type="button" title="Edit question" aria-label="Edit question">&#9998;</button>
                   </div>
@@ -113,6 +112,11 @@
           </div>
         </section>
 
+        <div class="mobile-stack-toggle" aria-label="Review and known stack tabs">
+          <button class="is-active" type="button" data-mobile-stack="review">Review <strong id="mobileReviewCount">0</strong></button>
+          <button type="button" data-mobile-stack="known">Known <strong id="mobileKnownCount">0</strong></button>
+        </div>
+
         <aside class="result-panel known-panel" aria-label="Known cards">
           <div class="result-head">
             <div>
@@ -125,7 +129,7 @@
       </section>
     </main>
 
-    <section class="import-panel is-open" id="importPanel" aria-label="Import notes">
+    <section class="import-panel" id="importPanel" aria-label="Import notes">
       <div class="import-card">
         <div class="import-head">
           <div>
@@ -135,34 +139,34 @@
           <button class="icon-button" id="closeImportBtn" type="button" aria-label="Close import panel">&#215;</button>
         </div>
 
-        <div class="columns is-mobile is-multiline" style="margin-top: 10px;">
+        <div class="import-methods" style="margin-top: 10px;">
           <!-- New Deck Method -->
-          <div class="column is-one-third-tablet is-full-mobile">
-            <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem; text-align: center;">
-              <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">New Deck</h3>
-              <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Start with a blank editable flashcard.</p>
-              <button id="newDeckFromImportBtn" type="button" class="button is-fullwidth" style="background: var(--accent); color: #05110e; border: none; height: var(--input-height); font-weight: bold; width: 100%;">Create New Deck</button>
+          <div class="import-method-item">
+            <div class="import-method-box">
+              <h3 class="import-method-title">New Deck</h3>
+              <p class="import-method-subtitle">Start with a blank editable flashcard.</p>
+              <button id="newDeckFromImportBtn" type="button" class="import-method-btn">Create New Deck</button>
             </div>
           </div>
 
           <!-- URL Import Method -->
-          <div class="column is-one-third-tablet is-full-mobile">
-            <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem;">
-              <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">Import via URL</h3>
-              <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Fetch raw markdown from a public URL.</p>
+          <div class="import-method-item">
+            <div class="import-method-box">
+              <h3 class="import-method-title">Import via URL</h3>
+              <p class="import-method-subtitle">Fetch raw markdown from a public URL.</p>
               <div class="url-row" style="display: flex; gap: 8px;">
                 <input id="urlInput" type="url" placeholder="https://..." autocomplete="off">
-                <button id="fetchBtn" type="button" class="button" style="background: var(--accent); color: #05110e; border: none; height: var(--input-height);">Fetch</button>
+                <button id="fetchBtn" type="button" class="import-method-btn" style="width: auto;">Fetch</button>
               </div>
             </div>
           </div>
           
           <!-- Web Decks Import Method -->
-          <div class="column is-one-third-tablet is-full-mobile">
-            <div class="box" style="height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--panel-2); border: 1px solid var(--line); box-shadow: none; padding: 1.25rem; text-align: center;">
-              <h3 class="title is-6" style="color: var(--text); margin-bottom: 0.5rem;">Web Decks</h3>
-              <p class="subtitle is-7" style="color: var(--muted); margin-bottom: 1rem;">Load previously synced decks from the web.</p>
-              <button id="openWebDecksFromImportBtn" type="button" class="button is-fullwidth" style="background: var(--accent); color: #05110e; border: none; height: var(--input-height); font-weight: bold; width: 100%;">Open Web Decks</button>
+          <div class="import-method-item">
+            <div class="import-method-box">
+              <h3 class="import-method-title">Web Decks</h3>
+              <p class="import-method-subtitle">Load previously synced decks from the web.</p>
+              <button id="openWebDecksFromImportBtn" type="button" class="import-method-btn">Open Web Decks</button>
             </div>
           </div>
         </div>
@@ -252,7 +256,7 @@
             </tbody>
           </table>
         </div>
-        <button class="button web-decks-refresh" id="refreshWebDecksBtn" type="button">Refresh List</button>
+        <button class="web-decks-refresh" id="refreshWebDecksBtn" type="button">Refresh List</button>
       </div>
     </section>
 
@@ -261,8 +265,8 @@
         <h2 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.25rem;">Sync Confirmation</h2>
         <div id="syncDetailsContent" style="margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;"></div>
         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button id="cancelSyncBtn" type="button" class="button">Cancel</button>
-          <button id="confirmSyncBtn" type="button" class="button is-primary" style="background: #4fc3b1; color: #16201c; border: none;">Confirm Sync</button>
+          <button id="cancelSyncBtn" type="button" class="sync-modal-btn">Cancel</button>
+          <button id="confirmSyncBtn" type="button" class="sync-modal-btn" style="background: #4fc3b1; color: #16201c; border: none;">Confirm Sync</button>
         </div>
       </div>
     </section>
