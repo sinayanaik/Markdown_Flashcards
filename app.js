@@ -3475,6 +3475,17 @@ function stopDiagramPan(event) {
   state.diagramPanPointerId = null;
 }
 
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch((error) => {
+      console.warn("Service worker registration failed", error);
+    });
+  });
+}
+
 function setDeckMenuOpen(open) {
   if (!el.deckMenu || !el.deckMenuBtn) return;
   el.deckMenu.hidden = !open;
@@ -3757,6 +3768,7 @@ setTheme("dark");
 setStatus("");
 showCard();
 loadStyleFromWeb();
+registerServiceWorker();
 
 function toggleEditMode(side) {
   const isQuestion = side === 'question';
