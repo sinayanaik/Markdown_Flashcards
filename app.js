@@ -505,6 +505,59 @@ function sameSyncContent(localCard, webCard) {
     && !syncTextChanged(localCard.answer, webCard.answer);
 }
 
+function normalizeDeckTitleForSync(value) {
+  return normalizeSyncText(value).toLowerCase();
+}
+
+async function findExistingWebDeckForLocalSync(deckTitle, preferredDeckId = "") {
+  if (!supabaseClient) return null;
+
+  const normalizedTitle = normalizeDeckTitleForSync(deckTitle);
+  const normalizedPreferredId = String(preferredDeckId || "").trim();
+
+  if (normalizedPreferredId) {
+    const { data, error } = await supabaseClient
+      .from("decks")
+      .select("id, title, updated_at")
+      .eq("id", normalizedPreferredId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  if (!normalizedTitle) return null;
+
+  const { data, error } = await supabaseClient
+    .from("decks")
+    .select("id, title, updated_at")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).find((deck) => normalizeDeckTitleForSync(deck.title) === normalizedTitle) || null;
+}
+
+async function resolveSyncTargetDeck(deckTitle) {
+  const preferredDeckId = state.deckId || slugifyFileName(deckTitle);
+
+  if (state.deckId || !supabaseClient) {
+    return {
+      deckId: preferredDeckId,
+      existingDeck: state.deckId ? { id: state.deckId, title: deckTitle } : null,
+      overwriteExisting: false
+    };
+  }
+
+  const existingDeck = await findExistingWebDeckForLocalSync(deckTitle, preferredDeckId);
+
+  return {
+    deckId: existingDeck?.id || preferredDeckId || ("deck-" + Date.now()),
+    existingDeck,
+    overwriteExisting: Boolean(existingDeck)
+  };
+}
+
 function uniqueMatchingWebCard(webCards, predicate) {
   const matches = webCards.filter(predicate);
   return matches.length === 1 ? matches[0] : null;
@@ -585,9 +638,24 @@ async function showSyncModal() {
   const cardsCount = state.masterCards.length;
   const knownCount = state.results.known.length;
   const reviewCount = state.results.review.length;
-  
-  const isUpdate = !!state.deckId;
-  const actionText = isUpdate ? "Update existing web deck" : "Create new web deck";
+
+  let syncTarget = {
+    deckId: state.deckId || slugifyFileName(deckTitle) || ("deck-" + Date.now()),
+    existingDeck: state.deckId ? { id: state.deckId, title: deckTitle } : null,
+    overwriteExisting: false
+  };
+  try {
+    syncTarget = await resolveSyncTargetDeck(deckTitle);
+  } catch (error) {
+    console.error("Failed to resolve sync target", error);
+  }
+
+  const isUpdate = Boolean(syncTarget.existingDeck);
+  const actionText = syncTarget.overwriteExisting
+    ? "Overwrite existing web deck"
+    : isUpdate
+      ? "Update existing web deck"
+      : "Create new web deck";
   
   modal.hidden = false;
   if (confirmBtn) confirmBtn.disabled = true;
@@ -610,7 +678,7 @@ async function showSyncModal() {
       const { data: webCards, error } = await supabaseClient
         .from("cards")
         .select("id, question, answer, status, position")
-        .eq("deck_id", state.deckId);
+        .eq("deck_id", syncTarget.deckId);
 
       if (error) throw error;
 
@@ -619,7 +687,7 @@ async function showSyncModal() {
       if (added === 0 && deleted === 0 && edited === 0 && moved === 0 && statusChanges === 0) {
         diffHtml = `<p style="color: var(--text-secondary);">No changes detected. The web deck is up to date.</p>`;
       } else {
-        diffHtml = `<p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>Changes to sync:</strong></p>
+        diffHtml = `<p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${syncTarget.overwriteExisting ? "Local import will overwrite web deck:" : "Changes to sync:"}</strong></p>
         <ul style="color: var(--text-secondary); margin-left: 1.5rem; list-style-type: disc;">`;
         if (added > 0) diffHtml += `<li>${added} card${added > 1 ? 's' : ''} added</li>`;
         if (deleted > 0) diffHtml += `<li>${deleted} card${deleted > 1 ? 's' : ''} deleted</li>`;
@@ -659,16 +727,17 @@ async function syncDeckToWeb() {
   if (syncBtn) syncBtn.disabled = true;
 
   try {
-    const isNewDeck = !state.deckId;
-    if (isNewDeck) {
-      state.deckId = slugifyFileName(state.deckTitle || state.sourceTitle) || ("deck-" + Date.now());
-    }
+    const deckTitle = state.deckTitle || state.sourceTitle || "Untitled Deck";
+    const syncTarget = await resolveSyncTargetDeck(deckTitle);
+    const isNewDeck = !syncTarget.existingDeck;
+    const shouldOverwriteExisting = syncTarget.overwriteExisting;
+    state.deckId = syncTarget.deckId;
 
-    setStatus(`Syncing... (1/3) Saving deck info "${state.deckTitle}"`);
+    setStatus(`Syncing... (1/3) Saving deck info "${deckTitle}"`);
     
     const deckData = {
       id: state.deckId,
-      title: state.deckTitle || "Untitled Deck",
+      title: deckTitle,
       current_card_index: state.current,
       updated_at: new Date().toISOString()
     };
@@ -679,8 +748,15 @@ async function syncDeckToWeb() {
 
     if (deckError) throw deckError;
 
-    // Handle deletions if it's an update
-    if (!isNewDeck) {
+    if (shouldOverwriteExisting) {
+      setStatus("Syncing... (2/3) Replacing existing web cards");
+      const { error: deleteError } = await supabaseClient
+        .from("cards")
+        .delete()
+        .eq("deck_id", state.deckId);
+
+      if (deleteError) throw deleteError;
+    } else if (!isNewDeck) {
       setStatus("Syncing... (2/3) Cleaning up deleted cards");
       const { data: webCards, error: fetchError } = await supabaseClient
         .from("cards")
@@ -695,6 +771,7 @@ async function syncDeckToWeb() {
           const { error: deleteError } = await supabaseClient
             .from("cards")
             .delete()
+            .eq("deck_id", state.deckId)
             .in("id", idsToDelete);
           if (deleteError) throw deleteError;
         }
