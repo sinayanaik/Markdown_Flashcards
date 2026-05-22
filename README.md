@@ -1,23 +1,29 @@
 # Flashcards
 
-A static GitHub Pages app that turns Notion-style toggle/foldable Markdown into swipe flashcards.
+A static GitHub Pages app that turns Markdown into swipe flashcards.
 
 ## How Cards Are Parsed
 
-Export or paste Notion Markdown where each toggle appears as a blockquote:
+The primary flashcard format is a `::` card block with a `---` separator:
 
 ```md
-> Question text
->
-> Answer text
+::
+## Front
+
+---
+
+## Back
+::
 ```
 
-The first non-empty line becomes the question. Everything after it becomes the answer.
+Everything before `---` becomes the front. Everything after it becomes the back. Both sides render as Markdown.
+Blank lines are optional around the markers, so compact blocks like `::## Front`, `---## Back`, and `## Back::` are also accepted.
 
-The app also accepts:
+The app also accepts legacy formats:
 
-- `### Question?` followed by answer content until the next question heading
+- `##`, `###`, or `####` headings followed by answer content until the next heading
 - Study-note headings such as `### Explain ...`, `### Describe ...`, `### Summary ...`, or headings with labeled sections like `**Translation:**`, `**Meaning:**`, and `**Word Meanings:**`
+- Notion toggle exports where each toggle appears as a blockquote
 - `<details><summary>Question</summary>Answer</details>`
 - `Q: ...` / `A: ...` blocks
 

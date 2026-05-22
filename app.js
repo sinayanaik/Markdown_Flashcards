@@ -1,26 +1,41 @@
-const sampleMarkdown = `> What is the derivative of $x^2$?
->
-> The derivative is $2x$.
->
-> $$
-> \\frac{d}{dx}x^2 = 2x
-> $$
+const delimitedCardBoundaryPattern = /(?:^|\n)\s*::/;
+const cardSideSeparatorPattern = /^\s*---(?!-)/;
 
-> What does this Mermaid graph show?
->
-> It shows a simple spaced-repetition loop.
->
-> \`\`\`mermaid
-> flowchart LR
->   A[Read note] --> B[Answer card]
->   B --> C{Remembered?}
->   C -->|Yes| D[Known]
->   C -->|No| E[Review]
-> \`\`\`
+const sampleMarkdown = `::
+## What is the derivative of $x^2$?
 
-> How do Notion toggle exports become cards?
->
-> Each blockquote group becomes one flashcard. The first non-empty line is the question, and the remaining lines become the answer.`;
+---
+
+The derivative is $2x$.
+
+$$
+\\frac{d}{dx}x^2 = 2x
+$$
+::
+
+::
+## What does this Mermaid graph show?
+
+---
+
+It shows a simple spaced-repetition loop.
+
+\`\`\`mermaid
+flowchart LR
+  A[Read note] --> B[Answer card]
+  B --> C{Remembered?}
+  C -->|Yes| D[Known]
+  C -->|No| E[Review]
+\`\`\`
+::
+
+::
+## How do Markdown flashcards become cards?
+
+---
+
+Each \`::\` block becomes one flashcard. The \`---\` line separates the front from the back.
+::`;
 
 const styleProfiles = ["desktop", "mobile"];
 const styleMobileQuery = "(max-width: 720px)";
@@ -1592,6 +1607,89 @@ function cleanToggleContent(lines) {
     .trim();
 }
 
+function parseDelimitedCards(markdown) {
+  const lines = normalizeMarkdown(markdown).split("\n");
+  const cards = [];
+  let inCard = false;
+  let side = "front";
+  let front = [];
+  let back = [];
+  let inFence = false;
+
+  const reset = () => {
+    inCard = false;
+    side = "front";
+    front = [];
+    back = [];
+    inFence = false;
+  };
+
+  const flush = () => {
+    const question = cleanToggleContent(front);
+    const answer = cleanToggleContent(back);
+    if (question && answer) cards.push({ question, answer });
+    reset();
+  };
+
+  const pushContent = (line) => {
+    if (!inCard) return;
+    if (side === "front") {
+      front.push(line);
+    } else {
+      back.push(line);
+    }
+    if (/^\s*```/.test(line.trim())) inFence = !inFence;
+  };
+
+  const toggleCardBoundary = () => {
+    if (inCard) {
+      flush();
+    } else {
+      reset();
+      inCard = true;
+    }
+  };
+
+  for (const line of lines) {
+    let rest = line;
+
+    if (!inFence && rest.trim() === "::") {
+      toggleCardBoundary();
+      continue;
+    }
+
+    if (!inFence && /^\s*::/.test(rest)) {
+      toggleCardBoundary();
+      rest = rest.replace(/^\s*::/, "");
+      if (!rest.trim()) continue;
+    }
+
+    if (!inCard) continue;
+
+    if (!inFence && side === "front" && rest.trim() === "---") {
+      side = "back";
+      continue;
+    }
+
+    if (!inFence && side === "front" && cardSideSeparatorPattern.test(rest)) {
+      side = "back";
+      rest = rest.replace(cardSideSeparatorPattern, "");
+      if (!rest.trim()) continue;
+    }
+
+    if (!inFence && rest.trim().endsWith("::")) {
+      const content = rest.replace(/::\s*$/, "");
+      if (content.trim()) pushContent(content);
+      flush();
+      continue;
+    }
+
+    pushContent(rest);
+  }
+
+  return cards;
+}
+
 function parseBlockquoteCards(markdown) {
   const lines = normalizeMarkdown(markdown).split("\n");
   const cards = [];
@@ -1756,6 +1854,44 @@ function parseHeadingCards(markdown, options = {}) {
   return cards;
 }
 
+function parseLegacyHeadingFallbackCards(markdown) {
+  const lines = normalizeMarkdown(markdown).split("\n");
+  const cards = [];
+  let current = null;
+  let inFence = false;
+
+  const flush = () => {
+    if (!current) return;
+    const answer = cleanToggleContent(current.answer);
+    if (current.question && answer) {
+      cards.push({
+        question: current.question,
+        answer
+      });
+    }
+    current = null;
+  };
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line.trim())) inFence = !inFence;
+
+    const heading = inFence ? null : line.match(/^(#{2,4})\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      flush();
+      current = {
+        question: heading[2].trim(),
+        answer: []
+      };
+      continue;
+    }
+
+    if (current) current.answer.push(line);
+  }
+
+  flush();
+  return cards;
+}
+
 function countQuestionHeadings(markdown) {
   return normalizeMarkdown(markdown)
     .split("\n")
@@ -1765,12 +1901,33 @@ function countQuestionHeadings(markdown) {
 
 function parseCards(markdown) {
   const source = removeEmptyHeadingGroups(stripReaderMetadata(markdown));
-  const cards = [
+  const delimitedCards = parseDelimitedCards(source);
+  const hasDelimitedCardSyntax = delimitedCardBoundaryPattern.test(source);
+  const structuredLegacyCards = [
     ...parseDetailsCards(source),
     ...parseBlockquoteCards(source),
-    ...parseQACards(source),
-    ...parseHeadingCards(source, { includeStudySections: true })
+    ...parseQACards(source)
   ];
+  const legacyHeadingCards = parseLegacyHeadingFallbackCards(source);
+  const parsedCards = delimitedCards.length
+    ? delimitedCards
+    : hasDelimitedCardSyntax
+      ? []
+    : structuredLegacyCards.length
+      ? [
+        ...structuredLegacyCards,
+        ...parseHeadingCards(source, { includeStudySections: true })
+      ]
+      : legacyHeadingCards.length
+        ? legacyHeadingCards
+        : parseHeadingCards(source, { includeStudySections: true });
+  const seen = new Set();
+  const cards = parsedCards.filter((card) => {
+    const key = `${card.question.trim()}\u0000${card.answer.trim()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   return cards.map((card, index) => ({
     id: `${index}-${card.question.slice(0, 32)}`,
@@ -2626,7 +2783,7 @@ function buildCards(titleHint = state.importTitleHint || "") {
     savePersistedDeck();
     const message = headingCount
       ? `Found ${headingCount} question heading${headingCount === 1 ? "" : "s"}, but no answer text. This Notion page is exposing collapsed toggle titles only; export Markdown or paste expanded toggle content.`
-      : "No cards found. Use > toggle blocks, Q:/A: blocks, question headings, or structured note sections with answer content.";
+      : "No cards found. Use :: card blocks with a --- separator, legacy > toggle blocks, Q:/A: blocks, or ##/###/#### headings with answer content.";
     setStatus(message, "error");
   }
 
@@ -2715,7 +2872,7 @@ function replayDeck(scope) {
 
 function formatCardList(title, cards) {
   const body = cards.length
-    ? cards.map((card, index) => `### ${index + 1}. ${card.question}\n\n${card.answer}`).join("\n\n")
+    ? cards.map((card) => `::\n${card.question.trim()}\n\n---\n\n${card.answer.trim()}\n::`).join("\n\n")
     : "_None_";
   return `## ${title}\n\n${body}`;
 }
