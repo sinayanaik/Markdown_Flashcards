@@ -9,13 +9,12 @@
     <meta name="apple-mobile-web-app-title" content="Flashcards">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Flashcards</title>
-    <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" type="image/png" href="fevicon.png">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260521-16">
+    <link rel="stylesheet" href="styles.css?v=20260523-4">
   </head>
   <body>
     <main class="app-shell">
@@ -76,7 +75,10 @@
             <article class="card" id="card" tabindex="0" aria-label="Current quiz card">
               <div class="card-face card-question">
                 <div class="face-header">
-                  <span class="face-label">Question</span>
+                  <div class="face-label-row">
+                    <span class="face-label">Question</span>
+                    <span class="card-status-badge" id="questionStatusBadge" data-status="">Uncategorized</span>
+                  </div>
                   <div>
                     <button class="edit-card-btn" id="deleteCardBtn" type="button" title="Delete card" aria-label="Delete card" style="color: #ff4a4a;">&#128465;</button>
                     <button class="edit-card-btn" id="editQuestionBtn" type="button" title="Edit question" aria-label="Edit question">&#9998;</button>
@@ -87,7 +89,10 @@
               </div>
               <div class="card-face card-answer">
                 <div class="face-header">
-                  <span class="face-label">Answer</span>
+                  <div class="face-label-row">
+                    <span class="face-label">Answer</span>
+                    <span class="card-status-badge" id="answerStatusBadge" data-status="">Uncategorized</span>
+                  </div>
                   <button class="edit-card-btn" id="editAnswerBtn" type="button" title="Edit answer" aria-label="Edit answer">&#9998;</button>
                 </div>
                 <div class="rendered" id="answerView"></div>
@@ -289,6 +294,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260522-6"></script>
+    <script src="app.js?v=20260523-4"></script>
   </body>
 </html>

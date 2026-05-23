@@ -115,9 +115,11 @@ const styleDefaults = {
   markdownBoxHeightPercent: "30",
   baseFontSize: "18px",
   baseLineHeight: "1.58",
+  rawMarkdownFontSize: "16px",
   codeFontSize: "15px",
   codeLineHeight: "1.55",
   questionFillPercent: "58",
+  questionMaxFontSize: "64px",
   questionLineHeight: "1.18",
   questionAlign: "center",
   questionVerticalAlign: "center",
@@ -155,6 +157,7 @@ const styleControlGroups = [
       { key: "fontFamily", label: "Base font family", type: "select", options: ["system", "serif", "mono", "rounded"], hint: "Base app font." },
       { key: "baseFontSize", label: "Base font size", type: "range", min: 10, max: 36, step: 1, unit: "px", hint: "General Markdown and interface text size." },
       { key: "baseLineHeight", label: "Base line spacing", type: "range", min: 0.9, max: 2.6, step: 0.01, hint: "General reading spacing." },
+      { key: "rawMarkdownFontSize", label: "Raw Markdown font size", type: "range", min: 8, max: 36, step: 1, unit: "px", hint: "Text size inside Markdown edit boxes." },
       { key: "codeFontSize", label: "Code font size", type: "range", min: 10, max: 28, step: 1, unit: "px", hint: "Text size inside code blocks." },
       { key: "codeLineHeight", label: "Code line spacing", type: "range", min: 0.9, max: 2.6, step: 0.01, hint: "Line spacing inside code blocks." }
     ]
@@ -191,6 +194,7 @@ const styleControlGroups = [
     fields: [
       { key: "questionFontFamily", label: "Question font family", type: "select", options: ["system", "serif", "mono", "rounded"], hint: "Question-only font." },
       { key: "questionFillPercent", label: "Question fill %", type: "range", min: 10, max: 95, step: 1, hint: "How much vertical card space the question tries to occupy." },
+      { key: "questionMaxFontSize", label: "Question max font size", type: "range", min: 8, max: 180, step: 1, unit: "px", hint: "Largest question text size. Small questions can still shrink without a floor." },
       { key: "questionLineHeight", label: "Question line spacing", type: "range", min: 0.8, max: 2.4, step: 0.01, hint: "Line spacing for question text." },
       { key: "questionAlign", label: "Question horizontal align", type: "select", options: ["left", "center", "right", "justify"], hint: "Question text alignment." },
       { key: "questionVerticalAlign", label: "Question vertical align", type: "select", options: ["start", "center", "end"], hint: "Question vertical position." },
@@ -243,8 +247,10 @@ const styleCssVariables = {
   markdownBoxHeightPercent: "--markdown-box-height-percent",
   baseFontSize: "--content-font-size",
   baseLineHeight: "--content-line-height",
+  rawMarkdownFontSize: "--raw-markdown-font-size",
   codeFontSize: "--code-font-size",
   codeLineHeight: "--code-line-height",
+  questionMaxFontSize: "--question-max-font-size",
   questionLineHeight: "--question-line-height",
   questionAlign: "--question-align",
   questionVerticalAlign: "--question-vertical-align",
@@ -830,6 +836,7 @@ let allCardsRenderId = 0;
 let draggedAllCardId = "";
 let printTitleBeforeExport = "";
 let liveQuestionFitFrame = 0;
+let markdownTableFitFrame = 0;
 
 const el = {
   sourceInput: document.querySelector("#sourceInput"),
@@ -875,6 +882,8 @@ const el = {
   card: document.querySelector("#card"),
   questionView: document.querySelector("#questionView"),
   answerView: document.querySelector("#answerView"),
+  questionStatusBadge: document.querySelector("#questionStatusBadge"),
+  answerStatusBadge: document.querySelector("#answerStatusBadge"),
   editQuestionBtn: document.querySelector("#editQuestionBtn"),
   editAnswerBtn: document.querySelector("#editAnswerBtn"),
   questionEdit: document.querySelector("#questionEdit"),
@@ -1375,6 +1384,7 @@ function handleStyleControlChange() {
   const settings = setStyleProfileSettings(editProfile, styleSettingsFromControls());
   if (editProfile === detectStyleProfile()) applyActiveStyleSettings();
   else updateStyleProfileUi();
+  scheduleMarkdownTableFit();
   setStyleStatus(`Unsynced ${styleProfileLabel(editProfile).toLowerCase()} style`);
   return settings;
 }
@@ -1387,8 +1397,14 @@ function forceStyleRefresh() {
     node.style.width = "";
     node.style.removeProperty("--question-fit-font-size");
   });
+  document.querySelectorAll(".rendered table").forEach((table) => {
+    table.style.fontSize = "";
+    delete table.dataset.baseFontSize;
+  });
+  scheduleMarkdownTableFit();
   scheduleLiveQuestionFit();
   requestAnimationFrame(() => {
+    scheduleMarkdownTableFit();
     scheduleLiveQuestionFit();
     if (!el.allCardsPanel?.hidden) renderAllCards();
   });
@@ -2310,11 +2326,161 @@ async function enhanceRenderedMarkdown(container) {
       console.warn("Mermaid render failed", error);
     }
   }
+
+  fitMarkdownTables(container);
 }
 
 async function renderMarkdown(container, markdown) {
   container.innerHTML = markdownToSafeHtml(markdown);
   await enhanceRenderedMarkdown(container);
+}
+
+function markdownTableColumnCount(table) {
+  return Array.from(table.rows).reduce((max, row) => {
+    const count = Array.from(row.cells).reduce((sum, cell) => sum + Math.max(1, cell.colSpan || 1), 0);
+    return Math.max(max, count);
+  }, 0);
+}
+
+function tableCellWeight(cell) {
+  const text = String(cell.textContent || "").replace(/\s+/g, " ").trim();
+  const longestWord = text.split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0);
+  return Math.max(4, Math.min(80, text.length * 0.58 + longestWord * 0.9));
+}
+
+function applyMarkdownTableColumns(table) {
+  const columnCount = markdownTableColumnCount(table);
+  if (!columnCount) return;
+  table.style.setProperty("--markdown-table-columns", String(columnCount));
+
+  const weights = Array(columnCount).fill(4);
+  Array.from(table.rows).forEach((row) => {
+    let columnIndex = 0;
+    Array.from(row.cells).forEach((cell) => {
+      const span = Math.max(1, cell.colSpan || 1);
+      const weight = tableCellWeight(cell) / span;
+      for (let offset = 0; offset < span && columnIndex + offset < weights.length; offset += 1) {
+        weights[columnIndex + offset] = Math.max(weights[columnIndex + offset], weight);
+      }
+      columnIndex += span;
+    });
+  });
+
+  table.querySelector(":scope > colgroup")?.remove();
+  const colgroup = document.createElement("colgroup");
+  const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+  weights.forEach((weight) => {
+    const col = document.createElement("col");
+    col.style.width = `${(weight / total) * 100}%`;
+    colgroup.appendChild(col);
+  });
+  table.insertBefore(colgroup, table.firstChild);
+}
+
+function markdownTableHeaderCells(table) {
+  if (table.tHead?.rows.length) {
+    return Array.from(table.tHead.rows[table.tHead.rows.length - 1].cells);
+  }
+
+  return Array.from(table.rows)
+    .find((row) => Array.from(row.cells).some((cell) => cell.tagName === "TH"))
+    ?.cells || [];
+}
+
+function markdownTableHeaders(table) {
+  const labels = [];
+  Array.from(markdownTableHeaderCells(table)).forEach((cell) => {
+    const label = String(cell.textContent || "").replace(/\s+/g, " ").trim();
+    const span = Math.max(1, cell.colSpan || 1);
+    for (let index = 0; index < span; index += 1) {
+      labels.push(label || `Column ${labels.length + 1}`);
+    }
+  });
+  return labels;
+}
+
+function applyMarkdownTableLabels(table) {
+  const labels = markdownTableHeaders(table);
+  const columnCount = markdownTableColumnCount(table);
+  while (labels.length < columnCount) {
+    labels.push(`Column ${labels.length + 1}`);
+  }
+  if (!labels.length) return;
+
+  const headerCells = new Set(Array.from(markdownTableHeaderCells(table)));
+  Array.from(table.rows).forEach((row) => {
+    let columnIndex = 0;
+    Array.from(row.cells).forEach((cell) => {
+      const span = Math.max(1, cell.colSpan || 1);
+      if (!headerCells.has(cell)) {
+        cell.dataset.label = labels[columnIndex] || `Column ${columnIndex + 1}`;
+      }
+      columnIndex += span;
+    });
+  });
+}
+
+function wrapMarkdownTable(table) {
+  if (table.parentElement?.classList.contains("markdown-table-wrap")) return table.parentElement;
+  const wrapper = document.createElement("div");
+  wrapper.className = "markdown-table-wrap";
+  table.parentNode.insertBefore(wrapper, table);
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
+function markdownTableFits(table, wrapper) {
+  const allowance = 1;
+  if (table.scrollWidth > wrapper.clientWidth + allowance) return false;
+  return Array.from(table.cells || table.querySelectorAll("th, td"))
+    .every((cell) => cell.scrollWidth <= cell.clientWidth + allowance);
+}
+
+function fitMarkdownTables(container) {
+  container.querySelectorAll("table").forEach((table) => {
+    if (table.closest("pre")) return;
+
+    const wrapper = wrapMarkdownTable(table);
+    applyMarkdownTableLabels(table);
+    applyMarkdownTableColumns(table);
+    if (!wrapper.clientWidth) return;
+
+    if (!table.dataset.baseFontSize) {
+      table.dataset.baseFontSize = String(parseFloat(getComputedStyle(table).fontSize) || 16);
+    }
+
+    const baseFontSize = parseFloat(table.dataset.baseFontSize) || 16;
+    const minimumFontSize = 7;
+    table.style.fontSize = `${baseFontSize}px`;
+
+    if (styleMobileMedia?.matches) return;
+
+    if (markdownTableFits(table, wrapper)) return;
+
+    let low = minimumFontSize;
+    let high = baseFontSize;
+    let best = low;
+
+    for (let index = 0; index < 10; index += 1) {
+      const mid = (low + high) / 2;
+      table.style.fontSize = `${mid}px`;
+      if (markdownTableFits(table, wrapper)) {
+        best = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    table.style.fontSize = `${Math.max(minimumFontSize, best - 0.25)}px`;
+  });
+}
+
+function scheduleMarkdownTableFit() {
+  cancelAnimationFrame(markdownTableFitFrame);
+  markdownTableFitFrame = requestAnimationFrame(() => {
+    document.querySelectorAll(".rendered").forEach((node) => fitMarkdownTables(node));
+  });
 }
 
 function addDiagramZoomControl(node) {
@@ -2548,6 +2714,7 @@ function updateAllCardStatuses() {
   el.allCardsList.querySelectorAll(".all-card").forEach((node) => {
     const status = state.statusById[node.dataset.cardId] || "";
     node.dataset.status = status;
+    setCardStatusBadge(node.querySelector("[data-all-status-label]"), status);
     node.querySelectorAll("[data-all-status]").forEach((button) => {
       button.classList.toggle("is-active", button.dataset.allStatus === status);
     });
@@ -2683,7 +2850,10 @@ async function renderAllCards() {
     item.cardData = card;
     item.innerHTML = `
       <div class="all-card-top">
-        <span class="all-card-index">${index + 1}</span>
+        <div class="all-card-state">
+          <span class="all-card-index">${index + 1}</span>
+          <span class="all-card-status-label" data-all-status-label data-status="">Uncategorized</span>
+        </div>
         <div class="all-card-actions" aria-label="Card controls">
           <button class="all-card-add" type="button" data-all-add-after title="Insert card after this one" aria-label="Insert card after this one">+</button>
           <button class="all-card-edit" type="button" data-all-edit-current title="Edit question" aria-label="Edit question">&#9998;</button>
@@ -2729,10 +2899,30 @@ function openAllCardsPanel() {
   renderAllCards();
 }
 
+function cardStatusLabel(status) {
+  if (status === "known") return "Known";
+  if (status === "review") return "Review";
+  return "Uncategorized";
+}
+
+function setCardStatusBadge(badge, status) {
+  if (!badge) return;
+  badge.dataset.status = status;
+  badge.textContent = cardStatusLabel(status);
+}
+
+function updateActiveCardStatusBadges() {
+  const card = state.previewCard || state.cards[state.current] || null;
+  const status = card ? normalizeCardStatus(state.statusById[card.id]) : "";
+  setCardStatusBadge(el.questionStatusBadge, status);
+  setCardStatusBadge(el.answerStatusBadge, status);
+}
+
 function updateMeta() {
   const total = state.cards.length;
   const finished = Math.min(state.current, total);
   syncResults();
+  updateActiveCardStatusBadges();
   el.deckTitle.textContent = state.deckTitle;
   el.deckTitle.title = state.deckTitle;
   el.deckTitleWrap.hidden = !state.deckTitle;
@@ -3151,10 +3341,11 @@ function fitLiveQuestion() {
   const gapHeight = Math.max(visibleItems.length - 1, 0) * rowGap;
   const lineHeight = parseFloat(settings.questionLineHeight) || parseFloat(styleDefaults.questionLineHeight) || 1.18;
   const fillRatio = Math.min(Math.max((parseFloat(settings.questionFillPercent) || parseFloat(styleDefaults.questionFillPercent)) / 100, 0.1), 0.95);
+  const maxQuestionFontSize = numericStyleValue(settings.questionMaxFontSize) ?? numericStyleValue(styleDefaults.questionMaxFontSize) ?? 64;
   const availableHeight = Math.max(face.clientHeight - paddingY - occupiedHeight - gapHeight, 1);
   const availableWidth = Math.max(face.clientWidth - paddingX, 1);
   const targetHeight = Math.max(availableHeight * fillRatio, 1);
-  const searchCeiling = Math.max(16, Math.min(360, targetHeight / Math.max(lineHeight, 0.1) * 2.2, availableWidth * 1.6));
+  const searchCeiling = Math.max(1, Math.min(maxQuestionFontSize, 360, targetHeight / Math.max(lineHeight, 0.1) * 2.2, availableWidth * 1.6));
   let low = 1;
   let high = searchCeiling;
   let best = low;
@@ -3216,7 +3407,7 @@ function fitLiveQuestion() {
     }
   }
 
-  node.style.setProperty("--question-fit-font-size", `${Math.max(1, best - 0.5)}px`);
+  node.style.setProperty("--question-fit-font-size", `${Math.min(maxQuestionFontSize, Math.max(1, best - 0.5))}px`);
 }
 
 function scheduleLiveQuestionFit() {
@@ -3235,11 +3426,12 @@ function fitPrintNode(node) {
   const answerFontSize = parseFloat(settings.answerFontSize) || parseFloat(styleDefaults.answerFontSize);
   const fillRatio = Math.min(Math.max((parseFloat(settings.questionFillPercent) || parseFloat(styleDefaults.questionFillPercent)) / 100, 0.1), 0.95);
   const lineHeight = parseFloat(settings.questionLineHeight) || parseFloat(styleDefaults.questionLineHeight) || 1.18;
-  const questionUpper = Math.max(8, Math.min(220, node.clientHeight * fillRatio / Math.max(lineHeight, 0.1), Math.max(node.clientWidth, 1)));
+  const maxQuestionFontSize = numericStyleValue(settings.questionMaxFontSize) ?? numericStyleValue(styleDefaults.questionMaxFontSize) ?? 64;
+  const questionUpper = Math.max(1, Math.min(maxQuestionFontSize, 220, node.clientHeight * fillRatio / Math.max(lineHeight, 0.1), Math.max(node.clientWidth, 1)));
 
   if (!shouldGrow && contentFits(node)) return;
 
-  let low = 4;
+  let low = shouldGrow ? 1 : 4;
   let high = shouldGrow ? questionUpper : Math.max(4, answerFontSize);
   let best = low;
 
@@ -3880,6 +4072,7 @@ function stopDiagramPan(event) {
 }
 
 function registerServiceWorker() {
+  if (!pwaAssetsSupported()) return;
   if (!("serviceWorker" in navigator)) return;
   if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
 
@@ -3888,6 +4081,19 @@ function registerServiceWorker() {
       console.warn("Service worker registration failed", error);
     });
   });
+}
+
+function pwaAssetsSupported() {
+  return location.protocol === "http:" || location.protocol === "https:";
+}
+
+function installManifestLink() {
+  if (!pwaAssetsSupported() || document.querySelector('link[rel="manifest"]')) return;
+
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = "manifest.webmanifest";
+  document.head.appendChild(link);
 }
 
 function setDeckMenuOpen(open) {
@@ -4172,7 +4378,10 @@ window.addEventListener("afterprint", () => {
   printTitleBeforeExport = "";
 });
 
-window.addEventListener("resize", scheduleLiveQuestionFit);
+window.addEventListener("resize", () => {
+  scheduleMarkdownTableFit();
+  scheduleLiveQuestionFit();
+});
 if (styleMobileMedia?.addEventListener) {
   styleMobileMedia.addEventListener("change", handleStyleEnvironmentChange);
 } else if (styleMobileMedia?.addListener) {
@@ -4189,6 +4398,7 @@ setTheme("dark");
 setStatus("");
 showCard();
 loadStyleFromWeb();
+installManifestLink();
 registerServiceWorker();
 
 function toggleEditMode(side) {

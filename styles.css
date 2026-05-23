@@ -27,10 +27,12 @@
   --answer-font-family: var(--app-font-family);
   --content-font-size: 18px;
   --content-line-height: 1.58;
+  --raw-markdown-font-size: 16px;
   --answer-font-size: 23px;
   --answer-line-height: 1.58;
   --answer-font-weight: 400;
   --question-fill: 58%;
+  --question-max-font-size: 64px;
   --question-line-height: 1.18;
   --question-align: center;
   --question-justify-items: center;
@@ -837,7 +839,7 @@ button:disabled {
 
 .card-question .rendered {
   font-family: var(--question-font-family);
-  font-size: var(--question-fit-font-size, var(--content-font-size));
+  font-size: min(var(--question-fit-font-size, var(--content-font-size)), var(--question-max-font-size));
   line-height: var(--question-line-height);
   font-weight: var(--question-font-weight);
   padding: var(--question-padding);
@@ -1066,18 +1068,38 @@ button:disabled {
   color: var(--muted);
 }
 
-.rendered table {
-  display: block;
+.markdown-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin: 0.9em 0;
   overflow-x: auto;
-  border-collapse: collapse;
   overscroll-behavior-x: contain;
   touch-action: pan-x pan-y;
+}
+
+.rendered table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  text-align: left;
 }
 
 .rendered th,
 .rendered td {
   border: 1px solid var(--line);
   padding: 8px 10px;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: auto;
+  line-height: 1.42;
+  vertical-align: top;
+}
+
+.rendered th {
+  background: color-mix(in srgb, var(--panel-2) 54%, transparent);
+  color: color-mix(in srgb, var(--text) 88%, var(--accent));
+  font-weight: 900;
 }
 
 .rendered .mermaid,
@@ -1703,6 +1725,7 @@ textarea {
   min-height: var(--textarea-min-height);
   resize: vertical;
   padding: 11px;
+  font-size: var(--raw-markdown-font-size);
   line-height: 1.5;
 }
 
@@ -1916,6 +1939,18 @@ textarea {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 900;
+}
+
+.all-card-state {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.all-card-status-label {
+  min-height: 24px;
+  font-size: 0.64rem;
 }
 
 .all-card-actions {
@@ -2461,7 +2496,7 @@ textarea {
   }
 
   .card-question .rendered {
-    font-size: clamp(16px, var(--question-fit-font-size, var(--content-font-size)), 26px);
+    font-size: min(var(--question-fit-font-size, var(--content-font-size)), var(--question-max-font-size));
     padding-inline: 6px;
   }
 
@@ -2474,6 +2509,52 @@ textarea {
   .card-answer .rendered {
     font-size: var(--answer-font-size);
     line-height: var(--answer-line-height);
+  }
+
+  .markdown-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--panel) 54%, transparent);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .rendered table {
+    display: table;
+    width: max-content;
+    min-width: max(100%, calc(var(--markdown-table-columns, 4) * 11rem));
+    max-width: none;
+    border-collapse: collapse;
+    table-layout: auto;
+    font-size: min(0.92em, var(--content-font-size));
+    text-align: left !important;
+  }
+
+  .rendered table col {
+    width: auto !important;
+  }
+
+  .rendered table th,
+  .rendered table td {
+    display: table-cell;
+    min-width: 10rem;
+    padding: 9px 11px;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
+    vertical-align: top;
+  }
+
+  .rendered table th:first-child,
+  .rendered table td:first-child {
+    min-width: 6.5rem;
+  }
+
+  .rendered table th {
+    white-space: normal;
+    font-weight: 900;
   }
 
   .face-label {
@@ -2836,12 +2917,15 @@ textarea {
   .fit-content table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
   }
 
   .fit-content th,
   .fit-content td {
     border: 1px solid #ddd;
     padding: 6px 8px;
+    overflow-wrap: anywhere;
+    vertical-align: top;
   }
 
   .fit-content svg {
@@ -2866,10 +2950,47 @@ textarea {
   margin-bottom: 0;
 }
 
+.face-label-row,
 .face-header > div {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.face-label-row {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.card-status-badge,
+.all-card-status-label {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+  color: var(--muted);
+  padding: 0 9px;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.card-status-badge[data-status="review"],
+.all-card-status-label[data-status="review"] {
+  border-color: color-mix(in srgb, var(--review) 58%, var(--line));
+  background: color-mix(in srgb, var(--review) 18%, var(--panel));
+  color: var(--review);
+}
+
+.card-status-badge[data-status="known"],
+.all-card-status-label[data-status="known"] {
+  border-color: color-mix(in srgb, var(--known) 58%, var(--line));
+  background: color-mix(in srgb, var(--known) 18%, var(--panel));
+  color: var(--known);
 }
 
 .edit-card-btn {
@@ -2933,7 +3054,7 @@ textarea {
   min-height: 100px;
   resize: none;
   font-family: var(--app-font-family);
-  font-size: var(--content-font-size);
+  font-size: var(--raw-markdown-font-size);
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--input-radius);
