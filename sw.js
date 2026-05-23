@@ -1,9 +1,8 @@
-const CACHE_NAME = "markdown-flashcards-v20260523-4";
+const CACHE_NAME = "markdown-flashcards-v20260523-6";
 const APP_SHELL = [
   "./",
-  "./index.html",
-  "./styles.css?v=20260523-4",
-  "./app.js?v=20260523-4",
+  "./styles.css?v=20260523-6",
+  "./app.js?v=20260523-6",
   "./manifest.webmanifest",
   "./fevicon.png",
   "./icons/icon-192.png",
@@ -42,10 +41,10 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
+          caches.open(CACHE_NAME).then((cache) => cache.put("./", copy));
           return response;
         })
-        .catch(() => caches.match("./index.html"))
+        .catch(() => caches.match("./"))
     );
     return;
   }

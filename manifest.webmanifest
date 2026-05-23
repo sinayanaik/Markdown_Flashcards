@@ -2,7 +2,7 @@
   "name": "Markdown Flashcards",
   "short_name": "Flashcards",
   "description": "Study Markdown flashcard decks with known and review stacks.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
