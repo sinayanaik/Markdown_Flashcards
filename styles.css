@@ -1147,7 +1147,7 @@ button:disabled {
   touch-action: pan-x pan-y;
 }
 
-.rendered img.zoomable-image {
+.rendered img {
   max-width: var(--visual-max-width, 100%);
   height: auto;
   display: block;
@@ -1170,7 +1170,7 @@ button:disabled {
 
 .diagram-shell .mermaid svg,
 .diagram-shell .nomnoml-diagram svg,
-.diagram-shell img.zoomable-image {
+.diagram-shell img {
   display: block !important;
   margin: 0 auto !important;
   width: var(--visual-max-width, 100%) !important;

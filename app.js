@@ -2420,6 +2420,8 @@ async function enhanceRenderedMarkdown(container) {
     });
   }
 
+  container.querySelectorAll("img").forEach(addDiagramZoomControl);
+
   fitMarkdownTables(container);
 }
 
@@ -2605,18 +2607,23 @@ let currentPanzoom = null;
 
 function openDiagramModal(node) {
   lockPageScroll();
-  el.diagramModalBody.innerHTML = node.innerHTML;
+  el.diagramModalBody.innerHTML = "";
+  if (node.tagName === "IMG") {
+    el.diagramModalBody.appendChild(node.cloneNode(true));
+  } else {
+    el.diagramModalBody.innerHTML = node.innerHTML;
+  }
   el.diagramModal.hidden = false;
   
-  const img = el.diagramModalBody.querySelector("svg");
-  if (img) {
-    currentPanzoom = Panzoom(img, {
+  const content = el.diagramModalBody.querySelector("svg, img");
+  if (content) {
+    currentPanzoom = Panzoom(content, {
         maxScale: 5,
         minScale: 0.1,
         startScale: 1,
         step: 0.3
     });
-    img.parentElement.addEventListener('wheel', currentPanzoom.zoomWithWheel);
+    content.parentElement.addEventListener('wheel', currentPanzoom.zoomWithWheel);
   }
 }
 
