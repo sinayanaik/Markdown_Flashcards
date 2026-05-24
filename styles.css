@@ -922,8 +922,8 @@ button:disabled {
 
 .rendered :is(ul, ol),
 .fit-content :is(ul, ol) {
-  margin: 0.65em 0 0.65em 1.35em;
-  padding-left: 1.1em;
+  margin: 0.65em 0;
+  padding-left: 2.45em;
 }
 
 .rendered ul,
