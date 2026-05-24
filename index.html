@@ -154,47 +154,40 @@
           <button class="icon-button" id="closeImportBtn" type="button" aria-label="Close import panel">&#215;</button>
         </div>
 
-        <div class="import-methods" style="margin-top: 10px;">
-          <!-- New Deck Method -->
-          <div class="import-method-item">
-            <div class="import-method-box">
-              <h3 class="import-method-title">New Deck</h3>
-              <p class="import-method-subtitle">Start with a blank editable flashcard.</p>
-              <button id="newDeckFromImportBtn" type="button" class="import-method-btn">Create New Deck</button>
+        <div class="import-grid">
+          <div class="import-group">
+            <h3 class="import-group-title">Create</h3>
+            <button id="newDeckFromImportBtn" type="button" class="import-action-btn">
+              <span class="import-icon" aria-hidden="true">✨</span>
+              <span>New Deck</span>
+            </button>
+          </div>
+
+          <div class="import-group">
+            <h3 class="import-group-title">Cloud</h3>
+            <button id="openWebDecksFromImportBtn" type="button" class="import-action-btn">
+              <span class="import-icon" aria-hidden="true">☁️</span>
+              <span>Web Decks</span>
+            </button>
+            <div class="url-row-compact">
+              <input id="urlInput" type="url" placeholder="https://... URL" autocomplete="off" class="url-input-compact">
+              <button id="fetchBtn" type="button" class="import-action-btn small-btn" title="Fetch URL">Fetch</button>
             </div>
           </div>
 
-          <!-- URL Import Method -->
-          <div class="import-method-item">
-            <div class="import-method-box">
-              <h3 class="import-method-title">Import via URL</h3>
-              <p class="import-method-subtitle">Fetch raw markdown from a public URL.</p>
-              <div class="url-row" style="display: flex; gap: 8px;">
-                <input id="urlInput" type="url" placeholder="https://..." autocomplete="off">
-                <button id="fetchBtn" type="button" class="import-method-btn" style="width: auto;">Fetch</button>
-              </div>
-            </div>
+          <div class="import-group">
+            <h3 class="import-group-title">Local</h3>
+            <label class="file-pick import-action-btn">
+              <input id="fileInput" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
+              <span class="import-icon" aria-hidden="true">📁</span>
+              <span>Import Deck</span>
+            </label>
+            <label class="file-pick import-action-btn">
+              <input id="fileInputCards" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
+              <span class="import-icon" aria-hidden="true">📄</span>
+              <span>Import Cards</span>
+            </label>
           </div>
-          
-          <!-- Web Decks Import Method -->
-          <div class="import-method-item">
-            <div class="import-method-box">
-              <h3 class="import-method-title">Web Decks</h3>
-              <p class="import-method-subtitle">Load previously synced decks from the web.</p>
-              <button id="openWebDecksFromImportBtn" type="button" class="import-method-btn">Open Web Decks</button>
-            </div>
-          </div>
-        </div>
-
-        <div style="display: flex; gap: 8px; margin-top: 1rem;">
-          <label class="file-pick" style="flex: 1; margin-top: 0;">
-            <input id="fileInput" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
-            <span>Import Deck</span>
-          </label>
-          <label class="file-pick" style="flex: 1; margin-top: 0;">
-            <input id="fileInputCards" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
-            <span>Import Cards</span>
-          </label>
         </div>
 
         <!-- Hidden legacy fields for JS compatibility -->
