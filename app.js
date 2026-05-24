@@ -4081,7 +4081,7 @@ function handleStylePanelTouchStart(event) {
 
 function handleStylePanelTouchMove(event) {
   if (event.touches?.length !== 1) return;
-  if (closestElement(event.target, "input[type='range']")) return;
+  if (closestElement(event.target, "input, button, a, label, textarea, .import-action-btn")) return;
 
   const point = event.touches[0];
   const previousY = state.stylePanelTouchY || point.clientY;
@@ -4223,7 +4223,6 @@ el.webDecksBtn.addEventListener("click", () => {
   closeDeckMenu();
   openWebDecksPanel();
 });
-el.openWebDecksFromImportBtn.addEventListener("click", openWebDecksPanel);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
 el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
 el.styleBtn.addEventListener("click", openStylePanel);

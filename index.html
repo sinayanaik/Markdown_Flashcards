@@ -149,26 +149,14 @@
         <div class="import-head">
           <div>
             <h1>Import notes</h1>
-            <p>Create a deck, import notes, or load a synced web deck.</p>
+            <p>Import local files or fetch a deck via URL.</p>
           </div>
           <button class="icon-button" id="closeImportBtn" type="button" aria-label="Close import panel">&#215;</button>
         </div>
 
         <div class="import-grid">
           <div class="import-group">
-            <h3 class="import-group-title">Create</h3>
-            <button id="newDeckFromImportBtn" type="button" class="import-action-btn">
-              <span class="import-icon" aria-hidden="true">✨</span>
-              <span>New Deck</span>
-            </button>
-          </div>
-
-          <div class="import-group">
-            <h3 class="import-group-title">Cloud</h3>
-            <button id="openWebDecksFromImportBtn" type="button" class="import-action-btn">
-              <span class="import-icon" aria-hidden="true">☁️</span>
-              <span>Web Decks</span>
-            </button>
+            <h3 class="import-group-title">URL</h3>
             <div class="url-row-compact">
               <input id="urlInput" type="url" placeholder="https://... URL" autocomplete="off" class="url-input-compact">
               <button id="fetchBtn" type="button" class="import-action-btn small-btn" title="Fetch URL">Fetch</button>
