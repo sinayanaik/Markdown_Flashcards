@@ -1368,6 +1368,7 @@ function updateStyleControls() {
 
 function applyStyleSettings(rawSettings, options = {}) {
   const settings = normalizeStyleSettings(rawSettings);
+  const activeProfile = state.activeStyleProfile || detectStyleProfile();
   state.styleSettings = settings;
   const appWidthPercent = numericStyleValue(settings.appWidthPercent) ?? 100;
   const appHeightPercent = numericStyleValue(settings.appHeightPercent) ?? 100;
@@ -3873,7 +3874,7 @@ function loadSample() {
   el.sourceInput.value = sampleMarkdown;
   state.importTitleHint = "Sample flashcards";
   setStatus("Sample loaded.");
-  buildCards(state.importTitleHint, append);
+  buildCards(state.importTitleHint);
 }
 
 function currentCardCanMove() {
