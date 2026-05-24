@@ -148,6 +148,7 @@ const defaultStyleProfiles = {
     "cardMaxHeightPercent": "80",
     "questionVerticalAlign": "center",
     "sidePanelWidthPercent": "16",
+    "visualMaxWidthPercent": "90",
     "markdownBoxHeightPercent": "30"
   },
   "desktop": {
@@ -195,6 +196,7 @@ const defaultStyleProfiles = {
     "cardMaxHeightPercent": "84",
     "questionVerticalAlign": "center",
     "sidePanelWidthPercent": "6",
+    "visualMaxWidthPercent": "50",
     "markdownBoxHeightPercent": "30"
   },
   "version": 2
@@ -223,6 +225,7 @@ const styleControlGroups = [
       { key: "cardWidthPercent", label: "Card width %", type: "range", min: 40, max: 100, step: 1, hint: "Flashcard width as a percent of the middle study area." },
       { key: "cardMaxHeightPercent", label: "Card max height %", type: "range", min: 30, max: 100, step: 1, hint: "Maximum flashcard height as a percent of screen height." },
       { key: "modalWidthPercent", label: "Modal width %", type: "range", min: 30, max: 100, step: 1, hint: "Import/Web/Style panel width as a percent of screen width." },
+      { key: "visualMaxWidthPercent", label: "Visual max width %", type: "range", min: 10, max: 100, step: 1, hint: "Maximum width of images, videos, and diagrams as a percent of available space." },
       { key: "markdownBoxHeightPercent", label: "Markdown box height %", type: "range", min: 10, max: 80, step: 1, hint: "Import textarea height as a percent of screen height." }
     ]
   },
@@ -296,6 +299,7 @@ const styleCssVariables = {
   cardWidthPercent: "--card-width-percent",
   cardMaxHeightPercent: "--card-max-height-percent",
   modalWidthPercent: "--modal-width-percent",
+  visualMaxWidthPercent: "--visual-max-width-percent",
   markdownBoxHeightPercent: "--markdown-box-height-percent",
   baseFontSize: "--content-font-size",
   baseLineHeight: "--content-line-height",
@@ -1371,6 +1375,7 @@ function applyStyleSettings(rawSettings, options = {}) {
   const cardWidthPercent = numericStyleValue(settings.cardWidthPercent) ?? 96;
   const cardMaxHeightPercent = numericStyleValue(settings.cardMaxHeightPercent) ?? 74;
   const modalWidthPercent = numericStyleValue(settings.modalWidthPercent) ?? 60;
+  const visualMaxWidthPercent = numericStyleValue(settings.visualMaxWidthPercent) ?? (activeProfile === "mobile" ? 90 : 50);
   const markdownBoxHeightPercent = numericStyleValue(settings.markdownBoxHeightPercent) ?? 30;
 
   const root = document.documentElement;
@@ -1393,6 +1398,7 @@ function applyStyleSettings(rawSettings, options = {}) {
   root.style.setProperty("--card-max-height", `${cardMaxHeightPercent}vh`);
   root.style.setProperty("--card-mobile-max-height", `${cardMaxHeightPercent}dvh`);
   root.style.setProperty("--modal-width", `${modalWidthPercent}vw`);
+  root.style.setProperty("--visual-max-width", `${visualMaxWidthPercent}%`);
   root.style.setProperty("--textarea-min-height", `${markdownBoxHeightPercent}vh`);
 
   if (!el.stylePanel || el.stylePanel.hidden || state.styleEditProfile === state.activeStyleProfile) {
