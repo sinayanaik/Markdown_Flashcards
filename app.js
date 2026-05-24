@@ -513,21 +513,14 @@ async function loadWebDeck(deckId) {
 
     if (cardsError) throw cardsError;
 
-    const usedIds = new Set();
-    const statusById = {};
     const cards = cardsData.map((rawCard, index) => {
       const id = String(rawCard.id || `${index}-${rawCard.question.slice(0, 32)}`);
-      if (rawCard.status) statusById[id] = rawCard.status;
       return { id, question: rawCard.question, answer: rawCard.answer };
     });
 
     state.deckId = deckData.id;
-    state.cards = cards.slice();
     state.masterCards = cards.slice();
-    state.statusById = statusById;
-    state.current = 0;
-    state.previewCard = null;
-    state.flipped = false;
+    resetStudyDeck(state.masterCards);
     state.deckTitle = deckData.title || "";
     state.sourceTitle = deckData.title || "";
     state.importTitleHint = deckData.title || "";
@@ -795,7 +788,7 @@ async function syncDeckToWeb() {
     const deckData = {
       id: state.deckId,
       title: deckTitle,
-      current_card_index: state.current,
+      current_card_index: 0,
       updated_at: new Date().toISOString()
     };
 
@@ -2116,6 +2109,15 @@ function resetResults() {
   state.review = 0;
 }
 
+function resetStudyDeck(cards = state.masterCards) {
+  state.transitionToken += 1;
+  state.cards = cards.slice();
+  state.current = 0;
+  state.previewCard = null;
+  state.flipped = false;
+  resetResults();
+}
+
 function renderBrickList(container, cards, group) {
   container.innerHTML = "";
   cards.forEach((card, index) => {
@@ -3307,13 +3309,11 @@ function buildCards(titleHint = state.importTitleHint || "", append = false) {
     state.cards = state.cards.concat(cards);
     state.masterCards = state.masterCards.concat(cards);
   } else {
-    state.cards = cards;
     state.masterCards = cards.slice();
     state.deckId = null;
-    state.current = 0;
+    resetStudyDeck(state.masterCards);
     state.deckTitle = cards.length ? importTitle || inferDeckTitle(source, titleHint) : "";
     state.sourceTitle = cards.length ? importTitle || state.deckTitle : "";
-    resetResults();
   }
   state.importTitleHint = titleHint;
   closeAllCardsPanel();
@@ -3383,9 +3383,7 @@ function shuffleCards() {
 }
 
 function resetQuiz() {
-  state.cards = state.masterCards.slice();
-  state.current = 0;
-  state.previewCard = null;
+  resetStudyDeck(state.masterCards);
   setStatus("Studying all cards.");
   savePersistedDeck();
   showCard();
@@ -3509,12 +3507,8 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
     state.masterCards = state.masterCards.concat(cards);
     state.statusById = statusById;
   } else {
-    state.cards = cards.slice();
     state.masterCards = cards.slice();
-    state.statusById = statusById;
-    state.current = 0;
-    state.previewCard = null;
-    state.flipped = false;
+    resetStudyDeck(state.masterCards);
     state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
     state.deckId = payload.deckId || null;
     state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
@@ -4005,7 +3999,7 @@ function loadFile(file, append = false) {
       try {
         loadDeckSnapshot(JSON.parse(text), file.name, append);
         el.sourceInput.value = "";
-        setStatus(`Loaded ${state.masterCards.length} card${state.masterCards.length === 1 ? "" : "s"} with saved markers from ${file.name}.`);
+        setStatus(`Loaded ${state.masterCards.length} card${state.masterCards.length === 1 ? "" : "s"} from ${file.name}.`);
         closeImportPanel();
       } catch (error) {
         setStatus("Could not read this flashcard JSON export.", "error");
@@ -4430,9 +4424,7 @@ function createNewDeck() {
   state.sourceTitle = "New Deck";
   state.importTitleHint = "New Deck";
   state.masterCards = [createBlankCard()];
-  state.cards = [...state.masterCards];
-  state.current = 0;
-  resetResults();
+  resetStudyDeck(state.masterCards);
   savePersistedDeck();
   closeImportPanel();
   closeAllCardsPanel();
