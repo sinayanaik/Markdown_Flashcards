@@ -1608,10 +1608,12 @@ function openWebDecksPanel() {
 }
 
 function closeImportPanel() {
-  if (state.cards.length) {
-    el.importPanel.classList.remove("is-open");
-    unlockPageScroll();
+  if (state.cards.length === 0) {
+    createNewDeck();
+    return;
   }
+  el.importPanel.classList.remove("is-open");
+  unlockPageScroll();
 }
 
 function normalizeMarkdown(text) {
@@ -4203,6 +4205,9 @@ if (document.getElementById("refreshWebDecksBtn")) document.getElementById("refr
 el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
 el.fetchBtn.addEventListener("click", fetchUrl);
+el.urlInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") fetchUrl();
+});
 if (el.deckMenuBtn) {
   el.deckMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
