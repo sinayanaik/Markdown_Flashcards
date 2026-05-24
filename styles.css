@@ -2225,6 +2225,184 @@ textarea {
   display: none;
 }
 
+.all-cards-shell {
+  width: min(1320px, 100%);
+}
+
+.all-cards-list {
+  gap: 8px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 28%),
+    color-mix(in srgb, var(--panel-2) 44%, transparent);
+}
+
+.cornell-card {
+  display: grid;
+  min-height: 108px;
+  grid-template-columns: clamp(58px, 9vw, 104px) minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.cornell-card .cornell-question-rail {
+  position: relative;
+  display: block;
+  border-right: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent),
+    color-mix(in srgb, var(--panel-2) 78%, var(--card));
+  color: var(--text);
+  padding: 12px 8px;
+  overflow: hidden;
+}
+
+.cornell-card.is-flipped .all-card-question {
+  display: grid;
+}
+
+.cornell-card .cornell-question-rail .rendered {
+  position: absolute;
+  top: calc(50% + 28px);
+  left: 50%;
+  display: block;
+  width: max-content;
+  max-width: none;
+  min-width: max-content;
+  overflow: visible;
+  padding: 0;
+  color: inherit;
+  font-size: clamp(0.86rem, 1.8vw, 1.05rem);
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: start;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  white-space: nowrap;
+}
+
+.cornell-card .cornell-question-rail .rendered > * {
+  display: inline;
+  margin: 0;
+}
+
+.cornell-card .cornell-question-rail .rendered a {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.cornell-row-number {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 1;
+  display: inline-grid;
+  min-width: 28px;
+  min-height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--card));
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  transform: translateX(-50%);
+}
+
+.cornell-card .cornell-answer-cell {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 10px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card-answer) 72%, transparent), transparent 180px),
+    var(--card);
+  padding: 12px;
+}
+
+.cornell-row-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cornell-status {
+  display: inline-grid;
+  min-height: 26px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--panel-2) 78%, transparent);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cornell-status[data-status="known"] {
+  border-color: color-mix(in srgb, var(--known) 50%, var(--line));
+  background: color-mix(in srgb, var(--known) 14%, transparent);
+  color: var(--known);
+}
+
+.cornell-status[data-status="review"] {
+  border-color: color-mix(in srgb, var(--review) 50%, var(--line));
+  background: color-mix(in srgb, var(--review) 12%, transparent);
+  color: var(--review);
+}
+
+.cornell-card .cornell-answer-body {
+  display: none;
+  min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  padding-top: 10px;
+}
+
+.cornell-card.is-flipped .cornell-answer-body {
+  display: block;
+}
+
+.cornell-answer-cue {
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.cornell-card.is-flipped .cornell-answer-cue {
+  display: none;
+}
+
+.cornell-card.is-editing .all-card-editor {
+  grid-column: 1 / -1;
+  padding: 12px;
+}
+
+.cornell-card.is-editing .all-card-question,
+.cornell-card.is-editing .all-card-answer {
+  display: none !important;
+}
+
+.cornell-card .rendered table {
+  table-layout: fixed;
+}
+
+.cornell-card .rendered th,
+.cornell-card .rendered td {
+  overflow-wrap: anywhere;
+}
+
 .print-root.is-preparing {
   position: fixed;
   top: 0;
@@ -2236,6 +2414,223 @@ textarea {
   font-family: var(--app-font-family);
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
+}
+
+.print-root.is-preview {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: block;
+  overflow: auto;
+  background: #e9ece8;
+  color: #17201c;
+  font-family: var(--app-font-family);
+  padding: 18px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.print-preview-actions {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  width: min(1123px, 100%);
+  margin: 0 auto 12px;
+  border: 1px solid rgba(28, 44, 38, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 8px;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.14);
+}
+
+.print-preview-actions button {
+  min-height: 38px;
+  border: 1px solid #cdd6d1;
+  border-radius: 8px;
+  background: #fff;
+  color: #17201c;
+  padding: 0 14px;
+  font-weight: 900;
+}
+
+.print-preview-actions [data-print-now] {
+  border-color: #16796c;
+  background: #16796c;
+  color: #fff;
+}
+
+.cornell-print-document {
+  width: min(1123px, 100%);
+  margin: 0 auto;
+  background: #fffdf8;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.22);
+}
+
+.cornell-print-cover {
+  display: flex;
+  align-items: end;
+  gap: 24px;
+  border-bottom: 4px solid #16796c;
+  background:
+    linear-gradient(135deg, rgba(22, 121, 108, 0.14), transparent 58%),
+    #fffdf8;
+  padding: 28px 32px 24px;
+}
+
+.cornell-print-cover h1 {
+  margin: 4px 0 6px;
+  color: #111815;
+  font-size: 34px;
+  line-height: 1.05;
+}
+
+.cornell-print-cover p {
+  margin: 0;
+  color: #63706a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cornell-print-kicker {
+  color: #16796c !important;
+  font-size: 12px !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cornell-print-badge {
+  display: grid;
+  min-width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 2px solid #16796c;
+  border-radius: 50%;
+  color: #0d5e53;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.cornell-print-table {
+  display: grid;
+  gap: 0;
+  padding: 18px;
+}
+
+.cornell-print-row {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  border: 1px solid #d8d4c8;
+  border-bottom: 0;
+  background: #fff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cornell-print-row:last-child {
+  border-bottom: 1px solid #d8d4c8;
+}
+
+.cornell-print-row.is-oversize {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+.cornell-print-row .cornell-question-rail {
+  position: relative;
+  display: block;
+  border-right: 1px solid #b9ccc6;
+  background: #eaf7f3;
+  padding: 12px 8px;
+  overflow: hidden;
+}
+
+.cornell-print-row .cornell-question-rail .rendered {
+  position: absolute;
+  top: calc(50% + 28px);
+  left: 50%;
+  display: block;
+  width: max-content;
+  max-width: none;
+  min-width: max-content;
+  color: #10221e;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.22;
+  overflow: visible;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  white-space: nowrap;
+}
+
+.cornell-print-row .cornell-question-rail .rendered > * {
+  display: inline;
+  margin: 0;
+}
+
+.cornell-print-row .cornell-answer-cell {
+  display: block;
+  min-width: 0;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.cornell-print-row .cornell-row-head {
+  margin-bottom: 10px;
+}
+
+.cornell-print-row .cornell-row-head:empty {
+  display: none;
+  margin-bottom: 0;
+}
+
+.cornell-print-row .cornell-answer-body {
+  display: block;
+  border-top: 1px solid #ebe7dc;
+  padding-top: 10px;
+}
+
+.cornell-print-row .rendered {
+  min-width: 0;
+  color: #17201c;
+  font-size: 16px;
+  line-height: 1.48;
+}
+
+.cornell-print-row .rendered > :first-child {
+  margin-top: 0;
+}
+
+.cornell-print-row .rendered > :last-child {
+  margin-bottom: 0;
+}
+
+.cornell-print-row pre {
+  overflow: visible;
+  white-space: pre-wrap;
+}
+
+.cornell-print-row table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cornell-print-row th,
+.cornell-print-row td {
+  border: 1px solid #d8d4c8;
+  padding: 6px 8px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.cornell-print-row svg,
+.cornell-print-row img {
+  max-width: 100%;
+  height: auto;
+  max-height: 178mm;
+  object-fit: contain;
 }
 
 .print-root.is-preparing .print-page {
@@ -2736,6 +3131,24 @@ textarea {
     padding: 10px;
   }
 
+  .cornell-card {
+    min-height: 96px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .cornell-card .cornell-question-rail {
+    padding: 9px 6px;
+  }
+
+  .cornell-card .cornell-question-rail .rendered {
+    font-size: 0.82rem;
+  }
+
+  .cornell-card .cornell-answer-cell {
+    padding: 10px;
+  }
+
   .all-card-top {
     align-items: flex-start;
     flex-direction: column;
@@ -2962,25 +3375,101 @@ textarea {
 @media print {
   @page {
     size: A4 landscape;
-    margin: 0;
+    margin: 8mm;
   }
 
+  html,
   body {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
     background: #fff;
     color: #000;
   }
 
+  body.modal-scroll-lock {
+    position: static !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+  }
+
   .app-shell,
-  .import-panel {
+  .import-panel,
+  .all-cards-panel,
+  .style-panel,
+  .web-decks-panel,
+  .diagram-modal {
     display: none !important;
   }
 
-  .print-root {
+  .print-root,
+  .print-root.is-preview,
+  .print-root.is-preparing {
+    position: static;
     display: block;
+    width: auto;
+    padding: 0;
+    overflow: visible;
+    background: #fff;
     color: #111;
     font-family: var(--app-font-family);
     font-size: var(--content-font-size);
     line-height: var(--content-line-height);
+  }
+
+  .print-preview-actions {
+    display: none !important;
+  }
+
+  .cornell-print-document {
+    width: auto;
+    margin: 0;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .cornell-print-cover {
+    padding: 0 0 7mm;
+  }
+
+  .cornell-print-cover h1 {
+    font-size: 24pt;
+  }
+
+  .cornell-print-table {
+    padding: 0;
+  }
+
+  .cornell-print-row {
+    grid-template-columns: 20mm minmax(0, 1fr);
+  }
+
+  .cornell-print-row .cornell-question-rail {
+    padding: 4mm 2.4mm;
+  }
+
+  .cornell-print-row .cornell-answer-cell {
+    padding: 4mm 5mm;
+  }
+
+  .cornell-print-row .rendered {
+    font-size: 11pt;
+    line-height: 1.42;
+  }
+
+  .cornell-print-row .cornell-question-rail .rendered {
+    font-size: 10pt;
+  }
+
+  .cornell-print-row svg,
+  .cornell-print-row img {
+    max-width: 100%;
+    max-height: 155mm;
   }
 
   .print-title {

@@ -879,6 +879,8 @@ const swipeConfig = {
 let allCardsRenderId = 0;
 let draggedAllCardId = "";
 let printTitleBeforeExport = "";
+let printPreviewOpen = false;
+const singlePagePrintStyleId = "singlePagePrintStyle";
 let liveQuestionFitFrame = 0;
 let markdownTableFitFrame = 0;
 
@@ -1007,6 +1009,15 @@ function configurePrismLanguages() {
 }
 
 function configureMermaid(theme) {
+  if (theme === "export-light") {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "loose",
+      theme: "default"
+    });
+    return;
+  }
+
   const dark = theme === "dark";
   mermaid.initialize({
     startOnLoad: false,
@@ -3119,7 +3130,11 @@ function saveAllCardEditor(item) {
 }
 
 async function ensureAllCardAnswer(item) {
-  if (item.dataset.answerRendered === "true" || item.dataset.answerRendered === "rendering") return;
+  if (item.dataset.answerRendered === "true") {
+    adjustCornellRowHeight(item);
+    return;
+  }
+  if (item.dataset.answerRendered === "rendering") return;
   const card = item.cardData;
   if (!card) return;
 
@@ -3128,6 +3143,7 @@ async function ensureAllCardAnswer(item) {
   answerView.textContent = "Rendering...";
   await renderMarkdown(answerView, card.answer, true);
   item.dataset.answerRendered = "true";
+  adjustCornellRowHeight(item);
 }
 
 function flipAllCard(item) {
@@ -3135,8 +3151,33 @@ function flipAllCard(item) {
   if (item.classList.contains("is-editing")) return;
   const willShowAnswer = !item.classList.contains("is-flipped");
   item.classList.toggle("is-flipped", willShowAnswer);
-  if (willShowAnswer) ensureAllCardAnswer(item);
+  if (willShowAnswer) {
+    ensureAllCardAnswer(item).then(() => adjustCornellRowHeight(item));
+  } else {
+    adjustCornellRowHeight(item);
+  }
   updateAllCardEditButton(item);
+}
+
+function adjustCornellRowHeight(row) {
+  if (!row) return;
+  row.style.minHeight = "";
+  const rail = row.querySelector(".cornell-question-rail");
+  const question = rail?.querySelector(".rendered");
+  const answerCell = row.querySelector(".cornell-answer-cell");
+  if (!rail || !question || !answerCell) return;
+
+  const railStyle = getComputedStyle(rail);
+  const railPaddingY = (parseFloat(railStyle.paddingTop) || 0) + (parseFloat(railStyle.paddingBottom) || 0);
+  const badgeReserve = 56;
+  const questionHeight = question.scrollWidth + railPaddingY + badgeReserve + 16;
+  const answerHeight = answerCell.scrollHeight;
+  const minHeight = row.classList.contains("cornell-print-row") ? 72 : 108;
+  row.style.minHeight = `${Math.ceil(Math.max(minHeight, questionHeight, answerHeight))}px`;
+}
+
+function adjustCornellRows(container = document) {
+  container.querySelectorAll(".cornell-card, .cornell-print-row").forEach(adjustCornellRowHeight);
 }
 
 async function renderAllCards() {
@@ -3148,36 +3189,10 @@ async function renderAllCards() {
   for (const [index, card] of cards.entries()) {
     if (renderId !== allCardsRenderId) return;
 
-    const item = document.createElement("article");
-    item.className = "all-card";
-    item.tabIndex = 0;
-    item.draggable = true;
-    item.dataset.cardId = card.id;
-    item.dataset.status = state.statusById[card.id] || "";
-    item.dataset.answerRendered = "false";
+    const template = document.createElement("template");
+    template.innerHTML = cornellCardHtml(card, index);
+    const item = template.content.firstElementChild;
     item.cardData = card;
-    item.innerHTML = `
-      <div class="all-card-top">
-        <div class="all-card-state">
-          <span class="all-card-index">${index + 1}</span>
-          <span class="all-card-status-label" data-all-status-label data-status="">Uncategorized</span>
-        </div>
-        <div class="all-card-actions" aria-label="Card controls">
-          <button class="all-card-add" type="button" data-all-add-after title="Insert card after this one" aria-label="Insert card after this one">+</button>
-          <button class="all-card-edit" type="button" data-all-edit-current title="Edit question" aria-label="Edit question">&#9998;</button>
-          <button class="all-card-review" type="button" data-all-status="review">Review</button>
-          <button class="all-card-known" type="button" data-all-status="known">Known</button>
-        </div>
-      </div>
-      <div class="all-card-face all-card-question">
-        <span class="face-label">Question</span>
-        <div class="rendered"></div>
-      </div>
-      <div class="all-card-face all-card-answer">
-        <span class="face-label">Answer</span>
-        <div class="rendered"></div>
-      </div>
-    `;
     const editor = document.createElement("div");
     editor.className = "all-card-editor";
     editor.hidden = true;
@@ -3189,10 +3204,13 @@ async function renderAllCards() {
     `;
     item.appendChild(editor);
     el.allCardsList.appendChild(item);
-    await renderMarkdown(item.querySelector(".all-card-question .rendered"), card.question, true);
+    await enhanceRenderedMarkdown(item.querySelector(".all-card-question .rendered"));
+    adjustCornellRowHeight(item);
   }
 
   updateAllCardStatuses();
+  await afterPaint();
+  adjustCornellRows(el.allCardsList);
 }
 
 function openAllCardsPanel() {
@@ -3778,59 +3796,156 @@ function afterPaint() {
   });
 }
 
+function scopeTitle(scope = "all") {
+  if (scope === "known") return "Known Cards";
+  if (scope === "review") return "Review Cards";
+  if (scope === "uncategorized") return "Uncategorized Cards";
+  return "All Cards";
+}
+
+function closePrintPreview() {
+  printPreviewOpen = false;
+  el.printRoot.classList.remove("is-preparing", "is-preview");
+  el.printRoot.innerHTML = "";
+  el.printRoot.setAttribute("aria-hidden", "true");
+  document.querySelector(`#${singlePagePrintStyleId}`)?.remove();
+  if (printTitleBeforeExport) document.title = printTitleBeforeExport;
+  printTitleBeforeExport = "";
+  unlockPageScroll();
+}
+
+function cardOrdinalLabel(index) {
+  return `Q${index + 1}`;
+}
+
+function cornellCardHtml(card, index, { answerVisible = false, print = false } = {}) {
+  const status = normalizeCardStatus(state.statusById[card.id]);
+  const statusLabel = cardStatusLabel(status);
+  const rowClass = print ? "cornell-print-row" : "all-card cornell-card";
+  const openClass = answerVisible ? " is-flipped" : "";
+  const idAttr = print ? "" : ` data-card-id="${escapeHtml(card.id)}" data-status="${escapeHtml(status)}" data-answer-rendered="${answerVisible ? "true" : "false"}"`;
+  const draggableAttr = print ? "" : ` tabindex="0" draggable="true"`;
+  const answerHtml = answerVisible ? markdownToSafeHtml(card.answer) : "";
+
+  return `
+    <article class="${rowClass}${openClass}"${idAttr}${draggableAttr}>
+      <aside class="cornell-question-rail all-card-question">
+        <span class="cornell-row-number">${cardOrdinalLabel(index)}</span>
+        <div class="rendered">${markdownToSafeHtml(card.question)}</div>
+      </aside>
+      <section class="cornell-answer-cell all-card-answer">
+        <div class="cornell-row-head">
+          ${print ? "" : `<span class="all-card-status-label cornell-status" data-all-status-label data-status="${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>`}
+          ${print ? "" : `
+            <div class="all-card-actions" aria-label="Card controls">
+              <button class="all-card-add" type="button" data-all-add-after title="Insert card after this one" aria-label="Insert card after this one">+</button>
+              <button class="all-card-edit" type="button" data-all-edit-current title="Edit question" aria-label="Edit question">&#9998;</button>
+              <button class="all-card-review" type="button" data-all-status="review">Review</button>
+              <button class="all-card-known" type="button" data-all-status="known">Known</button>
+            </div>
+          `}
+        </div>
+        <div class="cornell-answer-body rendered">${answerHtml}</div>
+        ${print ? "" : `<div class="cornell-answer-cue">Tap row to ${answerVisible ? "hide" : "show"} answer</div>`}
+      </section>
+    </article>
+  `;
+}
+
+function buildCornellPrintDocument(title, cards, scope) {
+  const total = cards.length;
+  const sourceTitle = state.deckTitle || state.sourceTitle || "Flashcards";
+  return `
+    <div class="print-preview-actions" data-print-ui>
+      <button type="button" data-print-close>Close</button>
+      <button type="button" data-print-now>Print / Save PDF</button>
+    </div>
+    <div class="cornell-print-document">
+      <header class="cornell-print-cover">
+        <div>
+          <h1>${escapeHtml(sourceTitle)}</h1>
+          <p>${total} ${total === 1 ? "card" : "cards"} · ${new Date().toLocaleString()}</p>
+        </div>
+      </header>
+      <section class="cornell-print-table" aria-label="${escapeHtml(title)} Cornell notes">
+        ${cards.map((card, index) => cornellCardHtml(card, index, { answerVisible: true, print: true })).join("\n")}
+      </section>
+    </div>
+  `;
+}
+
+function markOversizePrintRows() {
+  const a4LandscapeContentHeightMm = 194;
+  const pageHeight = Math.round(a4LandscapeContentHeightMm * 96 / 25.4);
+  el.printRoot.querySelectorAll(".cornell-print-row").forEach((row) => {
+    row.classList.toggle("is-oversize", row.scrollHeight > pageHeight);
+  });
+}
+
+function installSinglePagePrintStyle() {
+  const documentNode = el.printRoot.querySelector(".cornell-print-document");
+  if (!documentNode) return;
+
+  const widthPx = Math.max(documentNode.getBoundingClientRect().width, 1);
+  const heightPx = Math.max(documentNode.scrollHeight, documentNode.getBoundingClientRect().height, 1);
+  const widthMm = 297;
+  const marginMm = 8;
+  const heightMm = Math.ceil((heightPx / widthPx) * widthMm + marginMm * 2 + 2);
+  let style = document.querySelector(`#${singlePagePrintStyleId}`);
+  if (!style) {
+    style = document.createElement("style");
+    style.id = singlePagePrintStyleId;
+    document.head.appendChild(style);
+  }
+  style.textContent = `
+    @media print {
+      @page { size: ${widthMm}mm ${heightMm}mm; margin: ${marginMm}mm; }
+      .cornell-print-row { break-inside: avoid; page-break-inside: avoid; }
+    }
+  `;
+}
+
 async function exportPdf(scope = "all") {
   const cards = cardsForScope(scope);
-  const title = scope === "known" ? "Known Cards" : scope === "review" ? "Review Cards" : scope === "uncategorized" ? "Uncategorized Cards" : "All Cards";
+  const title = scopeTitle(scope);
   if (!cards.length) {
     setStatus(`No ${scope === "review" ? "review" : scope} cards to export.`, "error");
     return;
   }
 
-  setStatus(`Preparing ${title.toLowerCase()} PDF...`);
+  setStatus(`Preparing ${title.toLowerCase()} Cornell PDF...`);
   el.exportBtn.disabled = true;
   el.printRoot.innerHTML = "";
   el.printRoot.classList.add("is-preparing");
+  el.printRoot.classList.remove("is-preview");
+  el.printRoot.setAttribute("aria-hidden", "true");
   printTitleBeforeExport = document.title;
   document.title = exportBaseName(scope);
   try {
     await afterPaint();
-
-    const pages = [];
-    for (const [index, card] of cards.entries()) {
-      pages.push(`
-        <section class="print-page">
-          <div class="page-kicker">Question ${index + 1}</div>
-          <div class="fit-content fit-question">${markdownToSafeHtml(card.question)}</div>
-        </section>
-        <section class="print-page">
-          <div class="page-kicker">Answer ${index + 1}</div>
-          <div class="fit-content fit-answer">${markdownToSafeHtml(card.answer)}</div>
-        </section>
-      `);
-
-      if ((index + 1) % 20 === 0) {
-        setStatus(`Preparing ${title.toLowerCase()} PDF... ${index + 1}/${cards.length}`);
-        await afterPaint();
-      }
+    el.printRoot.innerHTML = buildCornellPrintDocument(title, cards, scope);
+    configureMermaid("export-light");
+    try {
+      await enhanceRenderedMarkdown(el.printRoot);
+    } finally {
+      configureMermaid(document.documentElement.dataset.theme || "light");
     }
-
-    el.printRoot.innerHTML = `
-      <h1 class="print-title">${escapeHtml(title)}</h1>
-      ${pages.join("\n")}
-    `;
-    await enhanceRenderedMarkdown(el.printRoot);
     await (document.fonts?.ready || Promise.resolve());
     await afterPaint();
 
-    fitPrintPages();
+    adjustCornellRows(el.printRoot);
+    await afterPaint();
+    installSinglePagePrintStyle();
     el.printRoot.classList.remove("is-preparing");
-    window.print();
-    setStatus(`Opened ${title.toLowerCase()} print dialog.`);
+    el.printRoot.classList.add("is-preview");
+    el.printRoot.setAttribute("aria-hidden", "false");
+    printPreviewOpen = true;
+    lockPageScroll();
+    markOversizePrintRows();
+    setStatus(`${title} Cornell PDF preview is ready. Use Print / Save PDF.`);
   } catch (error) {
     console.error("PDF export failed", error);
-    el.printRoot.classList.remove("is-preparing");
-    if (printTitleBeforeExport) document.title = printTitleBeforeExport;
-    printTitleBeforeExport = "";
+    closePrintPreview();
     setStatus("Could not prepare the PDF export.", "error");
   } finally {
     el.exportBtn.disabled = false;
@@ -4618,6 +4733,17 @@ el.exportMenu.addEventListener("click", (event) => {
   if (!button) return;
   handleExportAction(button.dataset.export, button.dataset.scope);
 });
+el.printRoot.addEventListener("click", (event) => {
+  if (event.target.closest("[data-print-close]")) {
+    closePrintPreview();
+    setStatus("Closed PDF preview.");
+    return;
+  }
+  if (event.target.closest("[data-print-now]")) {
+    window.print();
+    setStatus("Opened print dialog. Choose Save as PDF from your browser.");
+  }
+});
 el.themeBtn.addEventListener("click", () => {
   setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
@@ -4708,10 +4834,9 @@ el.diagramModal.addEventListener("click", (event) => {
 });
 
 window.addEventListener("afterprint", () => {
-  el.printRoot.classList.remove("is-preparing");
-  el.printRoot.innerHTML = "";
-  if (printTitleBeforeExport) document.title = printTitleBeforeExport;
-  printTitleBeforeExport = "";
+  if (printPreviewOpen || el.printRoot.classList.contains("is-preparing") || el.printRoot.classList.contains("is-preview")) {
+    closePrintPreview();
+  }
 });
 
 window.addEventListener("resize", () => {
