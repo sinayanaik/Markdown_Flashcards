@@ -1501,7 +1501,6 @@ async function loadStyleFromWeb(force = false) {
     }
 
     setStyleProfiles(data.settings);
-    localStorage.setItem("flashcards_style_cache", JSON.stringify(data.settings));
     applyActiveStyleSettings({ force: true });
     state.styleTouched = false;
     updateStyleControls();
@@ -1537,7 +1536,6 @@ async function syncStyleToWeb() {
       }, { onConflict: "id" });
 
     if (error) throw error;
-    localStorage.setItem("flashcards_style_cache", JSON.stringify(settings));
     state.styleTouched = false;
     setStyleStatus("Style synced");
     setStatus("Style synced to web.");
@@ -3236,6 +3234,7 @@ function clearBrowserPersistence() {
     localStorage.removeItem(deckStorageKey);
     localStorage.removeItem(styleStorageKey);
     localStorage.removeItem(themeStorageKey);
+    localStorage.removeItem("flashcards_style_cache");
   } catch (error) {
     console.warn("Could not clear browser persistence", error);
   }
@@ -4437,16 +4436,7 @@ if (styleMobileMedia?.addEventListener) {
 }
 
 clearBrowserPersistence();
-try {
-  const cachedStyle = localStorage.getItem("flashcards_style_cache");
-  if (cachedStyle) {
-    setStyleProfiles(JSON.parse(cachedStyle));
-  } else {
-    setStyleProfiles({ desktop: styleDefaults, mobile: styleDefaults });
-  }
-} catch (error) {
-  setStyleProfiles({ desktop: styleDefaults, mobile: styleDefaults });
-}
+setStyleProfiles({ desktop: styleDefaults, mobile: styleDefaults });
 applyActiveStyleSettings({ force: true });
 setTheme("dark");
 setStatus("");
