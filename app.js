@@ -3443,10 +3443,9 @@ function fitLiveQuestion() {
 
   const fits = () => {
     const contentSize = questionContentSize();
-    return contentSize.width <= Math.max(node.clientWidth, availableWidth) + 1
-      && node.scrollWidth <= availableWidth + 1
-      && contentSize.height <= targetHeight + 1
-      && contentSize.height <= availableHeight + 1;
+    return contentSize.width <= Math.max(node.clientWidth, availableWidth) + 4
+      && contentSize.height <= targetHeight + 2
+      && contentSize.height <= availableHeight + 2;
   };
 
   for (let index = 0; index < 14; index += 1) {
