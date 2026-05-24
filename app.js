@@ -880,6 +880,7 @@ let allCardsRenderId = 0;
 let draggedAllCardId = "";
 let printTitleBeforeExport = "";
 let printPreviewOpen = false;
+let allCardsAnswersVisible = false;
 const singlePagePrintStyleId = "singlePagePrintStyle";
 let liveQuestionFitFrame = 0;
 let markdownTableFitFrame = 0;
@@ -913,6 +914,7 @@ const el = {
   allCardsPanel: document.querySelector("#allCardsPanel"),
   allCardsList: document.querySelector("#allCardsList"),
   allCardsSummary: document.querySelector("#allCardsSummary"),
+  toggleAllAnswersBtn: document.querySelector("#toggleAllAnswersBtn"),
   closeAllCardsBtn: document.querySelector("#closeAllCardsBtn"),
   styleBtn: document.querySelector("#styleBtn"),
   stylePanel: document.querySelector("#stylePanel"),
@@ -3052,6 +3054,7 @@ function closeAllCardEditor(item) {
   item.classList.remove("is-editing");
   item.draggable = true;
   updateAllCardEditButton(item);
+  adjustCornellRowHeight(item);
 }
 
 function closeAllCardEditors(exceptItem = null) {
@@ -3087,11 +3090,13 @@ function openAllCardEditor(item, side = allCardVisibleSide(item)) {
   closeAllCardEditors(item);
   item.classList.add("is-editing");
   item.draggable = false;
+  if (side === "answer") item.classList.add("is-flipped");
   editor.hidden = false;
   editor.dataset.side = side;
   editor.querySelector("[data-all-edit-label]").textContent = side === "answer" ? "Answer" : "Question";
   editor.querySelector("[data-all-edit-value]").value = side === "answer" ? card.answer : card.question;
   updateAllCardEditButton(item);
+  adjustCornellRowHeight(item);
   editor.querySelector("[data-all-edit-value]").focus();
 }
 
@@ -3180,17 +3185,41 @@ function adjustCornellRows(container = document) {
   container.querySelectorAll(".cornell-card, .cornell-print-row").forEach(adjustCornellRowHeight);
 }
 
+function updateAllAnswersToggleButton() {
+  if (!el.toggleAllAnswersBtn) return;
+  el.toggleAllAnswersBtn.textContent = allCardsAnswersVisible ? "Hide answers" : "Show answers";
+  el.toggleAllAnswersBtn.setAttribute("aria-pressed", allCardsAnswersVisible ? "true" : "false");
+}
+
+async function setAllCardsAnswersVisible(visible) {
+  allCardsAnswersVisible = Boolean(visible);
+  updateAllAnswersToggleButton();
+
+  const rows = Array.from(el.allCardsList.querySelectorAll(".cornell-card"));
+  for (const row of rows) {
+    row.classList.toggle("is-flipped", allCardsAnswersVisible);
+    if (allCardsAnswersVisible) {
+      await ensureAllCardAnswer(row);
+    } else {
+      adjustCornellRowHeight(row);
+    }
+  }
+  await afterPaint();
+  adjustCornellRows(el.allCardsList);
+}
+
 async function renderAllCards() {
   const cards = state.masterCards;
   const renderId = allCardsRenderId;
   el.allCardsList.innerHTML = "";
   el.allCardsSummary.textContent = `${cards.length} ${cards.length === 1 ? "card" : "cards"}`;
+  updateAllAnswersToggleButton();
 
   for (const [index, card] of cards.entries()) {
     if (renderId !== allCardsRenderId) return;
 
     const template = document.createElement("template");
-    template.innerHTML = cornellCardHtml(card, index);
+    template.innerHTML = cornellCardHtml(card, index, { answerVisible: allCardsAnswersVisible });
     const item = template.content.firstElementChild;
     item.cardData = card;
     const editor = document.createElement("div");
@@ -3202,9 +3231,12 @@ async function renderAllCards() {
         <textarea data-all-edit-value spellcheck="false"></textarea>
       </label>
     `;
-    item.appendChild(editor);
+    item.querySelector(".cornell-answer-cell").appendChild(editor);
     el.allCardsList.appendChild(item);
     await enhanceRenderedMarkdown(item.querySelector(".all-card-question .rendered"));
+    if (allCardsAnswersVisible) {
+      await enhanceRenderedMarkdown(item.querySelector(".cornell-answer-body"));
+    }
     adjustCornellRowHeight(item);
   }
 
@@ -3903,6 +3935,112 @@ function installSinglePagePrintStyle() {
       .cornell-print-row { break-inside: avoid; page-break-inside: avoid; }
     }
   `;
+}
+
+function standalonePrintStyles() {
+  const links = Array.from(document.querySelectorAll('link[rel="stylesheet"][href]'))
+    .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
+    .join("\n");
+  const singlePageStyle = document.querySelector(`#${singlePagePrintStyleId}`)?.textContent || "";
+  return `
+    ${links}
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #fff;
+      }
+      body {
+        padding: 0;
+      }
+      .print-root,
+      .print-root.is-preview,
+      .print-root.is-preparing {
+        position: static !important;
+        display: block !important;
+        width: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        background: #fff !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+      }
+      .cornell-print-document {
+        width: auto !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+      }
+      .print-preview-actions,
+      [data-print-ui] {
+        display: none !important;
+      }
+      @media screen {
+        body {
+          padding: 10px;
+        }
+      }
+      ${singlePageStyle}
+    </style>
+  `;
+}
+
+function standalonePrintDocumentHtml() {
+  const documentNode = el.printRoot.querySelector(".cornell-print-document");
+  if (!documentNode) return "";
+  return `<!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <base href="${escapeHtml(document.baseURI)}">
+        <title>${escapeHtml(document.title || "Flashcards PDF")}</title>
+        ${standalonePrintStyles()}
+      </head>
+      <body>
+        <section class="print-root is-preview" aria-label="Cornell PDF export">
+          ${documentNode.outerHTML}
+        </section>
+        <script>
+          (() => {
+            const printWhenReady = () => {
+              const waitForImages = Promise.all(Array.from(document.images).map((img) => {
+                if (img.complete) return Promise.resolve();
+                return new Promise((resolve) => {
+                  img.addEventListener("load", resolve, { once: true });
+                  img.addEventListener("error", resolve, { once: true });
+                });
+              }));
+              Promise.all([document.fonts ? document.fonts.ready : Promise.resolve(), waitForImages])
+                .then(() => setTimeout(() => window.print(), 250));
+            };
+            if (document.readyState === "complete") {
+              printWhenReady();
+            } else {
+              window.addEventListener("load", printWhenReady, { once: true });
+            }
+          })();
+        <\/script>
+      </body>
+    </html>`;
+}
+
+function openStandalonePrintDocument() {
+  const html = standalonePrintDocumentHtml();
+  if (!html) {
+    setStatus("PDF preview is not ready yet.", "error");
+    return;
+  }
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    setStatus("Could not open the print page. Allow pop-ups, then try Print / Save PDF again.", "error");
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  setStatus("Opened a dedicated print page. Choose Save as PDF there.");
 }
 
 async function exportPdf(scope = "all") {
@@ -4677,6 +4815,9 @@ el.diagramModalBody.addEventListener("pointerup", handleDiagramPointerEnd);
 el.diagramModalBody.addEventListener("pointercancel", handleDiagramPointerEnd);
 
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
+el.toggleAllAnswersBtn?.addEventListener("click", () => {
+  setAllCardsAnswersVisible(!allCardsAnswersVisible);
+});
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
 el.allCardsList.addEventListener("click", (event) => {
   const addAfterButton = event.target.closest("[data-all-add-after]");
@@ -4740,8 +4881,7 @@ el.printRoot.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-print-now]")) {
-    window.print();
-    setStatus("Opened print dialog. Choose Save as PDF from your browser.");
+    openStandalonePrintDocument();
   }
 });
 el.themeBtn.addEventListener("click", () => {

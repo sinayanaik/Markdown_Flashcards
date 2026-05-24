@@ -1992,6 +1992,29 @@ textarea {
   font-weight: 800;
 }
 
+.all-cards-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.all-answers-toggle {
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-strong);
+  padding: 0 12px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.all-answers-toggle[aria-pressed="true"] {
+  background: var(--accent);
+  color: #05110e;
+}
+
 .all-cards-list {
   display: grid;
   align-content: start;
@@ -2179,7 +2202,7 @@ textarea {
   margin-bottom: 8px;
 }
 
-.all-card.is-editing .all-card-face {
+.all-card.is-editing:not(.cornell-card) .all-card-face {
   display: none;
 }
 
@@ -2241,6 +2264,7 @@ textarea {
   min-height: 108px;
   grid-template-columns: clamp(58px, 9vw, 104px) minmax(0, 1fr);
   gap: 0;
+  border: 3px double color-mix(in srgb, var(--accent) 58%, var(--line));
   overflow: hidden;
   padding: 0;
 }
@@ -2248,7 +2272,7 @@ textarea {
 .cornell-card .cornell-question-rail {
   position: relative;
   display: block;
-  border-right: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-right: 3px double color-mix(in srgb, var(--accent) 58%, var(--line));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent),
     color-mix(in srgb, var(--panel-2) 78%, var(--card));
@@ -2258,7 +2282,7 @@ textarea {
 }
 
 .cornell-card.is-flipped .all-card-question {
-  display: grid;
+  display: block;
 }
 
 .cornell-card .cornell-question-rail .rendered {
@@ -2385,13 +2409,27 @@ textarea {
 }
 
 .cornell-card.is-editing .all-card-editor {
-  grid-column: 1 / -1;
-  padding: 12px;
+  display: grid;
+  padding-top: 10px;
 }
 
-.cornell-card.is-editing .all-card-question,
-.cornell-card.is-editing .all-card-answer {
+.cornell-card.is-editing .cornell-answer-body,
+.cornell-card.is-editing .cornell-answer-cue {
   display: none !important;
+}
+
+.cornell-card.is-editing .cornell-answer-cell {
+  display: grid;
+}
+
+.cornell-card.is-editing .all-card-editor textarea {
+  min-height: min(44vh, 420px);
+  border: 1px solid color-mix(in srgb, var(--accent) 68%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 92%, black);
+  color: var(--text);
+  padding: 12px;
+  line-height: 1.45;
 }
 
 .cornell-card .rendered table {
@@ -2521,7 +2559,7 @@ textarea {
 .cornell-print-row {
   display: grid;
   grid-template-columns: 86px minmax(0, 1fr);
-  border: 1px solid #d8d4c8;
+  border: 3px double #9fb9b0;
   border-bottom: 0;
   background: #fff;
   break-inside: avoid;
@@ -2529,7 +2567,7 @@ textarea {
 }
 
 .cornell-print-row:last-child {
-  border-bottom: 1px solid #d8d4c8;
+  border-bottom: 3px double #9fb9b0;
 }
 
 .cornell-print-row.is-oversize {
@@ -2540,7 +2578,7 @@ textarea {
 .cornell-print-row .cornell-question-rail {
   position: relative;
   display: block;
-  border-right: 1px solid #b9ccc6;
+  border-right: 3px double #80aaa0;
   background: #eaf7f3;
   padding: 12px 8px;
   overflow: hidden;

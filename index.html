@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
     <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
     <script src="https://unpkg.com/nomnoml/dist/nomnoml.js"></script>
-    <link rel="stylesheet" href="styles.css?v=20260524-15">
+    <link rel="stylesheet" href="styles.css?v=20260524-21">
   </head>
   <body>
     <main class="app-shell">
@@ -198,7 +198,10 @@
             <h1>All cards</h1>
             <p id="allCardsSummary">0 cards</p>
           </div>
-          <button class="icon-button" id="closeAllCardsBtn" type="button" aria-label="Close all cards">&#215;</button>
+          <div class="all-cards-head-actions">
+            <button class="all-answers-toggle" id="toggleAllAnswersBtn" type="button" aria-pressed="false">Show answers</button>
+            <button class="icon-button" id="closeAllCardsBtn" type="button" aria-label="Close all cards">&#215;</button>
+          </div>
         </div>
         <div class="all-cards-list" id="allCardsList"></div>
       </div>
@@ -291,6 +294,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4.5.0/dist/panzoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
-    <script src="app.js?v=20260524-15"></script>
+    <script src="app.js?v=20260524-21"></script>
   </body>
 </html>
