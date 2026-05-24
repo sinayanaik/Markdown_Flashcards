@@ -102,53 +102,105 @@ const fontFamilyChoices = {
   rounded: "ui-rounded, \"Avenir Next\", \"Nunito Sans\", Inter, ui-sans-serif, system-ui, sans-serif"
 };
 
-const styleDefaults = {
-  fontFamily: "system",
-  questionFontFamily: "system",
-  answerFontFamily: "system",
-  appWidthPercent: "100",
-  appHeightPercent: "100",
-  sidePanelWidthPercent: "16",
-  cardWidthPercent: "96",
-  cardMaxHeightPercent: "74",
-  modalWidthPercent: "60",
-  markdownBoxHeightPercent: "30",
-  baseFontSize: "18px",
-  baseLineHeight: "1.58",
-  rawMarkdownFontSize: "16px",
-  codeFontSize: "15px",
-  codeLineHeight: "1.55",
-  questionFillPercent: "58",
-  questionMaxFontSize: "64px",
-  questionLineHeight: "1.18",
-  questionAlign: "center",
-  questionVerticalAlign: "center",
-  questionFontWeight: "700",
-  questionPadding: "2px",
-  answerFontSize: "23px",
-  answerLineHeight: "1.58",
-  answerFontWeight: "400",
-  answerPadding: "0px",
-  appGap: "10px",
-  panelPadding: "10px",
-  cardPadding: "24px",
-  cardContentGap: "16px",
-  buttonGap: "8px",
-  stackCardGap: "7px",
-  cardBorderWidth: "1px",
-  cardCornerRadius: "14px",
-  panelCornerRadius: "14px",
-  buttonCornerRadius: "8px",
-  inputCornerRadius: "8px",
-  toolbarButtonHeight: "38px",
-  actionButtonHeight: "42px",
-  buttonFontSize: "14px",
-  replayButtonHeight: "30px",
-  stackCardFontSize: "13px",
-  stackCardLineHeight: "1.28",
-  inputHeight: "40px",
-  modalPadding: "18px"
+const defaultStyleProfiles = {
+  "mobile": {
+    "appGap": "10px",
+    "buttonGap": "8px",
+    "fontFamily": "system",
+    "cardPadding": "24px",
+    "inputHeight": "40px",
+    "baseFontSize": "12px",
+    "codeFontSize": "10px",
+    "modalPadding": "18px",
+    "panelPadding": "10px",
+    "stackCardGap": "7px",
+    "answerPadding": "0px",
+    "questionAlign": "left",
+    "answerFontSize": "13px",
+    "baseLineHeight": "1.23",
+    "buttonFontSize": "14px",
+    "cardContentGap": "16px",
+    "codeLineHeight": "1.17",
+    "appWidthPercent": "100",
+    "cardBorderWidth": "1px",
+    "questionPadding": "2px",
+    "answerFontFamily": "system",
+    "answerFontWeight": "300",
+    "answerLineHeight": "1.58",
+    "appHeightPercent": "100",
+    "cardCornerRadius": "14px",
+    "cardWidthPercent": "96",
+    "inputCornerRadius": "8px",
+    "modalWidthPercent": "60",
+    "panelCornerRadius": "14px",
+    "stackCardFontSize": "13px",
+    "actionButtonHeight": "42px",
+    "buttonCornerRadius": "8px",
+    "questionFontFamily": "system",
+    "questionFontWeight": "700",
+    "questionLineHeight": "1.17",
+    "replayButtonHeight": "30px",
+    "questionFillPercent": "75",
+    "questionMaxFontSize": "23px",
+    "rawMarkdownFontSize": "16px",
+    "stackCardLineHeight": "1.28",
+    "toolbarButtonHeight": "38px",
+    "cardMaxHeightPercent": "80",
+    "questionVerticalAlign": "center",
+    "sidePanelWidthPercent": "16",
+    "markdownBoxHeightPercent": "30"
+  },
+  "desktop": {
+    "appGap": "10px",
+    "buttonGap": "8px",
+    "fontFamily": "system",
+    "cardPadding": "24px",
+    "inputHeight": "40px",
+    "baseFontSize": "18px",
+    "codeFontSize": "12px",
+    "modalPadding": "18px",
+    "panelPadding": "10px",
+    "stackCardGap": "7px",
+    "answerPadding": "0px",
+    "questionAlign": "center",
+    "answerFontSize": "23px",
+    "baseLineHeight": "1.58",
+    "buttonFontSize": "14px",
+    "cardContentGap": "16px",
+    "codeLineHeight": "1.55",
+    "appWidthPercent": "100",
+    "cardBorderWidth": "1px",
+    "questionPadding": "2px",
+    "answerFontFamily": "system",
+    "answerFontWeight": "400",
+    "answerLineHeight": "1.58",
+    "appHeightPercent": "100",
+    "cardCornerRadius": "14px",
+    "cardWidthPercent": "100",
+    "inputCornerRadius": "8px",
+    "modalWidthPercent": "60",
+    "panelCornerRadius": "14px",
+    "stackCardFontSize": "13px",
+    "actionButtonHeight": "42px",
+    "buttonCornerRadius": "8px",
+    "questionFontFamily": "system",
+    "questionFontWeight": "700",
+    "questionLineHeight": "1.18",
+    "replayButtonHeight": "30px",
+    "questionFillPercent": "58",
+    "questionMaxFontSize": "19px",
+    "rawMarkdownFontSize": "18px",
+    "stackCardLineHeight": "1.28",
+    "toolbarButtonHeight": "38px",
+    "cardMaxHeightPercent": "84",
+    "questionVerticalAlign": "center",
+    "sidePanelWidthPercent": "6",
+    "markdownBoxHeightPercent": "30"
+  },
+  "version": 2
 };
+
+const styleDefaults = defaultStyleProfiles.desktop;
 
 const styleControlGroups = [
   {
@@ -1011,9 +1063,9 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function normalizeStyleValue(key, value) {
+function normalizeStyleValue(key, value, customDefault) {
   const field = styleFieldByKey[key];
-  const defaultValue = styleDefaults[key];
+  const defaultValue = customDefault ?? styleDefaults[key];
   const raw = String(value ?? defaultValue ?? "").trim();
 
   if (!field) return raw || defaultValue;
@@ -1067,10 +1119,11 @@ function migrateLegacyStyleSettings(raw = {}) {
   return migrated;
 }
 
-function normalizeStyleSettings(raw = {}) {
+function normalizeStyleSettings(raw = {}, profile = "desktop") {
   const source = migrateLegacyStyleSettings(raw || {});
+  const defaults = defaultStyleProfiles[profile] || styleDefaults;
   return Object.keys(styleDefaults).reduce((normalized, key) => {
-    normalized[key] = normalizeStyleValue(key, styleValue(source, key));
+    normalized[key] = normalizeStyleValue(key, styleValue(source, key), defaults[key]);
     return normalized;
   }, {});
 }
@@ -1089,18 +1142,19 @@ function normalizeStyleProfiles(raw = {}) {
   const hasProfiles = Boolean(profileSource.desktop || profileSource.mobile);
 
   if (!hasProfiles) {
-    const legacy = normalizeStyleSettings(source);
+    const legacy = normalizeStyleSettings(source, "desktop");
+    const mobileLegacySource = { ...defaultStyleProfiles.mobile, ...migrateLegacyStyleSettings(source) };
     return {
       desktop: { ...legacy },
-      mobile: { ...legacy }
+      mobile: normalizeStyleSettings(mobileLegacySource, "mobile")
     };
   }
 
-  const desktopSource = profileSource.desktop || profileSource.mobile || styleDefaults;
-  const mobileSource = profileSource.mobile || profileSource.desktop || styleDefaults;
+  const desktopSource = profileSource.desktop || profileSource.mobile || defaultStyleProfiles.desktop;
+  const mobileSource = profileSource.mobile || profileSource.desktop || defaultStyleProfiles.mobile;
   return {
-    desktop: normalizeStyleSettings(desktopSource),
-    mobile: normalizeStyleSettings(mobileSource)
+    desktop: normalizeStyleSettings(desktopSource, "desktop"),
+    mobile: normalizeStyleSettings(mobileSource, "mobile")
   };
 }
 
@@ -1111,13 +1165,13 @@ function setStyleProfiles(raw = {}) {
 
 function getStyleProfileSettings(profile = state.styleEditProfile) {
   const normalizedProfile = styleProfiles.includes(profile) ? profile : detectStyleProfile();
-  const settings = state.styleProfiles?.[normalizedProfile] || styleDefaults;
-  return normalizeStyleSettings(settings);
+  const settings = state.styleProfiles?.[normalizedProfile] || defaultStyleProfiles[normalizedProfile];
+  return normalizeStyleSettings(settings, normalizedProfile);
 }
 
 function setStyleProfileSettings(profile, rawSettings) {
   const normalizedProfile = styleProfiles.includes(profile) ? profile : detectStyleProfile();
-  const settings = normalizeStyleSettings(rawSettings);
+  const settings = normalizeStyleSettings(rawSettings, normalizedProfile);
   state.styleProfiles = {
     ...state.styleProfiles,
     [normalizedProfile]: settings
@@ -1299,9 +1353,11 @@ function updateStyleControls() {
   renderStyleControls();
   const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
   const settings = getStyleProfileSettings(editProfile);
+  const defaults = defaultStyleProfiles[editProfile] || styleDefaults;
   updateStyleProfileUi();
   el.styleControls?.querySelectorAll("[data-style-key]").forEach((input) => {
     input.value = settings[input.dataset.styleKey] ?? "";
+    input.placeholder = defaults[input.dataset.styleKey] || "";
     syncSliderFromText(input);
   });
 }
@@ -4447,7 +4503,7 @@ if (styleMobileMedia?.addEventListener) {
 }
 
 clearBrowserPersistence();
-setStyleProfiles({ desktop: styleDefaults, mobile: styleDefaults });
+setStyleProfiles(defaultStyleProfiles);
 applyActiveStyleSettings({ force: true });
 setTheme("dark");
 setStatus("");
