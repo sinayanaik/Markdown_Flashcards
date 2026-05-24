@@ -83,12 +83,7 @@ const state = {
   styleEditProfileFollowsDevice: true,
   styleTouched: false,
   stylePanelScrollY: 0,
-  stylePanelTouchY: 0,
-  diagramPanPointerId: null,
-  diagramPanStartX: 0,
-  diagramPanStartY: 0,
-  diagramPanScrollLeft: 0,
-  diagramPanScrollTop: 0
+  stylePanelTouchY: 0
 };
 
 const deckStorageKey = "swipe-notes-current-deck-v1";
@@ -530,7 +525,7 @@ async function loadWebDeck(deckId) {
     state.cards = cards.slice();
     state.masterCards = cards.slice();
     state.statusById = statusById;
-    state.current = Math.min(Math.max(Number(deckData.current_card_index) || 0, 0), cards.length);
+    state.current = 0;
     state.previewCard = null;
     state.flipped = false;
     state.deckTitle = deckData.title || "";
@@ -2604,7 +2599,172 @@ function addDiagramZoomControl(node) {
   shell.appendChild(button);
 }
 
-let currentPanzoom = null;
+let currentDiagramZoom = null;
+const diagramZoomRange = {
+  min: 0.2,
+  max: 8
+};
+
+function clampDiagramScale(value) {
+  return Math.min(diagramZoomRange.max, Math.max(diagramZoomRange.min, value));
+}
+
+function diagramViewportCenter() {
+  const rect = el.diagramModalBody.getBoundingClientRect();
+  return {
+    x: rect.width / 2,
+    y: rect.height / 2
+  };
+}
+
+function diagramLocalPoint(point) {
+  if (Number.isFinite(point?.x) && Number.isFinite(point?.y)) {
+    return { x: point.x, y: point.y };
+  }
+  const rect = el.diagramModalBody.getBoundingClientRect();
+  return {
+    x: point.clientX - rect.left,
+    y: point.clientY - rect.top
+  };
+}
+
+function zoomDiagramTo(scale, focalPoint = diagramViewportCenter()) {
+  if (!currentDiagramZoom) return;
+  const nextScale = clampDiagramScale(scale);
+  const focal = diagramLocalPoint(focalPoint);
+  const anchorX = (focal.x - currentDiagramZoom.x) / currentDiagramZoom.scale;
+  const anchorY = (focal.y - currentDiagramZoom.y) / currentDiagramZoom.scale;
+  currentDiagramZoom.scale = nextScale;
+  currentDiagramZoom.x = focal.x - anchorX * nextScale;
+  currentDiagramZoom.y = focal.y - anchorY * nextScale;
+  applyDiagramTransform();
+}
+
+function zoomDiagramBy(multiplier) {
+  if (!currentDiagramZoom) return;
+  zoomDiagramTo(currentDiagramZoom.scale * multiplier);
+}
+
+function diagramPointers() {
+  return Array.from(currentDiagramZoom?.pointers.values() || []);
+}
+
+function pointerDistance(points) {
+  return Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+}
+
+function pointerCenter(points) {
+  return {
+    x: (points[0].x + points[1].x) / 2,
+    y: (points[0].y + points[1].y) / 2
+  };
+}
+
+function isVectorDiagramContent(content) {
+  return content instanceof SVGElement;
+}
+
+function baseDiagramSize(content) {
+  const rect = content.getBoundingClientRect();
+  const viewBox = content instanceof SVGElement ? content.viewBox?.baseVal : null;
+  if (viewBox?.width && viewBox?.height) {
+    return {
+      width: viewBox.width,
+      height: viewBox.height
+    };
+  }
+  if (content instanceof HTMLImageElement && content.naturalWidth && content.naturalHeight) {
+    return {
+      width: content.naturalWidth,
+      height: content.naturalHeight
+    };
+  }
+  return {
+    width: rect.width || Number(content.getAttribute("width")) || 1,
+    height: rect.height || Number(content.getAttribute("height")) || 1
+  };
+}
+
+function applyDiagramTransform() {
+  if (!currentDiagramZoom?.content) return;
+  const { content, scale, x, y, baseWidth, baseHeight, isVector } = currentDiagramZoom;
+  if (isVector) {
+    content.style.width = `${baseWidth}px`;
+    content.style.height = `${baseHeight}px`;
+  }
+
+  content.style.transform = `matrix(${scale}, 0, 0, ${scale}, ${x}, ${y})`;
+}
+
+function beginDiagramPan(point) {
+  if (!currentDiagramZoom) return;
+  const local = diagramLocalPoint(point);
+  currentDiagramZoom.mode = "pan";
+  currentDiagramZoom.panStartX = currentDiagramZoom.x;
+  currentDiagramZoom.panStartY = currentDiagramZoom.y;
+  currentDiagramZoom.pointerStartX = local.x;
+  currentDiagramZoom.pointerStartY = local.y;
+}
+
+function beginDiagramPinch() {
+  if (!currentDiagramZoom) return;
+  const points = diagramPointers();
+  if (points.length < 2) return;
+
+  const center = pointerCenter(points);
+  currentDiagramZoom.mode = "pinch";
+  currentDiagramZoom.pinchStartDistance = pointerDistance(points) || 1;
+  currentDiagramZoom.pinchStartScale = currentDiagramZoom.scale;
+  currentDiagramZoom.pinchAnchorX = (center.x - currentDiagramZoom.x) / currentDiagramZoom.scale;
+  currentDiagramZoom.pinchAnchorY = (center.y - currentDiagramZoom.y) / currentDiagramZoom.scale;
+}
+
+function centerDiagramContent(content) {
+  if (!currentDiagramZoom || currentDiagramZoom.content !== content) return;
+  const bodyRect = el.diagramModalBody.getBoundingClientRect();
+  const { width, height } = baseDiagramSize(content);
+  currentDiagramZoom.baseWidth = width;
+  currentDiagramZoom.baseHeight = height;
+  const fitPadding = 24;
+  const fitScale = Math.min(
+    1,
+    Math.max(0.1, (bodyRect.width - fitPadding * 2) / Math.max(width, 1)),
+    Math.max(0.1, (bodyRect.height - fitPadding * 2) / Math.max(height, 1))
+  );
+
+  currentDiagramZoom.scale = clampDiagramScale(fitScale);
+  currentDiagramZoom.x = (bodyRect.width - width * currentDiagramZoom.scale) / 2;
+  currentDiagramZoom.y = (bodyRect.height - height * currentDiagramZoom.scale) / 2;
+  applyDiagramTransform();
+}
+
+function initializeDiagramZoom(content) {
+  const { width, height } = baseDiagramSize(content);
+  currentDiagramZoom = {
+    content,
+    isVector: isVectorDiagramContent(content),
+    baseWidth: width,
+    baseHeight: height,
+    scale: 1,
+    x: 0,
+    y: 0,
+    pointers: new Map(),
+    mode: "",
+    panStartX: 0,
+    panStartY: 0,
+    pointerStartX: 0,
+    pointerStartY: 0,
+    pinchStartDistance: 1,
+    pinchStartScale: 1,
+    pinchAnchorX: 0,
+    pinchAnchorY: 0
+  };
+  requestAnimationFrame(() => centerDiagramContent(content));
+}
+
+function resetDiagramZoom() {
+  currentDiagramZoom = null;
+}
 
 function openDiagramModal(node) {
   lockPageScroll();
@@ -2618,23 +2778,15 @@ function openDiagramModal(node) {
   
   const content = el.diagramModalBody.querySelector("svg, img");
   if (content) {
-    currentPanzoom = Panzoom(content, {
-        maxScale: 5,
-        minScale: 0.1,
-        startScale: 1,
-        step: 0.3
-    });
-    content.parentElement.addEventListener('wheel', currentPanzoom.zoomWithWheel);
+    content.classList.add("diagram-zoom-content");
+    initializeDiagramZoom(content);
   }
 }
 
 function closeDiagramModal() {
   el.diagramModal.hidden = true;
   el.diagramModalBody.innerHTML = "";
-  if (currentPanzoom) {
-    currentPanzoom.destroy();
-    currentPanzoom = null;
-  }
+  resetDiagramZoom();
   unlockPageScroll();
 }
 
@@ -3360,7 +3512,7 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
     state.cards = cards.slice();
     state.masterCards = cards.slice();
     state.statusById = statusById;
-    state.current = Math.min(Math.max(Number(payload.current) || 0, 0), cards.length);
+    state.current = 0;
     state.previewCard = null;
     state.flipped = false;
     state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
@@ -4171,34 +4323,65 @@ function handleStylePanelWheel(event) {
   containStylePanelScroll(event, event.deltaY);
 }
 
-function handleDiagramPanStart(event) {
-  if (event.button !== 0 || event.target.closest("button, a")) return;
-  const body = el.diagramModalBody;
-  if (!body || body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight) return;
-
-  state.diagramPanPointerId = event.pointerId;
-  state.diagramPanStartX = event.clientX;
-  state.diagramPanStartY = event.clientY;
-  state.diagramPanScrollLeft = body.scrollLeft;
-  state.diagramPanScrollTop = body.scrollTop;
-  body.classList.add("is-panning");
-  body.setPointerCapture?.(event.pointerId);
-  event.preventDefault();
+function handleDiagramWheel(event) {
+  if (!currentDiagramZoom) return;
+  preventCancelableScroll(event);
+  const direction = event.deltaY > 0 ? 0.9 : 1.1;
+  zoomDiagramTo(currentDiagramZoom.scale * direction, event);
 }
 
-function handleDiagramPanMove(event) {
-  if (state.diagramPanPointerId !== event.pointerId) return;
-  const body = el.diagramModalBody;
-  body.scrollLeft = state.diagramPanScrollLeft - (event.clientX - state.diagramPanStartX);
-  body.scrollTop = state.diagramPanScrollTop - (event.clientY - state.diagramPanStartY);
-  event.preventDefault();
+function handleDiagramPointerDown(event) {
+  const isPrimaryContact = event.button === 0 || event.pointerType === "touch" || event.pointerType === "pen";
+  if (!currentDiagramZoom || !isPrimaryContact || event.target.closest("button, a")) return;
+  preventCancelableScroll(event);
+  el.diagramModalBody.setPointerCapture?.(event.pointerId);
+  currentDiagramZoom.pointers.set(event.pointerId, diagramLocalPoint(event));
+  el.diagramModalBody.classList.add("is-panning");
+
+  const points = diagramPointers();
+  if (points.length >= 2) beginDiagramPinch();
+  else beginDiagramPan(points[0]);
 }
 
-function stopDiagramPan(event) {
-  if (state.diagramPanPointerId !== event.pointerId) return;
+function handleDiagramPointerMove(event) {
+  if (!currentDiagramZoom?.pointers.has(event.pointerId)) return;
+  preventCancelableScroll(event);
+  currentDiagramZoom.pointers.set(event.pointerId, diagramLocalPoint(event));
+
+  const points = diagramPointers();
+  if (points.length >= 2) {
+    if (currentDiagramZoom.mode !== "pinch") beginDiagramPinch();
+    const distance = pointerDistance(points) || currentDiagramZoom.pinchStartDistance;
+    const center = pointerCenter(points);
+    const nextScale = clampDiagramScale(currentDiagramZoom.pinchStartScale * (distance / currentDiagramZoom.pinchStartDistance));
+    currentDiagramZoom.scale = nextScale;
+    currentDiagramZoom.x = center.x - currentDiagramZoom.pinchAnchorX * nextScale;
+    currentDiagramZoom.y = center.y - currentDiagramZoom.pinchAnchorY * nextScale;
+    applyDiagramTransform();
+    return;
+  }
+
+  if (currentDiagramZoom.mode !== "pan") beginDiagramPan(points[0]);
+  const local = diagramLocalPoint(event);
+  currentDiagramZoom.x = currentDiagramZoom.panStartX + local.x - currentDiagramZoom.pointerStartX;
+  currentDiagramZoom.y = currentDiagramZoom.panStartY + local.y - currentDiagramZoom.pointerStartY;
+  applyDiagramTransform();
+}
+
+function handleDiagramPointerEnd(event) {
+  if (!currentDiagramZoom?.pointers.has(event.pointerId)) return;
+  currentDiagramZoom.pointers.delete(event.pointerId);
   el.diagramModalBody.releasePointerCapture?.(event.pointerId);
-  el.diagramModalBody.classList.remove("is-panning");
-  state.diagramPanPointerId = null;
+
+  const points = diagramPointers();
+  if (points.length >= 2) {
+    beginDiagramPinch();
+  } else if (points.length === 1) {
+    beginDiagramPan(points[0]);
+  } else {
+    currentDiagramZoom.mode = "";
+    el.diagramModalBody.classList.remove("is-panning");
+  }
 }
 
 function registerServiceWorker() {
@@ -4345,13 +4528,11 @@ document.getElementById("webDecksPanel").addEventListener("touchstart", handleSt
 document.getElementById("webDecksPanel").addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
 document.getElementById("webDecksPanel").addEventListener("wheel", handleStylePanelWheel, { passive: false });
 
-el.diagramModal.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
-el.diagramModal.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
-el.diagramModal.addEventListener("wheel", handleStylePanelWheel, { passive: false });
-el.diagramModalBody.addEventListener("pointerdown", handleDiagramPanStart);
-el.diagramModalBody.addEventListener("pointermove", handleDiagramPanMove);
-el.diagramModalBody.addEventListener("pointerup", stopDiagramPan);
-el.diagramModalBody.addEventListener("pointercancel", stopDiagramPan);
+el.diagramModalBody.addEventListener("wheel", handleDiagramWheel, { passive: false });
+el.diagramModalBody.addEventListener("pointerdown", handleDiagramPointerDown);
+el.diagramModalBody.addEventListener("pointermove", handleDiagramPointerMove);
+el.diagramModalBody.addEventListener("pointerup", handleDiagramPointerEnd);
+el.diagramModalBody.addEventListener("pointercancel", handleDiagramPointerEnd);
 
 el.allCardsBtn.addEventListener("click", openAllCardsPanel);
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
@@ -4493,8 +4674,8 @@ document.addEventListener("click", (event) => {
 });
 
 el.closeDiagramBtn.addEventListener("click", closeDiagramModal);
-el.diagramZoomInBtn?.addEventListener("click", () => currentPanzoom?.zoomIn());
-el.diagramZoomOutBtn?.addEventListener("click", () => currentPanzoom?.zoomOut());
+el.diagramZoomInBtn?.addEventListener("click", () => zoomDiagramBy(1.25));
+el.diagramZoomOutBtn?.addEventListener("click", () => zoomDiagramBy(0.8));
 el.diagramModal.addEventListener("click", (event) => {
   if (event.target === el.diagramModal) closeDiagramModal();
 });
