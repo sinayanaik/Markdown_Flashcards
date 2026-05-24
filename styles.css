@@ -1103,12 +1103,21 @@ button:disabled {
 }
 
 .rendered .mermaid,
+.rendered .d2-diagram,
 .math-display {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   padding: 8px 0;
   touch-action: pan-x pan-y;
+}
+
+.rendered img.zoomable-image {
+  max-width: var(--visual-max-width, 100%);
+  height: auto;
+  display: block;
+  margin: 1rem auto;
+  border-radius: var(--diagram-radius);
 }
 
 .diagram-shell {
@@ -1122,12 +1131,14 @@ button:disabled {
   touch-action: pan-x pan-y;
 }
 
-.diagram-shell .mermaid {
-  min-width: max-content;
-}
 
-.diagram-shell .mermaid svg {
-  width: max(100%, 760px) !important;
+
+.diagram-shell .mermaid svg,
+.diagram-shell .nomnoml-diagram svg,
+.diagram-shell img.zoomable-image {
+  display: block !important;
+  margin: 0 auto !important;
+  width: var(--visual-max-width, 100%) !important;
   max-width: none !important;
   height: auto !important;
 }
@@ -1171,9 +1182,12 @@ button:disabled {
 }
 
 .diagram-modal-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 18px;
   cursor: grab;
   overscroll-behavior: contain;
@@ -1186,13 +1200,7 @@ button:disabled {
   user-select: none;
 }
 
-.diagram-modal-body svg {
-  display: block;
-  width: max(1600px, 140vw) !important;
-  max-width: none !important;
-  height: auto !important;
-  transform-origin: top left;
-}
+
 
 .controls button,
 .deck-utility-actions button {
@@ -1649,7 +1657,7 @@ button:disabled {
   font-weight: 900;
 }
 
-.style-actions #syncStyleBtn {
+.style-actions #syncUpBtn {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
   background: var(--accent);
   color: #05110e;

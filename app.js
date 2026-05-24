@@ -842,6 +842,7 @@ const el = {
   sourceInput: document.querySelector("#sourceInput"),
   urlInput: document.querySelector("#urlInput"),
   fileInput: document.querySelector("#fileInput"),
+  fileInputCards: document.querySelector("#fileInputCards"),
   fetchBtn: document.querySelector("#fetchBtn"),
   parseBtn: document.querySelector("#parseBtn"),
   openWebDecksFromImportBtn: document.querySelector("#openWebDecksFromImportBtn"),
@@ -858,6 +859,8 @@ const el = {
   diagramModal: document.querySelector("#diagramModal"),
   diagramModalBody: document.querySelector("#diagramModalBody"),
   closeDiagramBtn: document.querySelector("#closeDiagramBtn"),
+  diagramZoomInBtn: document.querySelector("#diagramZoomInBtn"),
+  diagramZoomOutBtn: document.querySelector("#diagramZoomOutBtn"),
   exportBtn: document.querySelector("#exportBtn"),
   exportMenu: document.querySelector("#exportMenu"),
   allCardsBtn: document.querySelector("#allCardsBtn"),
@@ -869,9 +872,9 @@ const el = {
   stylePanel: document.querySelector("#stylePanel"),
   styleControls: document.querySelector("#styleControls"),
   closeStyleBtn: document.querySelector("#closeStyleBtn"),
-  syncStyleBtn: document.querySelector("#syncStyleBtn"),
+  syncUpBtn: document.querySelector("#syncUpBtn"),
   applyStyleBtn: document.querySelector("#applyStyleBtn"),
-  resetStyleBtn: document.querySelector("#resetStyleBtn"),
+  syncDownBtn: document.querySelector("#syncDownBtn"),
   styleSyncStatus: document.querySelector("#styleSyncStatus"),
   themeBtn: document.querySelector("#themeBtn"),
   deckTitleWrap: document.querySelector("#deckTitleWrap"),
@@ -1473,7 +1476,7 @@ function handleStyleEnvironmentChange() {
   }
 }
 
-async function loadStyleFromWeb() {
+async function loadStyleFromWeb(force = false) {
   if (!supabaseClient) {
     setStyleStatus("Local style");
     return;
@@ -1492,12 +1495,13 @@ async function loadStyleFromWeb() {
       setStyleStatus("No synced style yet");
       return;
     }
-    if (state.styleTouched) {
+    if (state.styleTouched && !force) {
       setStyleStatus("Unsynced local style");
       return;
     }
 
     setStyleProfiles(data.settings);
+    localStorage.setItem("flashcards_style_cache", JSON.stringify(data.settings));
     applyActiveStyleSettings({ force: true });
     state.styleTouched = false;
     updateStyleControls();
@@ -1515,7 +1519,7 @@ async function syncStyleToWeb() {
     return;
   }
 
-  const syncBtn = el.syncStyleBtn;
+  const syncBtn = el.syncUpBtn;
   state.styleTouched = true;
   const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
   setStyleProfileSettings(editProfile, styleSettingsFromControls());
@@ -1533,6 +1537,7 @@ async function syncStyleToWeb() {
       }, { onConflict: "id" });
 
     if (error) throw error;
+    localStorage.setItem("flashcards_style_cache", JSON.stringify(settings));
     state.styleTouched = false;
     setStyleStatus("Style synced");
     setStatus("Style synced to web.");
@@ -2223,9 +2228,13 @@ function preprocessSpecialBlocks(markdown) {
 
   while ((match = fencePattern.exec(source))) {
     output += protectMath(source.slice(lastIndex, match.index));
-    output += /\bmermaid\b/i.test(match[1])
-      ? `<div class="mermaid" data-diagram="${encodeAttribute(match[2].trim())}"></div>`
-      : match[0];
+    if (/\bmermaid\b/i.test(match[1])) {
+      output += `<div class="mermaid" data-diagram="${encodeAttribute(match[2].trim())}"></div>`;
+    } else if (/\bnomnoml\b/i.test(match[1])) {
+      output += `<div class="nomnoml-diagram" data-diagram="${encodeAttribute(match[2].trim())}"></div>`;
+    } else {
+      output += match[0];
+    }
     lastIndex = fencePattern.lastIndex;
   }
 
@@ -2325,6 +2334,28 @@ async function enhanceRenderedMarkdown(container) {
     } catch (error) {
       console.warn("Mermaid render failed", error);
     }
+  }
+
+  const nomnomlDiagrams = container.querySelectorAll(".nomnoml-diagram");
+  nomnomlDiagrams.forEach((node) => {
+    if (node.dataset.diagram) {
+      node.textContent = decodeURIComponent(node.dataset.diagram);
+    }
+    node.removeAttribute("data-processed");
+  });
+
+  if (nomnomlDiagrams.length) {
+    nomnomlDiagrams.forEach((node) => {
+      try {
+        const diagramSource = node.textContent;
+        const svg = nomnoml.renderSvg(diagramSource);
+        node.innerHTML = svg;
+        addDiagramZoomControl(node);
+      } catch (err) {
+        console.warn("Nomnoml render error:", err);
+        node.textContent = "Error rendering Nomnoml: " + err.message;
+      }
+    });
   }
 
   fitMarkdownTables(container);
@@ -2500,22 +2531,32 @@ function addDiagramZoomControl(node) {
   shell.appendChild(button);
 }
 
+let currentPanzoom = null;
+
 function openDiagramModal(node) {
   lockPageScroll();
   el.diagramModalBody.innerHTML = node.innerHTML;
   el.diagramModal.hidden = false;
-  requestAnimationFrame(() => {
-    const body = el.diagramModalBody;
-    body.scrollLeft = Math.max(0, (body.scrollWidth - body.clientWidth) / 2);
-    body.scrollTop = Math.max(0, (body.scrollHeight - body.clientHeight) / 2);
-  });
+  
+  const img = el.diagramModalBody.querySelector("svg");
+  if (img) {
+    currentPanzoom = Panzoom(img, {
+        maxScale: 5,
+        minScale: 0.1,
+        startScale: 1,
+        step: 0.3
+    });
+    img.parentElement.addEventListener('wheel', currentPanzoom.zoomWithWheel);
+  }
 }
 
 function closeDiagramModal() {
   el.diagramModal.hidden = true;
   el.diagramModalBody.innerHTML = "";
-  el.diagramModalBody.classList.remove("is-panning");
-  state.diagramPanPointerId = null;
+  if (currentPanzoom) {
+    currentPanzoom.destroy();
+    currentPanzoom = null;
+  }
   unlockPageScroll();
 }
 
@@ -2538,7 +2579,7 @@ function setAllCardStatus(cardId, status) {
 }
 
 function createBlankCard() {
-  return { id: 'card-' + Date.now(), question: 'New Question', answer: 'New Answer' };
+  return { id: 'card-' + Date.now(), question: '', answer: '' };
 }
 
 function refreshAllCardsAround(cardId, side = "question") {
@@ -3027,19 +3068,24 @@ function animateToCard(direction, updateState) {
   }, 210);
 }
 
-function buildCards(titleHint = state.importTitleHint || "") {
+function buildCards(titleHint = state.importTitleHint || "", append = false) {
   const source = stripReaderMetadata(el.sourceInput.value);
   const cards = parseCards(source);
   const headingCount = countQuestionHeadings(source);
   const importTitle = titleFromImportHint(titleHint);
-  state.cards = cards;
-  state.masterCards = cards.slice();
-  state.deckId = null;
-  state.current = 0;
-  state.deckTitle = cards.length ? importTitle || inferDeckTitle(source, titleHint) : "";
-  state.sourceTitle = cards.length ? importTitle || state.deckTitle : "";
+  if (append) {
+    state.cards = state.cards.concat(cards);
+    state.masterCards = state.masterCards.concat(cards);
+  } else {
+    state.cards = cards;
+    state.masterCards = cards.slice();
+    state.deckId = null;
+    state.current = 0;
+    state.deckTitle = cards.length ? importTitle || inferDeckTitle(source, titleHint) : "";
+    state.sourceTitle = cards.length ? importTitle || state.deckTitle : "";
+    resetResults();
+  }
   state.importTitleHint = titleHint;
-  resetResults();
   closeAllCardsPanel();
 
   if (cards.length) {
@@ -3199,13 +3245,13 @@ function savePersistedDeck() {
   clearBrowserPersistence();
 }
 
-function loadDeckSnapshot(payload, titleHint = "") {
+function loadDeckSnapshot(payload, titleHint = "", append = false) {
   if (!payload || !Array.isArray(payload.cards)) {
     throw new Error("Invalid flashcard JSON");
   }
 
-  const usedIds = new Set();
-  const statusById = {};
+  const usedIds = new Set(append ? state.masterCards.map(c => c.id) : []);
+  const statusById = append ? { ...state.statusById } : {};
   const cards = payload.cards
     .map((rawCard, index) => {
       const question = String(rawCard?.question || "").trim();
@@ -3213,7 +3259,7 @@ function loadDeckSnapshot(payload, titleHint = "") {
       if (!question || !answer) return null;
 
       let id = String(rawCard.id || `${index}-${question.slice(0, 32)}`);
-      if (usedIds.has(id)) id = `${index}-${id}`;
+      while (usedIds.has(id)) id = `${index}-${Math.random().toString(36).slice(2, 6)}-${id}`;
       usedIds.add(id);
 
       const status = normalizeCardStatus(rawCard?.status || payload.statusById?.[id]);
@@ -3227,16 +3273,22 @@ function loadDeckSnapshot(payload, titleHint = "") {
     throw new Error("No cards in flashcard JSON");
   }
 
-  state.cards = cards.slice();
-  state.masterCards = cards.slice();
-  state.statusById = statusById;
-  state.current = Math.min(Math.max(Number(payload.current) || 0, 0), cards.length);
-  state.previewCard = null;
-  state.flipped = false;
-  state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
-  state.deckId = payload.deckId || null;
-  state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
-  state.importTitleHint = String(payload.importTitleHint || "").trim() || titleHint;
+  if (append) {
+    state.cards = state.cards.concat(cards);
+    state.masterCards = state.masterCards.concat(cards);
+    state.statusById = statusById;
+  } else {
+    state.cards = cards.slice();
+    state.masterCards = cards.slice();
+    state.statusById = statusById;
+    state.current = Math.min(Math.max(Number(payload.current) || 0, 0), cards.length);
+    state.previewCard = null;
+    state.flipped = false;
+    state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
+    state.deckId = payload.deckId || null;
+    state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
+    state.importTitleHint = String(payload.importTitleHint || "").trim() || titleHint;
+  }
   syncResults();
   closeAllCardsPanel();
   savePersistedDeck();
@@ -3680,7 +3732,7 @@ async function collectMarkdownFromZip(input, prefix = "", depth = 0) {
   return found;
 }
 
-async function loadZipFile(file) {
+async function loadZipFile(file, append = false) {
   if (!window.JSZip) {
     setStatus("Zip support did not load. Extract the zip and upload the .md file.", "error");
     return;
@@ -3701,17 +3753,17 @@ async function loadZipFile(file) {
     el.sourceInput.value = markdown;
     state.importTitleHint = markdownFiles.length === 1 ? markdownFiles[0].name : file.name;
     setStatus(`Loaded ${markdownFiles.length} Markdown file${markdownFiles.length === 1 ? "" : "s"} from ${file.name}.`);
-    buildCards(state.importTitleHint);
+    buildCards(state.importTitleHint, append);
   } catch (error) {
     setStatus("Could not read this zip export.", "error");
   }
 }
 
-function loadFile(file) {
+function loadFile(file, append = false) {
   if (!file) return;
 
   if (isZipName(file.name) || /zip/i.test(file.type)) {
-    loadZipFile(file);
+    loadZipFile(file, append);
     return;
   }
 
@@ -3721,7 +3773,7 @@ function loadFile(file) {
 
     if (isJsonName(file.name) || file.type === "application/json") {
       try {
-        loadDeckSnapshot(JSON.parse(text), file.name);
+        loadDeckSnapshot(JSON.parse(text), file.name, append);
         el.sourceInput.value = "";
         setStatus(`Loaded ${state.masterCards.length} card${state.masterCards.length === 1 ? "" : "s"} with saved markers from ${file.name}.`);
         closeImportPanel();
@@ -3734,7 +3786,7 @@ function loadFile(file) {
     el.sourceInput.value = text;
     state.importTitleHint = file.name;
     setStatus(`Loaded ${file.name}.`);
-    buildCards(state.importTitleHint);
+    buildCards(state.importTitleHint, append);
   });
   reader.addEventListener("error", () => setStatus("Could not read the selected file.", "error"));
   reader.readAsText(file);
@@ -3744,7 +3796,7 @@ function loadSample() {
   el.sourceInput.value = sampleMarkdown;
   state.importTitleHint = "Sample flashcards";
   setStatus("Sample loaded.");
-  buildCards(state.importTitleHint);
+  buildCards(state.importTitleHint, append);
 }
 
 function currentCardCanMove() {
@@ -4173,15 +4225,8 @@ el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
 el.styleBtn.addEventListener("click", openStylePanel);
 el.closeStyleBtn.addEventListener("click", closeStylePanel);
 el.applyStyleBtn.addEventListener("click", () => applyCurrentStyleSettings());
-el.syncStyleBtn.addEventListener("click", syncStyleToWeb);
-el.resetStyleBtn.addEventListener("click", () => {
-  state.styleTouched = true;
-  const editProfile = styleProfiles.includes(state.styleEditProfile) ? state.styleEditProfile : detectStyleProfile();
-  setStyleProfileSettings(editProfile, styleDefaults);
-  if (editProfile === detectStyleProfile()) applyActiveStyleSettings({ force: true });
-  else updateStyleControls();
-  setStyleStatus(`Reset ${styleProfileLabel(editProfile).toLowerCase()} locally`);
-});
+el.syncUpBtn.addEventListener("click", syncStyleToWeb);
+el.syncDownBtn.addEventListener("click", () => loadStyleFromWeb(true));
 el.styleControls.addEventListener("click", (event) => {
   const button = event.target.closest("[data-style-profile]");
   if (!button) return;
@@ -4288,7 +4333,8 @@ el.exportMenu.addEventListener("click", (event) => {
 el.themeBtn.addEventListener("click", () => {
   setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 });
-el.fileInput.addEventListener("change", (event) => loadFile(event.target.files[0]));
+el.fileInput.addEventListener("change", (event) => loadFile(event.target.files[0], false));
+if (el.fileInputCards) el.fileInputCards.addEventListener("change", (event) => loadFile(event.target.files[0], true));
 el.prevCardBtn.addEventListener("click", () => navigateCard(-1, "prev"));
 el.nextCardBtn.addEventListener("click", () => navigateCard(1, "next"));
 el.knownBtn.addEventListener("click", () => moveCard("known"));
@@ -4367,6 +4413,8 @@ document.addEventListener("click", (event) => {
 });
 
 el.closeDiagramBtn.addEventListener("click", closeDiagramModal);
+el.diagramZoomInBtn?.addEventListener("click", () => currentPanzoom?.zoomIn());
+el.diagramZoomOutBtn?.addEventListener("click", () => currentPanzoom?.zoomOut());
 el.diagramModal.addEventListener("click", (event) => {
   if (event.target === el.diagramModal) closeDiagramModal();
 });
@@ -4389,10 +4437,16 @@ if (styleMobileMedia?.addEventListener) {
 }
 
 clearBrowserPersistence();
-setStyleProfiles({
-  desktop: styleDefaults,
-  mobile: styleDefaults
-});
+try {
+  const cachedStyle = localStorage.getItem("flashcards_style_cache");
+  if (cachedStyle) {
+    setStyleProfiles(JSON.parse(cachedStyle));
+  } else {
+    setStyleProfiles({ desktop: styleDefaults, mobile: styleDefaults });
+  }
+} catch (error) {
+  setStyleProfiles({ desktop: styleDefaults, mobile: styleDefaults });
+}
 applyActiveStyleSettings({ force: true });
 setTheme("dark");
 setStatus("");

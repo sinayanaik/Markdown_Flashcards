@@ -14,6 +14,8 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
+    <script src="https://unpkg.com/nomnoml/dist/nomnoml.js"></script>
     <link rel="stylesheet" href="styles.css?v=20260523-6">
   </head>
   <body>
@@ -183,10 +185,16 @@
           </div>
         </div>
 
-        <label class="file-pick" style="margin-top: 1rem;">
-          <input id="fileInput" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
-          <span>Open Markdown, JSON, or zip</span>
-        </label>
+        <div style="display: flex; gap: 8px; margin-top: 1rem;">
+          <label class="file-pick" style="flex: 1; margin-top: 0;">
+            <input id="fileInput" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
+            <span>Import Deck</span>
+          </label>
+          <label class="file-pick" style="flex: 1; margin-top: 0;">
+            <input id="fileInputCards" type="file" accept=".md,.markdown,.txt,.json,.zip,text/markdown,text/plain,application/json,application/zip,application/x-zip-compressed">
+            <span>Import Cards</span>
+          </label>
+        </div>
 
         <!-- Hidden legacy fields for JS compatibility -->
         <div hidden>
@@ -217,7 +225,11 @@
     <section class="diagram-modal" id="diagramModal" hidden aria-label="Diagram preview">
       <div class="diagram-modal-head">
         <span>Diagram</span>
-        <button class="icon-button" id="closeDiagramBtn" type="button" aria-label="Close diagram preview">&#215;</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="icon-button" id="diagramZoomOutBtn" type="button" aria-label="Zoom out" style="font-size: 1.2rem;">&minus;</button>
+          <button class="icon-button" id="diagramZoomInBtn" type="button" aria-label="Zoom in" style="font-size: 1.2rem;">&plus;</button>
+          <button class="icon-button" id="closeDiagramBtn" type="button" aria-label="Close diagram preview" style="margin-left: 12px;">&#215;</button>
+        </div>
       </div>
       <div class="diagram-modal-body" id="diagramModalBody"></div>
     </section>
@@ -238,9 +250,9 @@
           </label>
         </div>
         <div class="style-actions">
-          <button id="resetStyleBtn" type="button">Reset</button>
+          <button id="syncDownBtn" type="button">Sync Down</button>
           <button id="applyStyleBtn" type="button">Apply</button>
-          <button id="syncStyleBtn" type="button">Sync Style</button>
+          <button id="syncUpBtn" type="button">Sync Up</button>
         </div>
       </div>
     </section>
@@ -294,6 +306,9 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4.5.0/dist/panzoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
     <script src="app.js?v=20260523-6"></script>
   </body>
 </html>
