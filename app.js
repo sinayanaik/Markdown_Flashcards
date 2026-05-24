@@ -966,7 +966,7 @@ function configureMermaid(theme) {
   const dark = theme === "dark";
   mermaid.initialize({
     startOnLoad: false,
-    securityLevel: "strict",
+    securityLevel: "loose",
     theme: "base",
     themeVariables: {
       primaryColor: dark ? "#202a25" : "#eef4f1",
