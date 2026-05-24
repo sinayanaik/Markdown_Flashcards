@@ -2078,8 +2078,8 @@ async function previewCard(card) {
   state.flipped = false;
   el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
   el.card.style.transform = "";
-  await renderMarkdown(el.questionView, card.question);
-  await renderMarkdown(el.answerView, card.answer);
+  await renderMarkdown(el.questionView, card.question, true);
+  await renderMarkdown(el.answerView, card.answer, true);
   scheduleLiveQuestionFit();
   setStatus("Previewing saved card. Use Replay to study that pile again.");
   updateMeta();
@@ -2361,8 +2361,16 @@ async function enhanceRenderedMarkdown(container) {
   fitMarkdownTables(container);
 }
 
-async function renderMarkdown(container, markdown) {
-  container.innerHTML = markdownToSafeHtml(markdown);
+async function renderMarkdown(container, markdown, allowPlaceholder = false) {
+  let displayMarkdown = markdown;
+  if (allowPlaceholder && (!markdown || String(markdown).trim() === "")) {
+    if (container.closest(".all-card-question") || container.closest(".card-question")) {
+      displayMarkdown = "<div class='empty-placeholder'>Question</div>";
+    } else if (container.closest(".all-card-answer") || container.closest(".card-answer")) {
+      displayMarkdown = "<div class='empty-placeholder'>Answer</div>";
+    }
+  }
+  container.innerHTML = markdownToSafeHtml(displayMarkdown);
   await enhanceRenderedMarkdown(container);
 }
 
@@ -2859,7 +2867,7 @@ async function ensureAllCardAnswer(item) {
   item.dataset.answerRendered = "rendering";
   const answerView = item.querySelector(".all-card-answer .rendered");
   answerView.textContent = "Rendering...";
-  await renderMarkdown(answerView, card.answer);
+  await renderMarkdown(answerView, card.answer, true);
   item.dataset.answerRendered = "true";
 }
 
@@ -2922,7 +2930,7 @@ async function renderAllCards() {
     `;
     item.appendChild(editor);
     el.allCardsList.appendChild(item);
-    await renderMarkdown(item.querySelector(".all-card-question .rendered"), card.question);
+    await renderMarkdown(item.querySelector(".all-card-question .rendered"), card.question, true);
   }
 
   updateAllCardStatuses();
@@ -3039,8 +3047,8 @@ async function showCard(direction = 0) {
     return;
   }
 
-  await renderMarkdown(el.questionView, card.question);
-  await renderMarkdown(el.answerView, card.answer);
+  await renderMarkdown(el.questionView, card.question, true);
+  await renderMarkdown(el.answerView, card.answer, true);
   scheduleLiveQuestionFit();
   updateMeta();
   if (enterClass) {
@@ -4485,7 +4493,7 @@ function toggleEditMode(side) {
     btn.innerHTML = '&#9998;';
     btn.title = isQuestion ? 'Edit question' : 'Edit answer';
     
-    renderMarkdown(view, newValue).then(() => {
+    renderMarkdown(view, newValue, true).then(() => {
       if (isQuestion) scheduleLiveQuestionFit();
     });
     

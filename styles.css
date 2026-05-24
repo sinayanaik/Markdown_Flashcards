@@ -3147,3 +3147,11 @@ textarea {
   border-color: var(--accent);
   outline: none;
 }
+
+.empty-placeholder {
+  color: color-mix(in srgb, var(--text) 30%, transparent);
+  font-style: italic;
+  font-size: 0.9em;
+  pointer-events: none;
+  user-select: none;
+}
