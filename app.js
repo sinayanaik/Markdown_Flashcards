@@ -2311,6 +2311,31 @@ function markdownToSafeHtml(markdown) {
   });
 }
 
+const nomnomlLightThemeDefaults = {
+  background: "#ffffff",
+  fill: "#fffdf8; #f3f6fb; #eaf7f3; #fff4db",
+  stroke: "#263238",
+  font: "Arial",
+  fontSize: "12",
+  lineWidth: "1.4"
+};
+
+function sourceWithNomnomlLightTheme(source) {
+  const diagramSource = String(source || "").trim();
+  const configured = new Set();
+
+  diagramSource.split("\n").forEach((line) => {
+    const match = line.trim().match(/^#([A-Za-z][A-Za-z0-9_]*)\s*:/);
+    if (match) configured.add(match[1].toLowerCase());
+  });
+
+  const injected = Object.entries(nomnomlLightThemeDefaults)
+    .filter(([key]) => !configured.has(key.toLowerCase()))
+    .map(([key, value]) => `#${key}: ${value}`);
+
+  return injected.length ? `${injected.join("\n")}\n${diagramSource}` : diagramSource;
+}
+
 function declaredCodeLanguage(code) {
   const languageClass = Array.from(code.classList).find((className) => className.startsWith("language-"));
   return languageClass ? languageClass.replace(/^language-/, "").trim() : "";
@@ -2408,8 +2433,10 @@ async function enhanceRenderedMarkdown(container) {
     nomnomlDiagrams.forEach((node) => {
       try {
         const diagramSource = node.textContent;
-        const svg = nomnoml.renderSvg(diagramSource);
+        const svg = nomnoml.renderSvg(sourceWithNomnomlLightTheme(diagramSource));
+        node.classList.add("nomnoml-light-theme");
         node.innerHTML = svg;
+        node.querySelector("svg")?.classList.add("nomnoml-light-svg");
         addDiagramZoomControl(node);
       } catch (err) {
         console.warn("Nomnoml render error:", err);
@@ -2590,6 +2617,9 @@ function addDiagramZoomControl(node) {
 
   const shell = document.createElement("div");
   shell.className = "diagram-shell";
+  if (node.classList.contains("nomnoml-light-theme")) {
+    shell.classList.add("nomnoml-light-shell");
+  }
   const button = document.createElement("button");
   button.className = "diagram-zoom";
   button.type = "button";
@@ -2771,6 +2801,7 @@ function resetDiagramZoom() {
 function openDiagramModal(node) {
   lockPageScroll();
   el.diagramModalBody.innerHTML = "";
+  el.diagramModalBody.classList.remove("nomnoml-light-modal-body");
   if (node.tagName === "IMG") {
     el.diagramModalBody.appendChild(node.cloneNode(true));
   } else {
@@ -2781,6 +2812,9 @@ function openDiagramModal(node) {
   const content = el.diagramModalBody.querySelector("svg, img");
   if (content) {
     content.classList.add("diagram-zoom-content");
+    if (content.classList.contains("nomnoml-light-svg")) {
+      el.diagramModalBody.classList.add("nomnoml-light-modal-body");
+    }
     initializeDiagramZoom(content);
   }
 }
@@ -2788,6 +2822,7 @@ function openDiagramModal(node) {
 function closeDiagramModal() {
   el.diagramModal.hidden = true;
   el.diagramModalBody.innerHTML = "";
+  el.diagramModalBody.classList.remove("nomnoml-light-modal-body");
   resetDiagramZoom();
   unlockPageScroll();
 }

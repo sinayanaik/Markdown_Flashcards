@@ -1166,6 +1166,56 @@ button:disabled {
   touch-action: pan-x pan-y;
 }
 
+.diagram-shell.nomnoml-light-shell {
+  background: #ffffff !important;
+  border-color: #d6dee6 !important;
+}
+
+.diagram-modal-body.nomnoml-light-modal-body {
+  background: #ffffff !important;
+}
+
+.nomnoml-light-theme {
+  color: #1f2933 !important;
+  color-scheme: light;
+  background: #ffffff !important;
+  isolation: isolate;
+}
+
+.nomnoml-light-theme svg,
+svg.nomnoml-light-svg {
+  background: #ffffff !important;
+  color: #1f2933 !important;
+  forced-color-adjust: none;
+}
+
+.nomnoml-light-theme svg text,
+svg.nomnoml-light-svg text {
+  fill: #1f2933 !important;
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
+.nomnoml-light-theme svg path,
+.nomnoml-light-theme svg line,
+.nomnoml-light-theme svg rect,
+.nomnoml-light-theme svg circle,
+.nomnoml-light-theme svg ellipse,
+.nomnoml-light-theme svg polygon,
+svg.nomnoml-light-svg path,
+svg.nomnoml-light-svg line,
+svg.nomnoml-light-svg rect,
+svg.nomnoml-light-svg circle,
+svg.nomnoml-light-svg ellipse,
+svg.nomnoml-light-svg polygon {
+  stroke: #263238 !important;
+}
+
+.nomnoml-light-theme svg [fill="transparent"],
+.nomnoml-light-theme svg [fill="none"],
+svg.nomnoml-light-svg [fill="transparent"],
+svg.nomnoml-light-svg [fill="none"] {
+  fill: none !important;
+}
 
 
 .diagram-shell .mermaid svg,
