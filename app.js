@@ -3174,11 +3174,14 @@ function adjustCornellRowHeight(row) {
 
   const railStyle = getComputedStyle(rail);
   const railPaddingY = (parseFloat(railStyle.paddingTop) || 0) + (parseFloat(railStyle.paddingBottom) || 0);
-  const badgeReserve = 56;
-  const questionHeight = question.scrollWidth + railPaddingY + badgeReserve + 16;
+  const railGap = parseFloat(railStyle.rowGap || railStyle.gap) || 0;
+  const badge = rail.querySelector(".cornell-row-number");
+  const badgeHeight = badge ? badge.getBoundingClientRect().height : 0;
+  const questionBuffer = row.classList.contains("cornell-print-row") ? 10 : 16;
+  const questionHeight = question.scrollHeight + railPaddingY + badgeHeight + railGap + questionBuffer;
   const answerHeight = answerCell.scrollHeight;
   const minHeight = row.classList.contains("cornell-print-row") ? 72 : 108;
-  row.style.minHeight = `${Math.ceil(Math.max(minHeight, questionHeight, answerHeight))}px`;
+  row.style.minHeight = `${Math.ceil(Math.max(minHeight, rail.scrollHeight, questionHeight, answerHeight))}px`;
 }
 
 function adjustCornellRows(container = document) {

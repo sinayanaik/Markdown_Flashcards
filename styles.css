@@ -2253,7 +2253,7 @@ textarea {
 }
 
 .all-cards-list {
-  gap: 8px;
+  gap: 10px;
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 28%),
     color-mix(in srgb, var(--panel-2) 44%, transparent);
@@ -2262,7 +2262,7 @@ textarea {
 .cornell-card {
   display: grid;
   min-height: 108px;
-  grid-template-columns: clamp(58px, 9vw, 104px) minmax(0, 1fr);
+  grid-template-columns: clamp(170px, 24vw, 300px) minmax(0, 1fr);
   gap: 0;
   border: 3px double color-mix(in srgb, var(--accent) 58%, var(--line));
   overflow: hidden;
@@ -2271,13 +2271,16 @@ textarea {
 
 .cornell-card .cornell-question-rail {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 10px;
   border-right: 3px double color-mix(in srgb, var(--accent) 58%, var(--line));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent),
     color-mix(in srgb, var(--panel-2) 78%, var(--card));
   color: var(--text);
-  padding: 12px 8px;
+  padding: 14px 10px;
   overflow: hidden;
 }
 
@@ -2286,41 +2289,44 @@ textarea {
 }
 
 .cornell-card .cornell-question-rail .rendered {
-  position: absolute;
-  top: calc(50% + 28px);
-  left: 50%;
+  position: static;
   display: block;
-  width: max-content;
-  max-width: none;
-  min-width: max-content;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: visible;
+  overflow-wrap: anywhere;
   padding: 0;
   color: inherit;
   font-size: clamp(0.86rem, 1.8vw, 1.05rem);
   font-weight: 800;
   line-height: 1.25;
-  text-align: start;
-  transform: translate(-50%, -50%) rotate(-90deg);
+  text-align: left;
+  transform: none;
   transform-origin: center;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: normal;
 }
 
 .cornell-card .cornell-question-rail .rendered > * {
-  display: inline;
-  margin: 0;
+  display: block;
+  margin: 0 0 0.45em;
+}
+
+.cornell-card .cornell-question-rail .rendered > :last-child {
+  margin-bottom: 0;
 }
 
 .cornell-card .cornell-question-rail .rendered a {
-  overflow-wrap: normal;
+  overflow-wrap: anywhere;
   word-break: normal;
 }
 
 .cornell-row-number {
-  position: absolute;
-  top: 10px;
-  left: 50%;
+  position: static;
   z-index: 1;
   display: inline-grid;
+  justify-self: start;
   min-width: 28px;
   min-height: 28px;
   place-items: center;
@@ -2331,7 +2337,7 @@ textarea {
   font-size: 0.72rem;
   font-weight: 950;
   letter-spacing: 0;
-  transform: translateX(-50%);
+  transform: none;
 }
 
 .cornell-card .cornell-answer-cell {
@@ -2558,7 +2564,7 @@ textarea {
 
 .cornell-print-row {
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
+  grid-template-columns: minmax(190px, 27%) minmax(0, 1fr);
   border: 3px double #9fb9b0;
   border-bottom: 0;
   background: #fff;
@@ -2577,34 +2583,41 @@ textarea {
 
 .cornell-print-row .cornell-question-rail {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 10px;
   border-right: 3px double #80aaa0;
   background: #eaf7f3;
-  padding: 12px 8px;
+  padding: 14px 10px;
   overflow: hidden;
 }
 
 .cornell-print-row .cornell-question-rail .rendered {
-  position: absolute;
-  top: calc(50% + 28px);
-  left: 50%;
+  position: static;
   display: block;
-  width: max-content;
-  max-width: none;
-  min-width: max-content;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   color: #10221e;
   font-size: 15px;
   font-weight: 850;
   line-height: 1.22;
   overflow: visible;
-  transform: translate(-50%, -50%) rotate(-90deg);
+  overflow-wrap: anywhere;
+  transform: none;
   transform-origin: center;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: normal;
 }
 
 .cornell-print-row .cornell-question-rail .rendered > * {
-  display: inline;
-  margin: 0;
+  display: block;
+  margin: 0 0 0.45em;
+}
+
+.cornell-print-row .cornell-question-rail .rendered > :last-child {
+  margin-bottom: 0;
 }
 
 .cornell-print-row .cornell-answer-cell {
@@ -3161,7 +3174,7 @@ textarea {
   }
 
   .all-cards-list {
-    gap: 8px;
+    gap: 10px;
     padding: 8px;
   }
 
@@ -3171,12 +3184,12 @@ textarea {
 
   .cornell-card {
     min-height: 96px;
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: minmax(112px, 38%) minmax(0, 1fr);
     padding: 0;
   }
 
   .cornell-card .cornell-question-rail {
-    padding: 9px 6px;
+    padding: 11px 8px;
   }
 
   .cornell-card .cornell-question-rail .rendered {
@@ -3484,11 +3497,11 @@ textarea {
   }
 
   .cornell-print-row {
-    grid-template-columns: 20mm minmax(0, 1fr);
+    grid-template-columns: 52mm minmax(0, 1fr);
   }
 
   .cornell-print-row .cornell-question-rail {
-    padding: 4mm 2.4mm;
+    padding: 4.5mm 3mm;
   }
 
   .cornell-print-row .cornell-answer-cell {
