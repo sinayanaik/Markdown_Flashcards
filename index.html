@@ -231,7 +231,18 @@
         <div class="style-grid" id="styleControls">
           <label class="style-field">
             <span>Theme</span>
-            <button class="style-theme-button" id="themeBtn" type="button">Dark</button>
+            <div class="theme-select" id="themeSelect">
+              <button class="theme-select-button" id="themeBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="theme-preview" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+                <span class="theme-select-label" id="themeCurrentLabel">AMOLED Black</span>
+                <span class="theme-caret" aria-hidden="true">v</span>
+              </button>
+              <div class="theme-menu" id="themeMenu" role="listbox" aria-label="Theme" hidden></div>
+            </div>
           </label>
         </div>
         <div class="style-actions">
@@ -270,12 +281,12 @@
     </section>
 
     <section class="sync-modal" id="syncModal" hidden aria-label="Sync Details" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center;">
-      <div class="sync-modal-content" style="background: var(--bg-surface, #1e1e1e); color: var(--text-primary, #fff); border: 1px solid var(--border-color, #333); border-radius: 8px; padding: 1.5rem; max-width: 400px; width: 90%;">
+      <div class="sync-modal-content" style="background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; max-width: 400px; width: 90%;">
         <h2 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.25rem;">Sync Confirmation</h2>
         <div id="syncDetailsContent" style="margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;"></div>
         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
           <button id="cancelSyncBtn" type="button" class="sync-modal-btn">Cancel</button>
-          <button id="confirmSyncBtn" type="button" class="sync-modal-btn" style="background: #4fc3b1; color: #16201c; border: none;">Confirm Sync</button>
+          <button id="confirmSyncBtn" type="button" class="sync-modal-btn is-primary">Confirm Sync</button>
         </div>
       </div>
     </section>
