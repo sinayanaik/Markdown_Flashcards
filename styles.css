@@ -37,7 +37,7 @@
   --question-align: center;
   --question-justify-items: center;
   --question-vertical-align: center;
-  --question-font-weight: 700;
+  --question-font-weight: 500;
   --question-padding: 2px;
   --answer-padding: 0px;
   --card-face-padding: clamp(18px, 3vw, 42px);
@@ -910,6 +910,30 @@ button:disabled {
 .card-question .rendered :is(h1, h2, h3) {
   font-size: 1em;
   line-height: inherit;
+}
+
+.rendered :is(strong, b),
+.fit-content :is(strong, b) {
+  font-weight: 900;
+}
+
+.rendered :is(em, i),
+.fit-content :is(em, i) {
+  font-style: italic;
+  font-weight: inherit;
+}
+
+.card-question .rendered :is(em, i),
+.print-root .fit-question :is(em, i) {
+  font-weight: 650;
+}
+
+.rendered :is(strong, b) :is(em, i),
+.rendered :is(em, i) :is(strong, b),
+.fit-content :is(strong, b) :is(em, i),
+.fit-content :is(em, i) :is(strong, b) {
+  font-style: italic;
+  font-weight: 900;
 }
 
 .rendered > :first-child {

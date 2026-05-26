@@ -112,7 +112,7 @@ WITH style_defaults AS (
   "questionLineHeight": "1.18",
   "questionAlign": "center",
   "questionVerticalAlign": "center",
-  "questionFontWeight": "700",
+  "questionFontWeight": "500",
   "questionPadding": "2px",
   "answerFontSize": "23px",
   "answerLineHeight": "1.58",

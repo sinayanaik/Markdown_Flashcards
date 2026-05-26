@@ -132,7 +132,7 @@ const defaultStyleProfiles = {
     "actionButtonHeight": "42px",
     "buttonCornerRadius": "8px",
     "questionFontFamily": "system",
-    "questionFontWeight": "700",
+    "questionFontWeight": "500",
     "questionLineHeight": "1.17",
     "replayButtonHeight": "30px",
     "questionFillPercent": "75",
@@ -180,7 +180,7 @@ const defaultStyleProfiles = {
     "actionButtonHeight": "42px",
     "buttonCornerRadius": "8px",
     "questionFontFamily": "system",
-    "questionFontWeight": "700",
+    "questionFontWeight": "500",
     "questionLineHeight": "1.18",
     "replayButtonHeight": "30px",
     "questionFillPercent": "58",
@@ -3760,7 +3760,7 @@ function fitLiveQuestion() {
       && contentSize.height <= availableHeight + 2;
   };
 
-  for (let index = 0; index < 14; index += 1) {
+  for (let index = 0; index < 10; index += 1) {
     const mid = (low + high) / 2;
     node.style.setProperty("--question-fit-font-size", `${mid}px`);
     if (fits()) {
