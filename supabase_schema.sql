@@ -2,10 +2,18 @@
 CREATE TABLE decks (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Uncategorized',
   current_card_index INT DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE INDEX decks_category_last_accessed_at_idx
+  ON decks (category, last_accessed_at DESC);
+
+CREATE INDEX decks_last_accessed_at_idx
+  ON decks (last_accessed_at DESC);
 
 -- Create Cards Table
 CREATE TABLE cards (

@@ -2,9 +2,9 @@ Final flashcard format:
 
 ```markdown
 ::
-## Front
+Front
 ---
-## Back
+Back
 ::
 ```
 

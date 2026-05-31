@@ -36,10 +36,13 @@
             <button class="tool-button" id="exportBtn" type="button">Export</button>
             <div class="export-menu" id="exportMenu" hidden>
               <button type="button" data-export="pdf" data-scope="known">Known Cornell PDF</button>
+              <button type="button" data-export="sql" data-scope="known">Known SQL</button>
               <button type="button" data-export="pdf" data-scope="review">Review Cornell PDF</button>
+              <button type="button" data-export="sql" data-scope="review">Review SQL</button>
               <button type="button" data-export="pdf" data-scope="all">All Cornell PDF</button>
               <button type="button" data-export="markdown" data-scope="all">All Markdown</button>
               <button type="button" data-export="json" data-scope="all">All JSON</button>
+              <button type="button" data-export="sql" data-scope="all">All SQL</button>
             </div>
           </div>
           <button class="tool-button" id="allCardsBtn" type="button">All</button>
@@ -52,6 +55,8 @@
           <span class="deck-title-wrap" id="deckTitleWrap" hidden>
             <span class="deck-title" id="deckTitle"></span>
             <button class="deck-title-edit" id="editDeckTitleBtn" type="button" title="Edit deck title" aria-label="Edit deck title">&#9998;</button>
+            <span class="deck-category" id="deckCategory">Uncategorized</span>
+            <button class="deck-title-edit deck-category-edit" id="editDeckCategoryBtn" type="button" title="Edit deck category" aria-label="Edit deck category">#</button>
           </span>
           <span id="positionText">0/0</span>
           <strong id="scoreText">Known 0 / Review 0</strong>
@@ -258,21 +263,39 @@
         <div class="web-decks-head">
           <div>
             <h1>Web Decks</h1>
-            <p>Load or delete decks stored on the web.</p>
+            <p>Load, delete, or categorize decks stored on the web.</p>
           </div>
           <button class="icon-button" id="closeWebDecksBtn" type="button" aria-label="Close web decks panel">&#215;</button>
+        </div>
+        <div class="web-decks-tools">
+          <label>
+            <span>Category</span>
+            <select id="webDeckCategoryFilter">
+              <option value="">All categories</option>
+            </select>
+          </label>
+          <div class="web-decks-global-export">
+            <button id="globalWebExportBtn" type="button" aria-haspopup="true" aria-expanded="false">Export All</button>
+            <div class="web-decks-global-export-menu" id="globalWebExportMenu" hidden>
+              <button type="button" data-global-web-export="pdf">Cornell PDF</button>
+              <button type="button" data-global-web-export="markdown">Markdown</button>
+              <button type="button" data-global-web-export="json">JSON</button>
+              <button type="button" data-global-web-export="sql">SQL</button>
+            </div>
+          </div>
         </div>
         <div class="web-decks-table-wrap">
           <table class="web-decks-table">
             <thead>
               <tr>
                 <th>Title</th>
-                <th>Last Updated</th>
+                <th>Category</th>
+                <th>Last Accessed</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="webDecksListTable">
-              <tr><td colspan="3" class="web-decks-empty">Click "Refresh List" to load web decks.</td></tr>
+              <tr><td colspan="4" class="web-decks-empty">Click "Refresh List" to load web decks.</td></tr>
             </tbody>
           </table>
         </div>
