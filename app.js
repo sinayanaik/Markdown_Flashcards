@@ -1722,7 +1722,7 @@ let draggedAllCardId = "";
 let printTitleBeforeExport = "";
 let printPreviewOpen = false;
 let allCardsAnswersVisible = false;
-const singlePagePrintStyleId = "singlePagePrintStyle";
+const pdfPrintStyleId = "pdfPrintStyle";
 let liveQuestionFitFrame = 0;
 let markdownTableFitFrame = 0;
 
@@ -4825,7 +4825,7 @@ function closePrintPreview() {
   el.printRoot.classList.remove("is-preparing", "is-preview");
   el.printRoot.innerHTML = "";
   el.printRoot.setAttribute("aria-hidden", "true");
-  document.querySelector(`#${singlePagePrintStyleId}`)?.remove();
+  document.querySelector(`#${pdfPrintStyleId}`)?.remove();
   if (printTitleBeforeExport) document.title = printTitleBeforeExport;
   printTitleBeforeExport = "";
   unlockPageScroll();
@@ -4924,25 +4924,20 @@ function markOversizePrintRows() {
   });
 }
 
-function installSinglePagePrintStyle() {
-  const documentNode = el.printRoot.querySelector(".cornell-print-document");
-  if (!documentNode) return;
-
-  const widthPx = Math.max(documentNode.getBoundingClientRect().width, 1);
-  const heightPx = Math.max(documentNode.scrollHeight, documentNode.getBoundingClientRect().height, 1);
-  const widthMm = 297;
-  const marginMm = 8;
-  const heightMm = Math.ceil((heightPx / widthPx) * widthMm + marginMm * 2 + 2);
-  let style = document.querySelector(`#${singlePagePrintStyleId}`);
+function installPdfPrintStyle() {
+  let style = document.querySelector(`#${pdfPrintStyleId}`);
   if (!style) {
     style = document.createElement("style");
-    style.id = singlePagePrintStyleId;
+    style.id = pdfPrintStyleId;
     document.head.appendChild(style);
   }
   style.textContent = `
     @media print {
-      @page { size: ${widthMm}mm ${heightMm}mm; margin: ${marginMm}mm; }
+      @page { size: A4 landscape; margin: 8mm; }
+      .cornell-print-document { width: auto !important; }
       .cornell-print-row { break-inside: avoid; page-break-inside: avoid; }
+      .cornell-print-row.is-oversize { break-inside: auto; page-break-inside: auto; }
+      .cornell-print-deck-divider { break-after: avoid; page-break-after: avoid; }
     }
   `;
 }
@@ -4951,7 +4946,7 @@ function standalonePrintStyles() {
   const links = Array.from(document.querySelectorAll('link[rel="stylesheet"][href]'))
     .map((link) => `<link rel="stylesheet" href="${escapeHtml(link.href)}">`)
     .join("\n");
-  const singlePageStyle = document.querySelector(`#${singlePagePrintStyleId}`)?.textContent || "";
+  const pdfPrintStyle = document.querySelector(`#${pdfPrintStyleId}`)?.textContent || "";
   return `
     ${links}
     <style>
@@ -4995,7 +4990,7 @@ function standalonePrintStyles() {
           padding: 10px;
         }
       }
-      ${singlePageStyle}
+      ${pdfPrintStyle}
     </style>
   `;
 }
@@ -5093,7 +5088,7 @@ async function exportCardsPdf(sourceTitle, cards, options = {}) {
 
     adjustCornellRows(el.printRoot);
     await afterPaint();
-    installSinglePagePrintStyle();
+    installPdfPrintStyle();
     el.printRoot.classList.remove("is-preparing");
     el.printRoot.classList.add("is-preview");
     el.printRoot.setAttribute("aria-hidden", "false");
@@ -5140,7 +5135,7 @@ async function exportPdf(scope = "all") {
 
     adjustCornellRows(el.printRoot);
     await afterPaint();
-    installSinglePagePrintStyle();
+    installPdfPrintStyle();
     el.printRoot.classList.remove("is-preparing");
     el.printRoot.classList.add("is-preview");
     el.printRoot.setAttribute("aria-hidden", "false");
