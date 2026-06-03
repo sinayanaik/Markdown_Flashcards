@@ -6952,10 +6952,3 @@ function handleToolbarClick(event) {
   });
 }
 
-// Global click delegation for any formatting toolbar button
-document.addEventListener("click", (e) => {
-  const button = e.target.closest(".edit-toolbar button");
-  if (button) {
-    handleToolbarClick(e);
-  }
-});
