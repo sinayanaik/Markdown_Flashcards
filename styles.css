@@ -3189,7 +3189,7 @@ textarea {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  width: min(1123px, 100%);
+  width: min(800px, 100%);
   margin: 0 auto 12px;
   border: 1px solid var(--print-line);
   border-radius: 10px;
@@ -3215,10 +3215,11 @@ textarea {
 }
 
 .cornell-print-document {
-  width: min(1123px, 100%);
+  width: min(800px, 100%);
   margin: 0 auto;
   background: var(--print-panel);
   box-shadow: var(--print-shadow);
+  border: 1px solid var(--print-line);
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
@@ -3227,11 +3228,9 @@ textarea {
   display: flex;
   align-items: end;
   gap: 24px;
-  border-bottom: 4px solid var(--print-accent);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--print-accent) 14%, transparent), transparent 58%),
-    var(--print-panel);
-  padding: 28px 32px 24px;
+  border-bottom: 3px solid var(--print-accent);
+  background: var(--print-panel);
+  padding: 36px 24px 24px;
 }
 
 .cornell-print-cover h1 {
@@ -3268,21 +3267,18 @@ textarea {
 }
 
 .cornell-print-table {
-  display: grid;
-  gap: 0;
-  padding: 18px;
+  display: block;
+  padding: 24px 24px 36px;
 }
 
 .cornell-print-deck-divider {
   display: grid;
   gap: 7px;
-  margin: 14px 0 10px;
-  border: 2px solid color-mix(in srgb, var(--print-accent) 56%, var(--print-line));
-  border-left-width: 8px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--print-accent) 12%, transparent), transparent 72%),
-    var(--print-surface);
-  padding: 16px 18px;
+  margin: 28px 0 14px;
+  border: 2px solid var(--print-accent);
+  border-left-width: 6px;
+  background: var(--print-surface);
+  padding: 14px 18px;
   break-after: avoid;
   page-break-after: avoid;
   print-color-adjust: exact;
@@ -3317,18 +3313,19 @@ textarea {
 }
 
 .cornell-print-row {
-  display: grid;
-  grid-template-columns: minmax(190px, 27%) minmax(0, 1fr);
-  border: 3px double color-mix(in srgb, var(--print-accent) 42%, var(--print-line));
-  border-bottom: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  border: 2px solid var(--print-line);
+  border-radius: 0;
+  margin-bottom: 6mm;
   background: var(--print-surface);
   break-inside: avoid;
   page-break-inside: avoid;
+  overflow: hidden;
 }
 
-.cornell-print-row:last-child {
-  border-bottom: 3px double color-mix(in srgb, var(--print-accent) 42%, var(--print-line));
-}
+/* Each card is self-contained with its own strong rectangular borders */
 
 .cornell-print-row.is-oversize {
   break-inside: auto;
@@ -3337,13 +3334,16 @@ textarea {
 
 .cornell-print-row .cornell-question-rail {
   position: relative;
-  display: grid;
-  grid-template-rows: auto auto;
+  flex: 0 0 45mm;
+  width: 45mm;
+  min-width: 45mm;
+  display: flex;
+  flex-direction: column;
   align-content: start;
   gap: 10px;
-  border-right: 3px double color-mix(in srgb, var(--print-accent) 48%, var(--print-line));
+  border-right: 2px solid var(--print-line);
   background: var(--print-question);
-  padding: 14px 10px;
+  padding: 12px 14px;
   overflow: hidden;
 }
 
@@ -3381,10 +3381,10 @@ textarea {
 }
 
 .cornell-print-row .cornell-answer-cell {
-  display: block;
+  flex: 1 1 0;
   min-width: 0;
   background: var(--print-surface);
-  padding: 14px 16px;
+  padding: 12px 16px;
 }
 
 .cornell-print-row .cornell-row-head {
@@ -4243,8 +4243,8 @@ textarea {
 
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 8mm;
+    size: A4 portrait;
+    margin: 12mm;
   }
 
   html,
@@ -4307,7 +4307,7 @@ textarea {
   }
 
   .cornell-print-cover {
-    padding: 0 0 7mm;
+    padding: 6mm 12mm 6mm;
   }
 
   .cornell-print-cover h1 {
@@ -4315,28 +4315,69 @@ textarea {
   }
 
   .cornell-print-table {
-    padding: 0;
+    padding: 6mm 12mm 12mm;
   }
 
   .cornell-print-row {
-    grid-template-columns: 52mm minmax(0, 1fr);
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    border: 2px solid var(--print-line) !important;
+    border-radius: 0 !important;
+    margin-bottom: 6mm !important;
+    overflow: hidden !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .cornell-print-row .cornell-question-rail {
-    padding: 4.5mm 3mm;
+    flex: 0 0 45mm !important;
+    width: 45mm !important;
+    min-width: 45mm !important;
+    border-right: 2px solid var(--print-line) !important;
+    padding: 3mm 4mm;
   }
 
   .cornell-print-row .cornell-answer-cell {
-    padding: 4mm 5mm;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 3mm 4mm;
   }
 
   .cornell-print-row .rendered {
-    font-size: 11pt;
-    line-height: 1.42;
+    font-size: 9.5pt;
+    line-height: 1.35;
   }
 
   .cornell-print-row .cornell-question-rail .rendered {
-    font-size: 10pt;
+    font-size: 9pt;
+    line-height: 1.3;
+  }
+
+  .cornell-print-row h1 { font-size: 13pt; margin-top: 0.5em; margin-bottom: 0.3em; }
+  .cornell-print-row h2 { font-size: 11.5pt; margin-top: 0.5em; margin-bottom: 0.3em; }
+  .cornell-print-row h3 { font-size: 10.5pt; margin-top: 0.4em; margin-bottom: 0.2em; }
+  .cornell-print-row p { margin: 0 0 0.5em; }
+  .cornell-print-row p:last-child { margin-bottom: 0; }
+
+  .cornell-print-row table {
+    width: 100% !important;
+    border-collapse: collapse;
+    margin: 6px 0;
+    font-size: 8.5pt;
+  }
+  .cornell-print-row th,
+  .cornell-print-row td {
+    padding: 4px 6px !important;
+    border: 1px solid var(--print-line) !important;
+    word-break: break-word;
+  }
+  .cornell-print-row pre {
+    padding: 6px 8px !important;
+    font-size: 8pt !important;
+    margin: 6px 0 !important;
+    background: #f7f9fa !important;
+    border: 1px solid var(--print-line) !important;
   }
 
   .cornell-print-row svg,
@@ -4587,3 +4628,124 @@ textarea {
   pointer-events: none;
   user-select: none;
 }
+
+/* Print/PDF-specific Codeblock styling */
+.print-root pre,
+.print-root pre[class*="language-"] {
+  background: #f8f9fa !important;
+  border: 1px solid var(--print-line) !important;
+  color: #24292e !important;
+  box-shadow: none !important;
+}
+
+.print-root pre code,
+.print-root pre code[class*="language-"] {
+  color: #24292e !important;
+  background: transparent !important;
+}
+
+.print-root :not(pre) > code {
+  background: color-mix(in srgb, var(--print-accent, var(--accent)) 8%, #f4f6f6) !important;
+  color: var(--print-text) !important;
+  border: 1px solid var(--print-line) !important;
+}
+
+/* Syntax Highlighting for Print/PDF mode */
+.print-root .token.comment,
+.print-root .token.prolog,
+.print-root .token.doctype,
+.print-root .token.cdata {
+  color: #6a737d !important;
+  font-style: italic !important;
+}
+
+.print-root .token.keyword,
+.print-root .token.atrule {
+  color: #d73a49 !important;
+  font-weight: bold !important;
+}
+
+.print-root .token.function,
+.print-root .token.method {
+  color: #6f42c1 !important;
+}
+
+.print-root .token.builtin,
+.print-root .token.class-name {
+  color: #e36209 !important;
+}
+
+.print-root .token.string,
+.print-root .token.char,
+.print-root .token.attr-value {
+  color: #032f62 !important;
+}
+
+.print-root .token.number,
+.print-root .token.boolean,
+.print-root .token.constant,
+.print-root .token.uppercase-constant {
+  color: #005cc5 !important;
+}
+
+.print-root .token.operator,
+.print-root .token.entity,
+.print-root .token.url {
+  color: #d73a49 !important;
+}
+
+.print-root .token.punctuation {
+  color: #24292e !important;
+}
+
+.print-root .token.property,
+.print-root .token.attr-name,
+.print-root .token.selector,
+.print-root .token.tag {
+  color: #22863a !important;
+}
+
+.print-root .token.regex,
+.print-root .token.important,
+.print-root .token.variable {
+  color: #e36209 !important;
+}
+
+/* Print/PDF Image and Table Formatting */
+.print-root img {
+  max-width: 100% !important;
+  max-height: 55mm !important;
+  object-fit: contain !important;
+  margin: 6px auto !important;
+  border: 1px solid var(--print-line) !important;
+  background: #ffffff !important;
+  padding: 2px !important;
+}
+
+.print-root table {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: table !important;
+  table-layout: auto !important;
+  margin: 8px 0 !important;
+  font-size: 8.5pt !important;
+  border-collapse: collapse !important;
+}
+
+.print-root th,
+.print-root td {
+  display: table-cell !important;
+  min-width: 0 !important;
+  padding: 4px 6px !important;
+  border: 1px solid var(--print-line) !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
+
+.print-root th {
+  background: color-mix(in srgb, var(--print-accent) 8%, #f4f6f6) !important;
+  font-weight: bold !important;
+  color: var(--print-text) !important;
+}
+
+

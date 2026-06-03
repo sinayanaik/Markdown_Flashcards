@@ -3239,8 +3239,14 @@ function protectMath(markdown) {
     if (source.startsWith("$$", index) && !isEscaped(source, index)) {
       const close = findUnescaped(source, "$$", index + 2);
       if (close !== -1) {
-        output += mathNode(source.slice(index + 2, close), true);
+        // Surround display math with blank lines so marked exits HTML-block mode
+        // and correctly parses any markdown (headings, paragraphs) that follows.
+        const node = mathNode(source.slice(index + 2, close), true);
+        const needsLeading = output.length > 0 && !output.endsWith("\n\n");
+        output += (needsLeading ? "\n\n" : "") + node + "\n\n";
         index = close + 2;
+        // Skip any trailing newlines that were already part of $$...$$
+        while (index < source.length && source[index] === "\n") index++;
         continue;
       }
     }
@@ -3251,9 +3257,12 @@ function protectMath(markdown) {
       const close = findSingleDollarLine(source, contentStart);
       if (close !== -1) {
         const closeLineStart = source.lastIndexOf("\n", close - 1) + 1;
-        output += mathNode(source.slice(contentStart, closeLineStart), true);
+        const node = mathNode(source.slice(contentStart, closeLineStart), true);
+        const needsLeading = output.length > 0 && !output.endsWith("\n\n");
+        output += (needsLeading ? "\n\n" : "") + node + "\n\n";
         const closeLineEnd = source.indexOf("\n", close);
         index = closeLineEnd === -1 ? close + 1 : closeLineEnd + 1;
+        while (index < source.length && source[index] === "\n") index++;
         continue;
       }
     }
@@ -3263,7 +3272,13 @@ function protectMath(markdown) {
       const closeToken = displayMode ? "\\]" : "\\)";
       const close = findUnescaped(source, closeToken, index + 2);
       if (close !== -1) {
-        output += mathNode(source.slice(index + 2, close), displayMode);
+        const node = mathNode(source.slice(index + 2, close), displayMode);
+        if (displayMode) {
+          const needsLeading = output.length > 0 && !output.endsWith("\n\n");
+          output += (needsLeading ? "\n\n" : "") + node + "\n\n";
+        } else {
+          output += node;
+        }
         index = close + 2;
         continue;
       }
@@ -4911,14 +4926,17 @@ function cornellCardHtml(card, index, { answerVisible = false, print = false, st
   const idAttr = print ? "" : ` data-card-id="${escapeHtml(card.id)}" data-status="${escapeHtml(status)}" data-answer-rendered="${answerVisible ? "true" : "false"}"`;
   const draggableAttr = print ? "" : ` tabindex="0" draggable="true"`;
   const answerHtml = answerVisible ? markdownToSafeHtml(card.answer) : "";
+  // Use clean class names for print — strip interactive all-card-* classes that have display:none rules
+  const questionClass = print ? "cornell-question-rail" : "cornell-question-rail all-card-question";
+  const answerClass = print ? "cornell-answer-cell" : "cornell-answer-cell all-card-answer";
 
   return `
     <article class="${rowClass}${openClass}"${idAttr}${draggableAttr}>
-      <aside class="cornell-question-rail all-card-question">
+      <aside class="${questionClass}">
         <span class="cornell-row-number">${cardOrdinalLabel(index)}</span>
         <div class="rendered">${markdownToSafeHtml(card.question)}</div>
       </aside>
-      <section class="cornell-answer-cell all-card-answer">
+      <section class="${answerClass}">
         <div class="cornell-row-head">
           ${print ? "" : `<span class="all-card-status-label cornell-status" data-all-status-label data-status="${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>`}
           ${print ? "" : `
@@ -4945,7 +4963,7 @@ function buildCornellPrintDocument(title, cards, scope, options = {}) {
   return `
     <div class="print-preview-actions" data-print-ui>
       <button type="button" data-print-close>Close</button>
-      <button type="button" data-print-now>Print / Save PDF</button>
+      <button type="button" data-print-now>Download PDF</button>
     </div>
     <div class="cornell-print-document">
       <header class="cornell-print-cover">
@@ -4967,8 +4985,8 @@ function buildCornellPrintDocument(title, cards, scope, options = {}) {
 }
 
 function markOversizePrintRows() {
-  const a4LandscapeContentHeightMm = 194;
-  const pageHeight = Math.round(a4LandscapeContentHeightMm * 96 / 25.4);
+  const a4PortraitContentHeightMm = 277;
+  const pageHeight = Math.round(a4PortraitContentHeightMm * 96 / 25.4);
   el.printRoot.querySelectorAll(".cornell-print-row").forEach((row) => {
     row.classList.toggle("is-oversize", row.scrollHeight > pageHeight);
   });
@@ -4983,11 +5001,88 @@ function installPdfPrintStyle() {
   }
   style.textContent = `
     @media print {
-      @page { size: A4 landscape; margin: 8mm; }
-      .cornell-print-document { width: auto !important; }
-      .cornell-print-row { break-inside: avoid; page-break-inside: avoid; }
-      .cornell-print-row.is-oversize { break-inside: auto; page-break-inside: auto; }
-      .cornell-print-deck-divider { break-after: avoid; page-break-after: avoid; }
+      @page { size: A4 portrait; margin: 12mm; }
+
+      /* Card layout */
+      .cornell-print-document { width: auto !important; border: none !important; box-shadow: none !important; }
+      .cornell-print-table { padding: 6mm 0 0 !important; }
+      .cornell-print-row {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: stretch !important;
+        border: 2px solid #bbb !important;
+        border-radius: 0 !important;
+        margin-bottom: 6mm !important;
+        overflow: hidden !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      .cornell-print-row .cornell-question-rail {
+        flex: 0 0 45mm !important;
+        width: 45mm !important;
+        min-width: 45mm !important;
+        border-right: 2px solid #bbb !important;
+      }
+      .cornell-print-row .cornell-answer-cell {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+      }
+      /* Oversized cards (taller than a page): let them fragment but start on new page */
+      .cornell-print-row.is-oversize {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+        break-before: page;
+        page-break-before: always;
+      }
+
+      /* Code block light theme for print */
+      .cornell-print-row pre,
+      .cornell-print-row pre[class*="language-"] {
+        background: #f6f8fa !important;
+        border: 1px solid #d0d0d0 !important;
+        color: #24292e !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+      }
+      .cornell-print-row pre code,
+      .cornell-print-row pre code[class*="language-"] {
+        color: #24292e !important;
+        background: transparent !important;
+      }
+      .cornell-print-row .token.comment,
+      .cornell-print-row .token.prolog,
+      .cornell-print-row .token.doctype,
+      .cornell-print-row .token.cdata { color: #6a737d !important; font-style: italic !important; }
+      .cornell-print-row .token.keyword,
+      .cornell-print-row .token.atrule { color: #d73a49 !important; font-weight: bold !important; }
+      .cornell-print-row .token.function { color: #6f42c1 !important; }
+      .cornell-print-row .token.string,
+      .cornell-print-row .token.char,
+      .cornell-print-row .token.attr-value { color: #032f62 !important; }
+      .cornell-print-row .token.number,
+      .cornell-print-row .token.boolean { color: #005cc5 !important; }
+      .cornell-print-row .token.operator { color: #d73a49 !important; }
+      .cornell-print-row .token.punctuation { color: #24292e !important; }
+      .cornell-print-row .token.tag,
+      .cornell-print-row .token.selector { color: #22863a !important; }
+      .cornell-print-row .token.variable { color: #e36209 !important; }
+
+      /* Tables */
+      .cornell-print-row table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-size: 8.5pt !important;
+      }
+      .cornell-print-row th { background: #f0f0f0 !important; font-weight: bold !important; color: #222 !important; }
+      .cornell-print-row th,
+      .cornell-print-row td { border: 1px solid #bbb !important; padding: 3px 6px !important; }
+
+      /* Images */
+      .cornell-print-row img {
+        max-width: 100% !important;
+        max-height: 50mm !important;
+        object-fit: contain !important;
+      }
     }
   `;
 }
@@ -5085,6 +5180,17 @@ function standalonePrintDocumentHtml() {
     </html>`;
 }
 
+async function generatePdfDirectly() {
+  const documentNode = el.printRoot.querySelector(".cornell-print-document");
+  if (!documentNode) {
+    setStatus("PDF preview is not ready yet.", "error");
+    return;
+  }
+
+  // Use fast standalone print window — browser print is instant and uses @media print CSS
+  openStandalonePrintDocument();
+}
+
 function openStandalonePrintDocument() {
   const html = standalonePrintDocumentHtml();
   if (!html) {
@@ -5145,7 +5251,7 @@ async function exportCardsPdf(sourceTitle, cards, options = {}) {
     printPreviewOpen = true;
     lockPageScroll();
     markOversizePrintRows();
-    setStatus(`${sourceTitle} Cornell PDF preview is ready. Use Print / Save PDF.`);
+    setStatus(`${sourceTitle} Cornell PDF preview is ready. Use Download PDF.`);
   } catch (error) {
     console.error("PDF export failed", error);
     closePrintPreview();
@@ -5192,7 +5298,7 @@ async function exportPdf(scope = "all") {
     printPreviewOpen = true;
     lockPageScroll();
     markOversizePrintRows();
-    setStatus(`${title} Cornell PDF preview is ready. Use Print / Save PDF.`);
+    setStatus(`${title} Cornell PDF preview is ready. Use Download PDF.`);
   } catch (error) {
     console.error("PDF export failed", error);
     closePrintPreview();
@@ -6016,7 +6122,7 @@ el.printRoot.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-print-now]")) {
-    openStandalonePrintDocument();
+    generatePdfDirectly();
   }
 });
 el.themeBtn.addEventListener("click", (event) => {
@@ -6138,23 +6244,13 @@ if (styleMobileMedia?.addEventListener) {
   styleMobileMedia.addListener(handleStyleEnvironmentChange);
 }
 
-setStyleProfiles(loadLocalStyleSettings());
-applyActiveStyleSettings({ force: true, save: false });
-
-let savedTheme = "dark-amoled";
-try {
-  const storedTheme = localStorage.getItem(themeStorageKey);
-  if (storedTheme) savedTheme = storedTheme;
-} catch (e) {
-  console.warn("Could not load saved theme", e);
-}
+clearBrowserPersistence();
+setStyleProfiles(defaultStyleProfiles);
+applyActiveStyleSettings({ force: true });
 renderThemeMenu();
-setTheme(savedTheme);
-
-if (!loadPersistedDeck()) {
-  setStatus("");
-  showCard();
-}
+setTheme("dark-amoled");
+setStatus("");
+showCard();
 loadStyleFromWeb();
 installManifestLink();
 registerServiceWorker();
