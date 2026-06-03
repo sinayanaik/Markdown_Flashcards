@@ -3328,8 +3328,8 @@ function markdownToSafeHtml(markdown) {
   const prepared = preprocessSpecialBlocks(markdown || "");
   const html = marked.parse(prepared);
   return DOMPurify.sanitize(html, {
-    ADD_TAGS: ["foreignObject"],
-    ADD_ATTR: ["target", "rel", "class", "data-tex", "data-diagram"]
+    ADD_TAGS: ["foreignObject", "font", "u", "del", "kbd"],
+    ADD_ATTR: ["target", "rel", "class", "data-tex", "data-diagram", "style", "color", "face"]
   });
 }
 
@@ -4247,7 +4247,12 @@ async function renderAllCards() {
     editor.hidden = true;
     editor.innerHTML = `
       <label>
-        <span data-all-edit-label>Question</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <span data-all-edit-label>Question</span>
+          <div class="edit-toolbar" data-all-card-toolbar>
+            ${createToolbarHtml()}
+          </div>
+        </div>
         <textarea data-all-edit-value spellcheck="false"></textarea>
       </label>
     `;
@@ -6380,6 +6385,7 @@ function toggleEditMode(side) {
   const btn = isQuestion ? el.editQuestionBtn : el.editAnswerBtn;
   const view = isQuestion ? el.questionView : el.answerView;
   const edit = isQuestion ? el.questionEdit : el.answerEdit;
+  const toolbar = isQuestion ? document.getElementById("questionEditToolbar") : document.getElementById("answerEditToolbar");
   const currentCard = state.cards[state.current];
   
   if (!currentCard) return;
@@ -6389,6 +6395,7 @@ function toggleEditMode(side) {
   if (!isEditing) {
     view.hidden = true;
     edit.hidden = false;
+    if (toolbar) toolbar.hidden = false;
     edit.value = isQuestion ? currentCard.question : currentCard.answer;
     btn.innerHTML = '&#128190;';
     btn.title = 'Save';
@@ -6409,6 +6416,7 @@ function toggleEditMode(side) {
 
     view.hidden = false;
     edit.hidden = true;
+    if (toolbar) toolbar.hidden = true;
     btn.innerHTML = '&#9998;';
     btn.title = isQuestion ? 'Edit question' : 'Edit answer';
     
@@ -6477,3 +6485,418 @@ if (el.deleteCardBtn) {
     setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
   });
 }
+
+// Convert rich text/HTML to Markdown on paste in all textareas
+document.addEventListener("paste", (event) => {
+  const target = event.target;
+  if (target.tagName !== "TEXTAREA") return;
+
+  if (typeof TurndownService === "undefined") return;
+
+  const clipboardData = event.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
+
+  const types = clipboardData.types || [];
+  if (!types.includes("text/html")) return;
+
+  const html = clipboardData.getData("text/html");
+  if (!html) return;
+
+  const plainText = clipboardData.getData("text/plain");
+
+  // Prevent default paste behavior
+  event.preventDefault();
+
+  // Initialize TurndownService with preferences matching markdown cards
+  const turndownService = new TurndownService({
+    headingStyle: "atx",
+    codeBlockStyle: "fenced",
+    hr: "---",
+    bulletListMarker: "-"
+  });
+
+  // Load GFM plugin for tables, strikethrough, etc. if available
+  if (typeof turndownPluginGfm !== "undefined" && turndownPluginGfm.gfm) {
+    turndownService.use(turndownPluginGfm.gfm);
+  }
+
+  // Restore KaTeX rendered math back into standard LaTeX ($...$ or $$...$$)
+  turndownService.addRule("katex", {
+    filter: function (node) {
+      return node.nodeName === "SPAN" && node.classList.contains("katex");
+    },
+    replacement: function (content, node) {
+      const annotation = node.querySelector('annotation[encoding="application/x-tex"]');
+      if (annotation) {
+        const tex = annotation.textContent.trim();
+        const isDisplay = node.classList.contains("katex-display") || node.querySelector(".katex-display");
+        return isDisplay ? "\n$$\n" + tex + "\n$$\n" : "$" + tex + "$";
+      }
+      return content;
+    }
+  });
+
+  // Intercept and ignore MathJax rendering containers, extracting raw text from mjx-copytext
+  turndownService.addRule("mathjax-containers", {
+    filter: function (node) {
+      return (
+        (node.classList && (
+          node.classList.contains("MathJax") || 
+          node.classList.contains("MathJax_Preview") || 
+          node.classList.contains("MathJax_Display")
+        )) || 
+        node.nodeName === "MJX-CONTAINER"
+      );
+    },
+    replacement: function (content, node) {
+      if (node.nodeName === "MJX-CONTAINER") {
+        const copyTextEl = node.querySelector("mjx-copytext");
+        if (copyTextEl) return copyTextEl.textContent.trim();
+      }
+      return "";
+    }
+  });
+
+  // Extract LaTeX from MathJax 2 script tags
+  turndownService.addRule("mathjax-script", {
+    filter: function (node) {
+      return node.nodeName === "SCRIPT" && node.type && node.type.startsWith("math/tex");
+    },
+    replacement: function (content, node) {
+      const tex = node.textContent.trim();
+      const isDisplay = node.type.includes("mode=display");
+      return isDisplay ? "\n$$\n" + tex + "\n$$\n" : "$" + tex + "$";
+    }
+  });
+
+  let markdown = "";
+  try {
+    markdown = turndownService.turndown(html);
+  } catch (err) {
+    console.error("Turndown conversion failed, falling back to plain text", err);
+    markdown = plainText;
+  }
+
+  // Fallback to plain text if the markdown conversion was empty
+  if (!markdown.trim() && plainText.trim()) {
+    markdown = plainText;
+  }
+
+  let inserted = false;
+  try {
+    target.focus();
+    inserted = document.execCommand("insertText", false, markdown);
+  } catch (e) {
+    console.warn("execCommand failed, falling back to manual insertion", e);
+  }
+
+  if (!inserted) {
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const val = target.value;
+    target.value = val.substring(0, start) + markdown + val.substring(end);
+    target.selectionStart = target.selectionEnd = start + markdown.length;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+});
+
+// Dynamic HTML template for the inline edit toolbar
+function createToolbarHtml() {
+  return `
+    <button type="button" data-action="bold" title="Bold"><b>B</b></button>
+    <button type="button" data-action="italic" title="Italic"><i>I</i></button>
+    <button type="button" data-action="underline" title="Underline"><u>U</u></button>
+    <button type="button" data-action="strikethrough" title="Strikethrough"><span style="text-decoration: line-through;">S</span></button>
+    <button type="button" data-action="code" title="Code Block"><code>&lt;/&gt;</code></button>
+    
+    <div class="toolbar-dropdown">
+      <button type="button" class="toolbar-dropdown-toggle" title="Font Family">Aa</button>
+      <div class="toolbar-dropdown-content font-menu">
+        <button type="button" data-font="sans-serif" style="font-family: sans-serif;">Sans-Serif</button>
+        <button type="button" data-font="serif" style="font-family: serif;">Serif</button>
+        <button type="button" data-font="monospace" style="font-family: monospace;">Monospace</button>
+        <button type="button" data-font="cursive" style="font-family: cursive;">Cursive</button>
+        <button type="button" data-font="system-ui" style="font-family: system-ui;">System UI</button>
+        <button type="button" data-font="georgia" style="font-family: georgia, serif;">Georgia</button>
+        <button type="button" data-font="Garamond" style="font-family: Garamond, serif;">Garamond</button>
+        <button type="button" data-font="Impact" style="font-family: Impact, sans-serif;">Impact</button>
+        <button type="button" data-font="Trebuchet MS" style="font-family: 'Trebuchet MS', sans-serif;">Trebuchet</button>
+        <button type="button" data-font="Arial" style="font-family: Arial, sans-serif;">Arial</button>
+        <button type="button" data-font="Times New Roman" style="font-family: 'Times New Roman', serif;">Times New Roman</button>
+        <button type="button" data-font="Verdana" style="font-family: Verdana, sans-serif;">Verdana</button>
+        <button type="button" data-font="Tahoma" style="font-family: Tahoma, sans-serif;">Tahoma</button>
+        <button type="button" data-font="Courier New" style="font-family: 'Courier New', monospace;">Courier New</button>
+        <button type="button" data-font="Consolas" style="font-family: Consolas, monospace;">Consolas</button>
+        <button type="button" data-font="Comic Sans MS" style="font-family: 'Comic Sans MS', cursive;">Comic Sans</button>
+      </div>
+    </div>
+
+    <div class="toolbar-dropdown">
+      <button type="button" class="toolbar-dropdown-toggle" title="Text Color">🎨</button>
+      <div class="toolbar-dropdown-content color-menu">
+        <button type="button" data-color="#ef4444" style="--btn-bg: #ef4444;" title="Red"></button>
+        <button type="button" data-color="#f97316" style="--btn-bg: #f97316;" title="Orange"></button>
+        <button type="button" data-color="#f59e0b" style="--btn-bg: #f59e0b;" title="Yellow"></button>
+        <button type="button" data-color="#10b981" style="--btn-bg: #10b981;" title="Green"></button>
+        <button type="button" data-color="#14b8a6" style="--btn-bg: #14b8a6;" title="Teal"></button>
+        <button type="button" data-color="#3b82f6" style="--btn-bg: #3b82f6;" title="Blue"></button>
+        <button type="button" data-color="#6366f1" style="--btn-bg: #6366f1;" title="Indigo"></button>
+        <button type="button" data-color="#8b5cf6" style="--btn-bg: #8b5cf6;" title="Purple"></button>
+        <button type="button" data-color="#ec4899" style="--btn-bg: #ec4899;" title="Pink"></button>
+        <button type="button" data-color="var(--accent-strong)" style="--btn-bg: var(--accent-strong);" title="Accent"></button>
+        <button type="button" data-color="#ffffff" style="--btn-bg: #ffffff;" title="White"></button>
+        <button type="button" data-color="#9ca3af" style="--btn-bg: #9ca3af;" title="Gray"></button>
+        <button type="button" data-color="clear" class="color-clear" title="Clear Color">Clear Color</button>
+      </div>
+    </div>
+
+    <button type="button" data-action="bullet" title="Toggle Bullet List">-</button>
+    <button type="button" data-action="clear-all" title="Clear Formatting">Tx</button>
+  `;
+}
+
+// Populate toolbars for static question & answer fields on load
+function initToolbars() {
+  const qToolbar = document.getElementById("questionEditToolbar");
+  if (qToolbar) qToolbar.innerHTML = createToolbarHtml();
+
+  const aToolbar = document.getElementById("answerEditToolbar");
+  if (aToolbar) aToolbar.innerHTML = createToolbarHtml();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initToolbars);
+} else {
+  initToolbars();
+}
+
+// Formatting helpers
+function toggleWrap(text, wrapper) {
+  if (text.startsWith(wrapper) && text.endsWith(wrapper)) {
+    return text.substring(wrapper.length, text.length - wrapper.length);
+  }
+  return wrapper + text + wrapper;
+}
+
+function toggleUnderline(text) {
+  if (text.startsWith("<u>") && text.endsWith("</u>")) {
+    return text.substring(3, text.length - 4);
+  }
+  return "<u>" + text + "</u>";
+}
+
+function toggleStrikethrough(text) {
+  if (text.startsWith("~~") && text.endsWith("~~")) {
+    return text.substring(2, text.length - 2);
+  }
+  return "~~" + text + "~~";
+}
+
+function toggleCode(text) {
+  if (text.startsWith("`") && text.endsWith("`")) {
+    return text.substring(1, text.length - 1);
+  }
+  return "`" + text + "`";
+}
+
+function toggleKbd(text) {
+  if (text.startsWith("<kbd>") && text.endsWith("</kbd>")) {
+    return text.substring(5, text.length - 6);
+  }
+  return "<kbd>" + text + "</kbd>";
+}
+
+function clearStyling(text) {
+  let cleared = text;
+  cleared = cleared.replace(/<span style="[^"]*">([\s\S]*?)<\/span>/gi, "$1");
+  cleared = cleared.replace(/<font [^>]*>([\s\S]*?)<\/font>/gi, "$1");
+  cleared = cleared.replace(/<mark>([\s\S]*?)<\/mark>/gi, "$1");
+  cleared = cleared.replace(/<u>([\s\S]*?)<\/u>/gi, "$1");
+  cleared = cleared.replace(/<del>([\s\S]*?)<\/del>/gi, "$1");
+  cleared = cleared.replace(/<kbd[^>]*>([\s\S]*?)<\/kbd>/gi, "$1");
+  return cleared;
+}
+
+function toggleBulletPoints(text) {
+  const lines = text.split("\n");
+  const allAreBulleted = lines.every(line => line.trim() === "" || line.trim().startsWith("- "));
+  
+  const formatted = lines.map(line => {
+    if (allAreBulleted) {
+      return line.replace(/^(\s*)-\s?/, "$1");
+    } else {
+      if (line.trim() === "") return line;
+      if (line.trim().startsWith("- ")) return line;
+      return "- " + line;
+    }
+  });
+  return formatted.join("\n");
+}
+
+function clearFormatting(text) {
+  let cleared = text;
+  
+  // 1. Strip styling HTML wrappers
+  cleared = clearStyling(cleared);
+  
+  // 2. Strip standard Markdown markup (bold, italic, strikethrough, inline code)
+  cleared = cleared.replace(/\*\*([\s\S]*?)\*\*/g, "$1");
+  cleared = cleared.replace(/__([\s\S]*?)__/g, "$1");
+  cleared = cleared.replace(/\*([\s\S]*?)\*/g, "$1");
+  cleared = cleared.replace(/_([\s\S]*?)_/g, "$1");
+  cleared = cleared.replace(/~~([\s\S]*?)~~/g, "$1");
+  cleared = cleared.replace(/`([\s\S]*?)`/g, "$1");
+  
+  // 3. Strip list bullets and header tags on each line
+  const lines = cleared.split("\n");
+  const processed = lines.map(line => {
+    let l = line;
+    l = l.replace(/^(\s*)[-*+]\s+/, "$1");
+    l = l.replace(/^(\s*)\d+\.\s+/, "$1");
+    l = l.replace(/^(\s*)#+\s+/, "$1");
+    return l;
+  });
+  return processed.join("\n");
+}
+
+// Global mousedown listener to prevent focus loss in textareas
+document.addEventListener("mousedown", (e) => {
+  if (e.target.closest(".edit-toolbar")) {
+    e.preventDefault();
+  }
+});
+
+// Dropdown click-to-open toggler (prevents opening on hover)
+document.addEventListener("click", (e) => {
+  const dropdownToggle = e.target.closest(".edit-toolbar .toolbar-dropdown-toggle");
+  if (dropdownToggle) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropdown = dropdownToggle.closest(".toolbar-dropdown");
+    const wasOpen = dropdown.classList.contains("is-open");
+    
+    // Close all dropdowns first
+    document.querySelectorAll(".edit-toolbar .toolbar-dropdown").forEach(d => {
+      d.classList.remove("is-open");
+    });
+    
+    // Toggle current
+    if (!wasOpen) {
+      dropdown.classList.add("is-open");
+    }
+    return;
+  }
+
+  // Close dropdowns if clicked anywhere else
+  if (!e.target.closest(".edit-toolbar .toolbar-dropdown-content")) {
+    document.querySelectorAll(".edit-toolbar .toolbar-dropdown").forEach(d => {
+      d.classList.remove("is-open");
+    });
+  }
+});
+
+// Handle toolbar actions
+function handleToolbarClick(event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+
+  const toolbar = button.closest(".edit-toolbar");
+  if (!toolbar) return;
+
+  // Find the associated textarea
+  let textarea = null;
+  if (toolbar.id === "questionEditToolbar") {
+    textarea = el.questionEdit;
+  } else if (toolbar.id === "answerEditToolbar") {
+    textarea = el.answerEdit;
+  } else {
+    // Inside dynamic "All cards" editor
+    const container = toolbar.closest(".all-card-editor");
+    if (container) {
+      textarea = container.querySelector("[data-all-edit-value]");
+    }
+  }
+
+  if (!textarea) return;
+
+  event.preventDefault();
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(start, end);
+
+  let formatFn = null;
+
+  if (button.dataset.action === "bold") {
+    formatFn = text => toggleWrap(text, "**");
+  } else if (button.dataset.action === "italic") {
+    formatFn = text => toggleWrap(text, "*");
+  } else if (button.dataset.action === "underline") {
+    formatFn = text => toggleUnderline(text);
+  } else if (button.dataset.action === "strikethrough") {
+    formatFn = text => toggleStrikethrough(text);
+  } else if (button.dataset.action === "code") {
+    formatFn = text => toggleCode(text);
+  } else if (button.dataset.action === "kbd") {
+    formatFn = text => toggleKbd(text);
+  } else if (button.dataset.action === "bullet") {
+    formatFn = text => toggleBulletPoints(text);
+  } else if (button.dataset.action === "clear-all") {
+    formatFn = text => clearFormatting(text);
+  } else if (button.dataset.font) {
+    const font = button.dataset.font;
+    formatFn = text => `<span style="font-family: ${font};">${clearStyling(text)}</span>`;
+  } else if (button.dataset.color) {
+    const color = button.dataset.color;
+    if (color === "clear") {
+      formatFn = text => clearStyling(text);
+    } else {
+      formatFn = text => `<span style="color: ${color};">${clearStyling(text)}</span>`;
+    }
+  } else if (button.dataset.highlight) {
+    const highlight = button.dataset.highlight;
+    if (highlight === "clear") {
+      formatFn = text => clearStyling(text);
+    } else {
+      formatFn = text => `<span style="background-color: ${highlight};">${clearStyling(text)}</span>`;
+    }
+  }
+
+  if (!formatFn) return;
+
+  const replacement = formatFn(selectedText);
+
+  let inserted = false;
+  try {
+    textarea.focus();
+    inserted = document.execCommand("insertText", false, replacement);
+  } catch (e) {
+    console.warn("execCommand failed, manual fallback used", e);
+  }
+
+  if (!inserted) {
+    const val = textarea.value;
+    textarea.value = val.substring(0, start) + replacement + val.substring(end);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  // Restore selection
+  textarea.selectionStart = start;
+  textarea.selectionEnd = start + replacement.length;
+  
+  // Trigger input event to save values to state
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+  // Close all open dropdowns after action is applied
+  document.querySelectorAll(".edit-toolbar .toolbar-dropdown").forEach(d => {
+    d.classList.remove("is-open");
+  });
+}
+
+// Global click delegation for any formatting toolbar button
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".edit-toolbar button");
+  if (button) {
+    handleToolbarClick(e);
+  }
+});
