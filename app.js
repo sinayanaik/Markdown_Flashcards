@@ -1326,14 +1326,21 @@ async function loadWebDeck(deckId) {
 
     if (cardsError) throw cardsError;
 
+    const statusById = {};
     const cards = cardsData.map((rawCard, index) => {
       const id = String(rawCard.id || `${index}-${rawCard.question.slice(0, 32)}`);
+      const status = normalizeCardStatus(rawCard.status);
+      if (status) {
+        statusById[id] = status;
+      }
       return { id, question: rawCard.question, answer: rawCard.answer };
     });
 
     state.deckId = deckData.id;
     state.masterCards = cards.slice();
     resetStudyDeck(state.masterCards);
+    state.statusById = statusById;
+    state.current = Math.min(Math.max(Number(deckData.current_card_index) || 0, 0), cards.length);
     state.deckTitle = deckData.title || "";
     state.deckCategory = normalizeDeckCategory(deckData.category);
     state.sourceTitle = deckData.title || "";
@@ -1414,7 +1421,7 @@ async function resolveSyncTargetDeck(deckTitle) {
 
     return {
       deckId: preferredDeckId,
-      existingDeck: existingDeck || { id: state.deckId, title: deckTitle, category: state.deckCategory },
+      existingDeck: existingDeck,
       overwriteExisting: false
     };
   }
@@ -1622,7 +1629,7 @@ async function syncDeckToWeb() {
       id: state.deckId,
       title: deckTitle,
       category: state.deckCategory,
-      current_card_index: 0,
+      current_card_index: Number.isFinite(state.current) ? state.current : 0,
       updated_at: now,
       last_accessed_at: now
     };
@@ -1927,6 +1934,11 @@ function setTheme(theme) {
     allCardsRenderId += 1;
     renderAllCards();
   }
+  try {
+    localStorage.setItem(themeStorageKey, themeId);
+  } catch (error) {
+    console.warn("Could not save theme", error);
+  }
 }
 
 function renderThemeMenu() {
@@ -2098,6 +2110,11 @@ function normalizeStyleProfiles(raw = {}) {
 
 function setStyleProfiles(raw = {}) {
   state.styleProfiles = normalizeStyleProfiles(raw);
+  try {
+    localStorage.setItem(styleStorageKey, JSON.stringify(state.styleProfiles));
+  } catch (error) {
+    console.warn("Could not save style profiles", error);
+  }
   return state.styleProfiles;
 }
 
@@ -2115,6 +2132,11 @@ function setStyleProfileSettings(profile, rawSettings) {
     [normalizedProfile]: settings
   };
   if (normalizedProfile === state.activeStyleProfile) state.styleSettings = settings;
+  try {
+    localStorage.setItem(styleStorageKey, JSON.stringify(state.styleProfiles));
+  } catch (error) {
+    console.warn("Could not save style profiles", error);
+  }
   return settings;
 }
 
@@ -2355,8 +2377,15 @@ function applyActiveStyleSettings(options = {}) {
 }
 
 function loadLocalStyleSettings() {
-  clearBrowserPersistence();
-  return normalizeStyleSettings();
+  try {
+    const stored = localStorage.getItem(styleStorageKey);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.warn("Could not load style settings from local storage", error);
+  }
+  return defaultStyleProfiles;
 }
 
 function hasMeaningfulStyleSettings(settings) {
@@ -4540,7 +4569,15 @@ function clearBrowserPersistence() {
 }
 
 function savePersistedDeck() {
-  clearBrowserPersistence();
+  try {
+    if (!state.masterCards.length) {
+      localStorage.removeItem(deckStorageKey);
+      return;
+    }
+    localStorage.setItem(deckStorageKey, JSON.stringify(deckSnapshot()));
+  } catch (error) {
+    console.warn("Could not save deck state", error);
+  }
 }
 
 function loadDeckSnapshot(payload, titleHint = "", append = false) {
@@ -4578,6 +4615,8 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
   } else {
     state.masterCards = cards.slice();
     resetStudyDeck(state.masterCards);
+    state.statusById = statusById;
+    state.current = Math.min(Math.max(Number(payload.current) || 0, 0), cards.length);
     state.deckTitle = String(payload.deckTitle || "").trim() || humanizeSourceTitle(titleHint);
     state.deckCategory = normalizeDeckCategory(payload.deckCategory || payload.category);
     state.deckId = payload.deckId || null;
@@ -4591,8 +4630,19 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
 }
 
 function loadPersistedDeck() {
-  clearBrowserPersistence();
-  return false;
+  try {
+    const stored = localStorage.getItem(deckStorageKey);
+    if (!stored) return false;
+
+    loadDeckSnapshot(JSON.parse(stored), "Saved deck");
+    setStatus(`Restored ${state.masterCards.length} saved card${state.masterCards.length === 1 ? "" : "s"}.`);
+    closeImportPanel();
+    return true;
+  } catch (error) {
+    console.warn("Could not restore saved deck", error);
+    localStorage.removeItem(deckStorageKey);
+    return false;
+  }
 }
 
 function cardsForScope(scope) {
@@ -6088,13 +6138,23 @@ if (styleMobileMedia?.addEventListener) {
   styleMobileMedia.addListener(handleStyleEnvironmentChange);
 }
 
-clearBrowserPersistence();
-setStyleProfiles(defaultStyleProfiles);
-applyActiveStyleSettings({ force: true });
+setStyleProfiles(loadLocalStyleSettings());
+applyActiveStyleSettings({ force: true, save: false });
+
+let savedTheme = "dark-amoled";
+try {
+  const storedTheme = localStorage.getItem(themeStorageKey);
+  if (storedTheme) savedTheme = storedTheme;
+} catch (e) {
+  console.warn("Could not load saved theme", e);
+}
 renderThemeMenu();
-setTheme("dark-amoled");
-setStatus("");
-showCard();
+setTheme(savedTheme);
+
+if (!loadPersistedDeck()) {
+  setStatus("");
+  showCard();
+}
 loadStyleFromWeb();
 installManifestLink();
 registerServiceWorker();

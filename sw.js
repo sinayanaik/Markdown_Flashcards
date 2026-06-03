@@ -1,8 +1,8 @@
-const CACHE_NAME = "markdown-flashcards-v20260526-1";
+const CACHE_NAME = "markdown-flashcards-v20260603-1";
 const APP_SHELL = [
   "./",
-  "./styles.css?v=20260526-1",
-  "./app.js?v=20260526-1",
+  "./styles.css?v=20260603-1",
+  "./app.js?v=20260603-1",
   "./manifest.webmanifest",
   "./fevicon.png",
   "./icons/icon-192.png",
@@ -49,15 +49,27 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Do not intercept or cache the service worker itself
+  if (url.pathname.endsWith("/sw.js")) return;
+
   if (!isSameOrigin && !isCdnAsset) return;
 
+  // Stale-While-Revalidate for other static assets
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        return response;
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.match(request).then((cached) => {
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response.status === 200) {
+              const putPromise = cache.put(request, response.clone());
+              if (typeof event.waitUntil === "function") {
+                event.waitUntil(putPromise);
+              }
+            }
+            return response;
+          })
+          .catch(() => cached);
+        return cached || fetchPromise;
       });
     })
   );
