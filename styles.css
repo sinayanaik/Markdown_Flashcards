@@ -4629,6 +4629,226 @@ textarea {
   user-select: none;
 }
 
+/* ── Deck Summary overlay — covers the whole card when deck ends ─────────── */
+.deck-summary-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px 20px 20px;
+  overflow-y: auto;
+  background: var(--card);
+  border-radius: var(--card-radius);
+  box-sizing: border-box;
+  text-align: center;
+  -webkit-overflow-scrolling: touch;
+}
+
+.deck-summary-overlay[hidden] {
+  display: none;
+}
+
+.deck-summary-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.deck-summary-icon {
+  font-size: 2.4rem;
+  line-height: 1;
+  animation: summary-pop 0.45s cubic-bezier(.34,1.6,.64,1) both;
+}
+
+@keyframes summary-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.deck-summary-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.deck-summary-subtitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-summary-body {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* SVG pie chart */
+.deck-summary-chart-wrap {
+  flex-shrink: 0;
+}
+
+.deck-summary-pie {
+  width: 110px;
+  height: 110px;
+  transform: rotate(-90deg);
+  filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent));
+}
+
+.pie-segment {
+  transition: stroke-dasharray 0.6s cubic-bezier(.4,0,.2,1),
+              stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1);
+  animation: pie-draw 0.7s cubic-bezier(.4,0,.2,1) both;
+}
+
+@keyframes pie-draw {
+  from { stroke-dasharray: 0 100; }
+}
+
+/* Inner text (rendered while SVG is rotated -90deg, so we counter-rotate) */
+.pie-center-num {
+  transform: rotate(90deg);
+  transform-origin: 21px 21px;
+  font-size: 7px;
+  font-weight: 900;
+  fill: var(--text);
+  text-anchor: middle;
+  dominant-baseline: auto;
+}
+
+.pie-center-label {
+  transform: rotate(90deg);
+  transform-origin: 21px 21px;
+  font-size: 3.6px;
+  font-weight: 700;
+  fill: var(--muted);
+  text-anchor: middle;
+  dominant-baseline: auto;
+}
+
+/* Stat rows */
+.deck-summary-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 140px;
+}
+
+.deck-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.deck-stat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.deck-stat-label {
+  flex: 1;
+  font-weight: 700;
+  color: var(--text);
+  text-align: left;
+}
+
+.deck-stat-count {
+  font-weight: 900;
+  color: var(--text);
+  min-width: 22px;
+  text-align: right;
+}
+
+.deck-stat-pct {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 34px;
+  text-align: right;
+}
+
+/* Segment colours */
+.deck-stat-known .deck-stat-dot  { background: var(--known, #22c55e); }
+.deck-stat-review .deck-stat-dot { background: var(--review, #f59e0b); }
+.deck-stat-uncat .deck-stat-dot  { background: var(--muted, #94a3b8); }
+.deck-stat-known .deck-stat-count,
+.deck-stat-known .deck-stat-pct  { color: var(--known, #22c55e); }
+.deck-stat-review .deck-stat-count,
+.deck-stat-review .deck-stat-pct { color: var(--review, #f59e0b); }
+
+/* Replay action buttons */
+.deck-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+}
+
+.deck-summary-btn {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.deck-summary-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.deck-summary-btn-primary {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  border-color: var(--accent);
+}
+
+.deck-summary-btn-primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+  color: var(--accent-contrast, #fff);
+}
+
+.deck-summary-btn-review {
+  border-color: color-mix(in srgb, var(--review, #f59e0b) 60%, var(--line));
+  color: var(--review, #f59e0b);
+}
+
+.deck-summary-btn-known {
+  border-color: color-mix(in srgb, var(--known, #22c55e) 60%, var(--line));
+  color: var(--known, #22c55e);
+}
+
+.deck-summary-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* Print/PDF-specific Codeblock styling */
 .print-root pre,
 .print-root pre[class*="language-"] {

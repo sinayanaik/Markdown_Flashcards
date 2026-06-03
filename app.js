@@ -1340,7 +1340,7 @@ async function loadWebDeck(deckId) {
     state.masterCards = cards.slice();
     resetStudyDeck(state.masterCards);
     state.statusById = statusById;
-    state.current = Math.min(Math.max(Number(deckData.current_card_index) || 0, 0), cards.length);
+    state.current = 0; // always start from the first card on fresh load
     state.deckTitle = deckData.title || "";
     state.deckCategory = normalizeDeckCategory(deckData.category);
     state.sourceTitle = deckData.title || "";
@@ -1815,6 +1815,7 @@ const el = {
   replayKnownBtn: document.querySelector("#replayKnownBtn"),
   replayUncategorizedBtn: document.querySelector("#replayUncategorizedBtn"),
   replayAllBtn: document.querySelector("#replayAllBtn"),
+  deckSummary: document.querySelector("#deckSummary"),
 };
 
 marked.setOptions({
@@ -4361,6 +4362,96 @@ function clearCardTransitionClasses() {
   );
 }
 
+function buildDeckSummaryHtml() {
+  syncResults();
+  const total = state.masterCards.length;
+  const known = state.results.known.length;
+  const review = state.results.review.length;
+  const uncategorized = total - known - review;
+
+  const knownPct   = total ? Math.round((known / total) * 100) : 0;
+  const reviewPct  = total ? Math.round((review / total) * 100) : 0;
+  const uncatPct   = total ? (100 - knownPct - reviewPct) : 0;
+
+  // SVG pie chart using stroke-dasharray on a circle (r=15.9, circumference≈100)
+  const r = 15.9155;
+  const circ = 2 * Math.PI * r; // ≈100
+  const knownArc   = (known / total) * circ || 0;
+  const reviewArc  = (review / total) * circ || 0;
+  const uncatArc   = (uncategorized / total) * circ || 0;
+
+  // Rotation offsets so segments start at top (-90deg = top)
+  const knownOffset   = circ * 0.25; // start at top
+  const reviewOffset  = knownOffset - knownArc;
+  const uncatOffset   = reviewOffset - reviewArc;
+
+  const isEmpty = total === 0;
+
+  const pieSlices = isEmpty ? `
+    <circle r="${r}" cx="21" cy="21" fill="none"
+      stroke="var(--line)" stroke-width="8" stroke-dasharray="${circ} 0"/>
+  ` : `
+    ${known > 0 ? `<circle r="${r}" cx="21" cy="21" fill="none"
+      stroke="var(--known,#22c55e)" stroke-width="8"
+      stroke-dasharray="${knownArc} ${circ - knownArc}"
+      stroke-dashoffset="${knownOffset}"
+      class="pie-segment pie-known"/>` : ""}
+    ${review > 0 ? `<circle r="${r}" cx="21" cy="21" fill="none"
+      stroke="var(--review,#f59e0b)" stroke-width="8"
+      stroke-dasharray="${reviewArc} ${circ - reviewArc}"
+      stroke-dashoffset="${reviewOffset}"
+      class="pie-segment pie-review"/>` : ""}
+    ${uncategorized > 0 ? `<circle r="${r}" cx="21" cy="21" fill="none"
+      stroke="var(--muted,#94a3b8)" stroke-width="8"
+      stroke-dasharray="${uncatArc} ${circ - uncatArc}"
+      stroke-dashoffset="${uncatOffset}"
+      class="pie-segment pie-uncat"/>` : ""}
+  `;
+
+  return `<div class="deck-summary">
+    <div class="deck-summary-header">
+      <div class="deck-summary-icon">🎉</div>
+      <h2 class="deck-summary-title">Deck Complete!</h2>
+      <p class="deck-summary-subtitle">${escapeHtml(state.deckTitle || "All cards reviewed")}</p>
+    </div>
+    <div class="deck-summary-body">
+      <div class="deck-summary-chart-wrap">
+        <svg class="deck-summary-pie" viewBox="0 0 42 42" role="img" aria-label="Score breakdown">
+          ${pieSlices}
+          <text x="21" y="19.5" class="pie-center-num">${total}</text>
+          <text x="21" y="24.5" class="pie-center-label">cards</text>
+        </svg>
+      </div>
+      <div class="deck-summary-stats">
+        <div class="deck-stat deck-stat-known">
+          <span class="deck-stat-dot"></span>
+          <span class="deck-stat-label">Known</span>
+          <span class="deck-stat-count">${known}</span>
+          <span class="deck-stat-pct">${knownPct}%</span>
+        </div>
+        <div class="deck-stat deck-stat-review">
+          <span class="deck-stat-dot"></span>
+          <span class="deck-stat-label">Review</span>
+          <span class="deck-stat-count">${review}</span>
+          <span class="deck-stat-pct">${reviewPct}%</span>
+        </div>
+        <div class="deck-stat deck-stat-uncat">
+          <span class="deck-stat-dot"></span>
+          <span class="deck-stat-label">Uncategorized</span>
+          <span class="deck-stat-count">${uncategorized}</span>
+          <span class="deck-stat-pct">${uncatPct}%</span>
+        </div>
+      </div>
+    </div>
+    <div class="deck-summary-actions">
+      <button class="deck-summary-btn deck-summary-btn-primary" data-replay="all">↺ Restart All</button>
+      <button class="deck-summary-btn deck-summary-btn-review" data-replay="review" ${review === 0 ? "disabled" : ""}>❌ Review (${review})</button>
+      <button class="deck-summary-btn deck-summary-btn-uncat" data-replay="uncategorized" ${uncategorized === 0 ? "disabled" : ""}>? Uncategorized (${uncategorized})</button>
+      <button class="deck-summary-btn deck-summary-btn-known" data-replay="known" ${known === 0 ? "disabled" : ""}>✅ Known (${known})</button>
+    </div>
+  </div>`;
+}
+
 async function showCard(direction = 0) {
   const token = state.transitionToken;
   state.previewCard = null;
@@ -4373,15 +4464,27 @@ async function showCard(direction = 0) {
 
   const card = state.cards[state.current];
   if (!card) {
-    await renderMarkdown(el.questionView, state.cards.length ? "Finished. Restart or shuffle to quiz again." : "Import a deck to begin.");
-    await renderMarkdown(el.answerView, "");
-    el.questionView.style.fontSize = "";
-    el.questionView.style.width = "";
-    el.questionView.style.removeProperty("--question-fit-font-size");
+    if (state.cards.length > 0) {
+      // Deck finished — show rich summary overlay covering the whole card
+      if (el.deckSummary) {
+        el.deckSummary.innerHTML = buildDeckSummaryHtml();
+        el.deckSummary.hidden = false;
+      }
+    } else {
+      // No deck loaded
+      if (el.deckSummary) el.deckSummary.hidden = true;
+      await renderMarkdown(el.questionView, "Import a deck to begin.");
+      await renderMarkdown(el.answerView, "");
+      el.questionView.style.fontSize = "";
+      el.questionView.style.width = "";
+      el.questionView.style.removeProperty("--question-fit-font-size");
+    }
     updateMeta();
     return;
   }
 
+  // Normal card — hide summary overlay
+  if (el.deckSummary) el.deckSummary.hidden = true;
   await renderMarkdown(el.questionView, card.question, true);
   await renderMarkdown(el.answerView, card.answer, true);
   scheduleLiveQuestionFit();
@@ -4453,6 +4556,17 @@ function flipCard() {
 
 function navigateCard(direction, animationDirection = direction) {
   if (state.previewCard || !state.cards.length) return;
+
+  // Allow going one step past the last card to show the end-of-deck summary
+  if (direction > 0 && state.current >= state.cards.length - 1) {
+    animateToCard(animationDirection, () => {
+      state.current = state.cards.length; // triggers summary in showCard
+      state.previewCard = null;
+      state.flipped = false;
+    });
+    return;
+  }
+
   const nextIndex = Math.min(Math.max(state.current + direction, 0), state.cards.length - 1);
   if (nextIndex === state.current) return;
   setStatus(direction > 0 ? "Moved to next card." : "Moved to previous card.");
@@ -6170,6 +6284,12 @@ el.mobileStackToggle?.addEventListener("click", (event) => {
 el.card.addEventListener("click", (event) => {
   if (performance.now() < state.suppressClickUntil) {
     event.preventDefault();
+    return;
+  }
+  // Deck summary replay buttons
+  const replayBtn = event.target.closest("[data-replay]");
+  if (replayBtn) {
+    replayDeck(replayBtn.dataset.replay);
     return;
   }
   if (hasCardTextSelection()) return;
