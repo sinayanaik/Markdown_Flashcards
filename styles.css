@@ -5097,4 +5097,133 @@ textarea {
   margin-top: 4px;
 }
 
+.all-card-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .face-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .face-header .face-label-row {
+    order: 1;
+  }
+  .face-header > div:not(.face-label-row):not(.edit-toolbar) {
+    order: 2;
+  }
+  .face-header .edit-toolbar {
+    width: 100%;
+    flex-shrink: 0;
+    justify-content: space-around;
+    order: 3;
+    box-sizing: border-box;
+    margin-top: 6px;
+  }
+  .all-card-editor-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .all-card-editor-header .edit-toolbar {
+    width: 100%;
+    flex-shrink: 0;
+    justify-content: space-around;
+    margin-top: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .edit-toolbar button {
+    min-width: 20px;
+    height: 20px !important;
+    min-height: 20px !important;
+    font-size: 0.75rem !important;
+    padding: 0 4px !important;
+  }
+  .edit-toolbar {
+    gap: 2px;
+    padding: 2px;
+  }
+}
+
+/* Syntax Highlighting Backdropped Textarea styling */
+.highlight-textarea-wrapper {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+}
+
+.highlight-textarea-backdrop,
+.edit-textarea {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: inherit !important;
+  font-family: var(--app-font-family) !important;
+  font-size: var(--raw-markdown-font-size) !important;
+  line-height: 1.5 !important;
+  padding: 10px !important;
+  margin: 0 !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+}
+
+.all-card-editor textarea {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: inherit !important;
+}
+
+.highlight-textarea-backdrop {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  color: var(--text) !important;
+  background: var(--card) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: var(--input-radius) !important;
+  overflow: auto !important;
+  pointer-events: none !important;
+}
+
+.edit-textarea {
+  position: relative !important;
+  z-index: 1 !important;
+  color: transparent !important;
+  background: transparent !important;
+  caret-color: var(--text) !important;
+  border: 1px solid transparent !important;
+  overflow: auto !important;
+  resize: none !important;
+}
+
+.edit-textarea:focus {
+  outline: none !important;
+  border-color: transparent !important;
+}
+
+.highlight-textarea-wrapper:focus-within .highlight-textarea-backdrop {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent) !important;
+}
+
+.highlight-textarea-wrapper:has(textarea[hidden]) {
+  display: none !important;
+}
+
+/* Faint styling elements / HTML tags in editor mode */
+.syntax-tag {
+  opacity: 0.35 !important;
+  color: var(--muted) !important;
+  font-weight: normal !important;
+}
+
 

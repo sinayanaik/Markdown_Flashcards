@@ -4111,10 +4111,12 @@ function openAllCardEditor(item, side = allCardVisibleSide(item)) {
   editor.hidden = false;
   editor.dataset.side = side;
   editor.querySelector("[data-all-edit-label]").textContent = side === "answer" ? "Answer" : "Question";
-  editor.querySelector("[data-all-edit-value]").value = side === "answer" ? card.answer : card.question;
+  const textarea = editor.querySelector("[data-all-edit-value]");
+  textarea.value = side === "answer" ? card.answer : card.question;
   updateAllCardEditButton(item);
   adjustCornellRowHeight(item);
-  editor.querySelector("[data-all-edit-value]").focus();
+  enableSyntaxHighlighting(textarea);
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function toggleAllCardEditor(item) {
@@ -4247,7 +4249,7 @@ async function renderAllCards() {
     editor.hidden = true;
     editor.innerHTML = `
       <label>
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+        <div class="all-card-editor-header">
           <span data-all-edit-label>Question</span>
           <div class="edit-toolbar" data-all-card-toolbar>
             ${createToolbarHtml()}
@@ -6399,7 +6401,7 @@ function toggleEditMode(side) {
     edit.value = isQuestion ? currentCard.question : currentCard.answer;
     btn.innerHTML = '&#128190;';
     btn.title = 'Save';
-    edit.focus();
+    edit.dispatchEvent(new Event("input", { bubbles: true }));
   } else {
     const newValue = edit.value.trim();
     if (isQuestion) {
@@ -6662,12 +6664,69 @@ function initToolbars() {
 
   const aToolbar = document.getElementById("answerEditToolbar");
   if (aToolbar) aToolbar.innerHTML = createToolbarHtml();
+
+  if (el.questionEdit) enableSyntaxHighlighting(el.questionEdit);
+  if (el.answerEdit) enableSyntaxHighlighting(el.answerEdit);
 }
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initToolbars);
 } else {
   initToolbars();
+}
+
+// Global click delegation for any formatting toolbar button
+document.addEventListener("click", (e) => {
+  const button = e.target.closest(".edit-toolbar button");
+  if (button) {
+    handleToolbarClick(e);
+  }
+});
+
+// Syntax highlighting backdrop creator for textareas
+function enableSyntaxHighlighting(textarea) {
+  if (!textarea || textarea.dataset.highlighted === "true") return;
+  textarea.dataset.highlighted = "true";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "highlight-textarea-wrapper";
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "highlight-textarea-backdrop";
+
+  textarea.parentNode.insertBefore(wrapper, textarea);
+  wrapper.appendChild(backdrop);
+  wrapper.appendChild(textarea);
+
+  function sync() {
+    const text = textarea.value;
+    const escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Fade out HTML syntax tags
+    let highlighted = escaped.replace(/(&lt;\/?[a-zA-Z0-9]+(?:\s+[^&]*)?&gt;)/g, '<span class="syntax-tag">$1</span>');
+
+    if (highlighted.endsWith("\n") || highlighted === "") {
+      highlighted += " ";
+    }
+
+    backdrop.innerHTML = highlighted;
+  }
+
+  function syncScroll() {
+    backdrop.scrollTop = textarea.scrollTop;
+    backdrop.scrollLeft = textarea.scrollLeft;
+  }
+
+  textarea.addEventListener("input", sync);
+  textarea.addEventListener("scroll", syncScroll);
+
+  // Initialize
+  sync();
+  syncScroll();
+  window.addEventListener("resize", syncScroll);
 }
 
 // Formatting helpers
