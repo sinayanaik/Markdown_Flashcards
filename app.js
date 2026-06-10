@@ -1732,6 +1732,9 @@ let allCardsAnswersVisible = false;
 const pdfPrintStyleId = "pdfPrintStyle";
 let liveQuestionFitFrame = 0;
 let markdownTableFitFrame = 0;
+let pasteImportAppend = false;
+let pastePreviewSource = "";
+let pastePreviewCards = [];
 
 const el = {
   sourceInput: document.querySelector("#sourceInput"),
@@ -1739,6 +1742,17 @@ const el = {
   fileInput: document.querySelector("#fileInput"),
   fileInputCards: document.querySelector("#fileInputCards"),
   fetchBtn: document.querySelector("#fetchBtn"),
+  pasteDeckBtn: document.querySelector("#pasteDeckBtn"),
+  pasteCardsBtn: document.querySelector("#pasteCardsBtn"),
+  pasteEditorPanel: document.querySelector("#pasteEditorPanel"),
+  pasteEditorTitle: document.querySelector("#pasteEditorTitle"),
+  pasteEditorHint: document.querySelector("#pasteEditorHint"),
+  pasteMarkdownInput: document.querySelector("#pasteMarkdownInput"),
+  pastePreviewBtn: document.querySelector("#pastePreviewBtn"),
+  pastePreviewSummary: document.querySelector("#pastePreviewSummary"),
+  pastePreviewList: document.querySelector("#pastePreviewList"),
+  pasteImportBtn: document.querySelector("#pasteImportBtn"),
+  pasteCancelBtn: document.querySelector("#pasteCancelBtn"),
   parseBtn: document.querySelector("#parseBtn"),
   openWebDecksFromImportBtn: document.querySelector("#openWebDecksFromImportBtn"),
   sampleBtn: document.querySelector("#sampleBtn"),
@@ -2654,6 +2668,7 @@ async function editCurrentDeckCategory() {
 
 function openImportPanel() {
   lockPageScroll();
+  closePasteEditor(false);
   el.importPanel.classList.add("is-open");
 }
 
@@ -2666,6 +2681,7 @@ function openWebDecksPanel() {
 }
 
 function closeImportPanel() {
+  closePasteEditor(true);
   if (state.cards.length === 0) {
     createNewDeck();
     return;
@@ -4553,6 +4569,7 @@ function buildCards(titleHint = state.importTitleHint || "", append = false) {
   }
 
   showCard();
+  return cards.length;
 }
 
 function flipCard() {
@@ -5655,6 +5672,116 @@ function loadSample() {
   buildCards(state.importTitleHint);
 }
 
+function resetPastePreview(message = "Paste Markdown and click Preview.", summary = "No preview yet") {
+  pastePreviewSource = "";
+  pastePreviewCards = [];
+  if (el.pastePreviewSummary) el.pastePreviewSummary.textContent = summary;
+  if (el.pastePreviewList) {
+    el.pastePreviewList.innerHTML = `<div class="paste-preview-empty">${escapeHtml(message)}</div>`;
+  }
+  if (el.pasteImportBtn) el.pasteImportBtn.disabled = true;
+}
+
+function closePasteEditor(clear = false) {
+  if (el.pasteEditorPanel) el.pasteEditorPanel.hidden = true;
+  if (clear && el.pasteMarkdownInput) el.pasteMarkdownInput.value = "";
+  resetPastePreview();
+}
+
+function openPasteEditor(append = false) {
+  pasteImportAppend = append;
+
+  if (el.pasteEditorTitle) {
+    el.pasteEditorTitle.textContent = append ? "Paste Markdown Cards" : "Paste Markdown Deck";
+  }
+  if (el.pasteEditorHint) {
+    el.pasteEditorHint.textContent = append
+      ? "Append pasted Markdown cards to the current deck."
+      : "Replace the current deck with pasted Markdown.";
+  }
+  if (el.pasteImportBtn) {
+    el.pasteImportBtn.textContent = append ? "Import Pasted Cards" : "Import Pasted Deck";
+  }
+  if (el.pasteMarkdownInput) {
+    el.pasteMarkdownInput.placeholder = append
+      ? "Paste Markdown cards here"
+      : "Paste Markdown deck here";
+  }
+  if (el.pasteEditorPanel) el.pasteEditorPanel.hidden = false;
+  resetPastePreview();
+
+  window.setTimeout(() => el.pasteMarkdownInput?.focus(), 0);
+}
+
+async function previewPastedMarkdown() {
+  const markdown = el.pasteMarkdownInput?.value || "";
+  if (!markdown.trim()) {
+    setStatus("Paste Markdown before importing.", "error");
+    el.pasteMarkdownInput?.focus();
+    resetPastePreview("Paste Markdown to generate a preview.", "No preview");
+    return;
+  }
+
+  const cards = parseCards(markdown);
+  if (!cards.length) {
+    const headingCount = countQuestionHeadings(markdown);
+    const message = headingCount
+      ? `Found ${headingCount} question heading${headingCount === 1 ? "" : "s"}, but no answer text.`
+      : "No cards found in this Markdown.";
+    resetPastePreview(message, "0 cards");
+    setStatus(message, "error");
+    return;
+  }
+
+  pastePreviewSource = markdown;
+  pastePreviewCards = cards;
+  if (el.pastePreviewSummary) {
+    el.pastePreviewSummary.textContent = `${cards.length} card${cards.length === 1 ? "" : "s"}`;
+  }
+  if (el.pastePreviewList) {
+    el.pastePreviewList.innerHTML = cards.map((card, index) => `
+      <article class="paste-preview-card">
+        <div class="paste-preview-card-head">Card ${index + 1}</div>
+        <div class="paste-preview-card-side">
+          <span class="paste-preview-card-label">Question</span>
+          <div class="rendered">${markdownToSafeHtml(card.question)}</div>
+        </div>
+        <div class="paste-preview-card-side">
+          <span class="paste-preview-card-label">Answer</span>
+          <div class="rendered">${markdownToSafeHtml(card.answer)}</div>
+        </div>
+      </article>
+    `).join("");
+    await enhanceRenderedMarkdown(el.pastePreviewList);
+  }
+  if (el.pasteImportBtn) el.pasteImportBtn.disabled = false;
+  setStatus(`Previewed ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
+}
+
+async function importPastedMarkdown() {
+  const markdown = el.pasteMarkdownInput?.value || "";
+  if (!markdown.trim()) {
+    setStatus("Paste Markdown before importing.", "error");
+    el.pasteMarkdownInput?.focus();
+    resetPastePreview("Paste Markdown to generate a preview.", "No preview");
+    return;
+  }
+
+  if (!pastePreviewCards.length || pastePreviewSource !== markdown) {
+    await previewPastedMarkdown();
+    if (!pastePreviewCards.length || pastePreviewSource !== markdown) return;
+  }
+
+  el.sourceInput.value = markdown;
+  const titleHint = pasteImportAppend
+    ? state.importTitleHint || state.deckTitle || "Pasted cards"
+    : "";
+  state.importTitleHint = titleHint;
+  setStatus(pasteImportAppend ? "Importing pasted cards..." : "Importing pasted deck...");
+  const builtCount = buildCards(titleHint, pasteImportAppend);
+  if (builtCount) closePasteEditor(true);
+}
+
 function currentCardCanMove() {
   return Boolean(state.previewCard || state.cards[state.current]);
 }
@@ -6258,6 +6385,15 @@ el.themeMenu?.addEventListener("click", (event) => {
 });
 el.fileInput.addEventListener("change", (event) => loadFile(event.target.files[0], false));
 if (el.fileInputCards) el.fileInputCards.addEventListener("change", (event) => loadFile(event.target.files[0], true));
+el.pasteDeckBtn?.addEventListener("click", () => openPasteEditor(false));
+el.pasteCardsBtn?.addEventListener("click", () => openPasteEditor(true));
+el.pastePreviewBtn?.addEventListener("click", previewPastedMarkdown);
+el.pasteImportBtn?.addEventListener("click", importPastedMarkdown);
+el.pasteCancelBtn?.addEventListener("click", () => closePasteEditor(false));
+el.pasteMarkdownInput?.addEventListener("input", () => resetPastePreview("Preview is out of date. Click Preview again.", "Needs preview"));
+el.pasteMarkdownInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closePasteEditor(false);
+});
 el.prevCardBtn.addEventListener("click", () => navigateCard(-1, "prev"));
 el.nextCardBtn.addEventListener("click", () => navigateCard(1, "next"));
 el.knownBtn.addEventListener("click", () => moveCard("known"));
@@ -6951,4 +7087,3 @@ function handleToolbarClick(event) {
     d.classList.remove("is-open");
   });
 }
-

@@ -1,8 +1,8 @@
-const CACHE_NAME = "markdown-flashcards-v20260603-12";
+const CACHE_NAME = "markdown-flashcards-v20260610-2";
 const APP_SHELL = [
   "./",
-  "./styles.css?v=20260603-11",
-  "./app.js?v=20260603-11",
+  "./styles.css?v=20260610-2",
+  "./app.js?v=20260610-2",
   "./manifest.webmanifest",
   "./fevicon.png",
   "./icons/icon-192.png",
