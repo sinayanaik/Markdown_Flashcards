@@ -2764,7 +2764,7 @@ function inferDeckTitle(markdown, fallback = "") {
     return nonQuestionHeading.replace(/^#{2,6}\s+/, "").replace(/\s+#*$/, "").trim();
   }
 
-  return humanizeSourceTitle(fallback);
+  return humanizeSourceTitle(fallback) || "Pasted Deck";
 }
 
 function stripQuoteMarker(line) {
@@ -4326,7 +4326,7 @@ function updateMeta() {
   updateActiveCardStatusBadges();
   el.deckTitle.textContent = state.deckTitle;
   el.deckTitle.title = state.deckTitle;
-  el.deckTitleWrap.hidden = !state.deckTitle;
+  el.deckTitleWrap.hidden = state.masterCards.length === 0;
   el.editDeckTitleBtn.disabled = state.masterCards.length === 0;
   if (el.deckCategory) {
     el.deckCategory.textContent = normalizeDeckCategory(state.deckCategory);
@@ -6029,7 +6029,7 @@ function preventCancelableScroll(event) {
 }
 
 function styleScrollRegion(target) {
-  return closestElement(target, ".style-grid, .all-cards-list, .import-card, .web-decks-table-wrap, .diagram-modal-body");
+  return closestElement(target, ".style-grid, .all-cards-list, .paste-preview-list, textarea, .import-card, .web-decks-table-wrap, .diagram-modal-body");
 }
 
 function canScrollStyleRegion(region) {

@@ -905,13 +905,13 @@ button:disabled {
 }
 
 .paste-editor-panel textarea {
-  min-height: min(42vh, 340px);
+  height: min(42vh, 340px);
 }
 
 .paste-preview-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  min-height: min(42vh, 340px);
+  height: min(42vh, 340px);
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
