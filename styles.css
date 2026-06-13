@@ -2173,21 +2173,27 @@ svg.nomnoml-light-svg [fill="none"] {
 
 .web-decks-table th:nth-child(1),
 .web-decks-table td:nth-child(1) {
-  width: 39%;
+  width: 6%;
+  text-align: center;
 }
 
 .web-decks-table th:nth-child(2),
 .web-decks-table td:nth-child(2) {
-  width: 21%;
+  width: 35%;
 }
 
 .web-decks-table th:nth-child(3),
 .web-decks-table td:nth-child(3) {
-  width: 16%;
+  width: 20%;
 }
 
 .web-decks-table th:nth-child(4),
 .web-decks-table td:nth-child(4) {
+  width: 15%;
+}
+
+.web-decks-table th:nth-child(5),
+.web-decks-table td:nth-child(5) {
   width: 24%;
 }
 
@@ -5434,3 +5440,256 @@ textarea {
   color: var(--muted) !important;
   font-weight: normal !important;
 }
+
+/* Bulk Action / Selection Styling */
+.web-deck-select-cell {
+  text-align: center;
+}
+
+.web-deck-select-cell input[type="checkbox"],
+.web-decks-table th input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.web-decks-tools-left {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  flex: 1;
+}
+
+.web-decks-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.web-decks-bulk-actions .bulk-title {
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: var(--accent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.web-decks-bulk-actions .bulk-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-btn {
+  cursor: pointer;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--input-radius);
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  transition: all 0.15s ease;
+}
+
+.bulk-action-btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.bulk-action-btn.bulk-load {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  border-color: var(--accent);
+}
+.bulk-action-btn.bulk-load:hover {
+  background: color-mix(in srgb, var(--accent) 85%, #000);
+}
+
+.bulk-action-btn.bulk-delete {
+  border-color: color-mix(in srgb, var(--review) 50%, var(--line));
+  color: var(--review);
+}
+.bulk-action-btn.bulk-delete:hover {
+  background: color-mix(in srgb, var(--review) 15%, var(--panel));
+  border-color: var(--review);
+}
+
+.bulk-export-dropdown {
+  position: relative;
+}
+
+.bulk-export-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: var(--shadow);
+  z-index: 10001;
+  min-width: 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bulk-export-menu button {
+  min-height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bulk-export-menu button:hover {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+  color: var(--accent-strong);
+}
+
+/* ALL View Goto & Delete Action Styling */
+.all-card-goto {
+  min-width: 30px;
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--line)) !important;
+  color: var(--accent) !important;
+  padding: 0 10px !important;
+}
+
+.all-card-goto:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent) !important;
+}
+
+.all-card-delete {
+  min-width: 30px;
+  border-color: color-mix(in srgb, var(--review) 48%, var(--line)) !important;
+  background: color-mix(in srgb, var(--review) 13%, var(--panel)) !important;
+  color: var(--review) !important;
+  padding: 0 10px !important;
+}
+
+.all-card-delete:hover {
+  border-color: var(--review) !important;
+  background: color-mix(in srgb, var(--review) 22%, var(--panel)) !important;
+  color: color-mix(in srgb, var(--review) 88%, var(--text)) !important;
+}
+
+.import-selector-panel {
+  position: fixed;
+  z-index: 105;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 18px;
+  touch-action: none;
+}
+
+.import-selector-shell {
+  display: grid;
+  width: min(var(--modal-width), 100%);
+  height: min(72vh, 620px);
+  height: min(72dvh, 620px);
+  max-height: min(72vh, 620px);
+  max-height: min(72dvh, 620px);
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 1px solid var(--line);
+  border-radius: var(--modal-radius);
+  background: var(--panel);
+  color: var(--text);
+  padding: var(--modal-padding);
+  box-shadow: var(--shadow);
+  touch-action: auto;
+}
+
+.import-selector-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.import-selector-head h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: 0;
+}
+
+.import-selector-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.import-selector-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--input-radius);
+  background: var(--card);
+  overflow: auto;
+  min-height: 0;
+  margin-bottom: 14px;
+}
+
+.import-selector-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  text-align: left;
+  font-size: 0.92rem;
+}
+
+.import-selector-table th,
+.import-selector-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 10px;
+  vertical-align: middle;
+}
+
+.import-selector-table th {
+  color: var(--text);
+  font-weight: 900;
+  background: var(--card);
+}
+
+.import-selector-table th:nth-child(1),
+.import-selector-table td:nth-child(1) {
+  width: 12%;
+  text-align: center;
+}
+.import-selector-table th:nth-child(2),
+.import-selector-table td:nth-child(2) {
+  width: 48%;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.import-selector-table th:nth-child(3),
+.import-selector-table td:nth-child(3) {
+  width: 25%;
+}
+.import-selector-table th:nth-child(4),
+.import-selector-table td:nth-child(4) {
+  width: 15%;
+  text-align: right;
+}
+
+.import-selector-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+

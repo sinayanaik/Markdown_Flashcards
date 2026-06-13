@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
     <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
     <script src="https://unpkg.com/nomnoml/dist/nomnoml.js"></script>
-    <link rel="stylesheet" href="styles.css?v=20260610-3">
+    <link rel="stylesheet" href="styles.css?v=20260613-4">
   </head>
   <body>
     <main class="app-shell">
@@ -307,12 +307,31 @@
           <button class="icon-button" id="closeWebDecksBtn" type="button" aria-label="Close web decks panel">&#215;</button>
         </div>
         <div class="web-decks-tools">
-          <label>
-            <span>Category</span>
-            <select id="webDeckCategoryFilter">
-              <option value="">All categories</option>
-            </select>
-          </label>
+          <div class="web-decks-tools-left">
+            <label>
+              <span>Category</span>
+              <select id="webDeckCategoryFilter">
+                <option value="">All categories</option>
+              </select>
+            </label>
+            <div class="web-decks-bulk-actions" id="webDecksBulkActions" hidden>
+              <span class="bulk-title">Selected (<strong id="selectedDecksCount">0</strong>)</span>
+              <div class="bulk-buttons">
+                <button id="bulkLoadBtn" class="bulk-action-btn bulk-load" type="button">Load</button>
+                <button id="bulkCategoryBtn" class="bulk-action-btn bulk-category" type="button">Categorize</button>
+                <div class="bulk-export-dropdown">
+                  <button id="bulkExportBtn" class="bulk-action-btn bulk-export" type="button" aria-haspopup="true" aria-expanded="false">Export</button>
+                  <div class="bulk-export-menu" id="bulkExportMenu" hidden>
+                    <button type="button" data-bulk-export="pdf">Cornell PDF</button>
+                    <button type="button" data-bulk-export="markdown">Markdown</button>
+                    <button type="button" data-bulk-export="json">JSON</button>
+                    <button type="button" data-bulk-export="sql">SQL</button>
+                  </div>
+                </div>
+                <button id="bulkDeleteBtn" class="bulk-action-btn bulk-delete" type="button">Delete</button>
+              </div>
+            </div>
+          </div>
           <div class="web-decks-global-export">
             <button id="globalWebExportBtn" type="button" aria-haspopup="true" aria-expanded="false">Export All</button>
             <div class="web-decks-global-export-menu" id="globalWebExportMenu" hidden>
@@ -327,6 +346,7 @@
           <table class="web-decks-table">
             <thead>
               <tr>
+                <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllWebDecksCheckbox"></th>
                 <th>Title</th>
                 <th>Category</th>
                 <th>Last Accessed</th>
@@ -334,7 +354,7 @@
               </tr>
             </thead>
             <tbody id="webDecksListTable">
-              <tr><td colspan="4" class="web-decks-empty">Click "Refresh List" to load web decks.</td></tr>
+              <tr><td colspan="5" class="web-decks-empty">Click "Refresh List" to load web decks.</td></tr>
             </tbody>
           </table>
         </div>
@@ -349,6 +369,39 @@
         <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
           <button id="cancelSyncBtn" type="button" class="sync-modal-btn">Cancel</button>
           <button id="confirmSyncBtn" type="button" class="sync-modal-btn is-primary">Confirm Sync</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="import-selector-panel" id="importSelectorPanel" hidden aria-label="Select decks to import">
+      <div class="import-selector-shell">
+        <div class="import-selector-head">
+          <div>
+            <h1>Select Decks to Import</h1>
+            <p>Multiple decks were detected in this file. Choose which ones you want to import.</p>
+          </div>
+          <button class="icon-button" id="closeImportSelectorBtn" type="button" aria-label="Close import selector">&#215;</button>
+        </div>
+        <div class="import-selector-body">
+          <div class="import-selector-table-wrap">
+            <table class="import-selector-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;"><input type="checkbox" id="selectAllImportSelectorCheckbox" checked></th>
+                  <th>Deck Title</th>
+                  <th>Category</th>
+                  <th style="text-align: right; padding-right: 14px;">Cards</th>
+                </tr>
+              </thead>
+              <tbody id="importSelectorListTable">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="import-selector-actions">
+          <button id="importSelectorLoadBtn" class="import-action-btn import-action-primary" type="button">Load Selected Decks</button>
+          <button id="importSelectorCancelBtn" class="import-action-btn" type="button">Cancel</button>
         </div>
       </div>
     </section>
@@ -370,6 +423,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
-    <script src="app.js?v=20260610-3"></script>
+    <script src="app.js?v=20260613-4"></script>
   </body>
 </html>

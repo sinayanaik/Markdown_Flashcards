@@ -624,6 +624,13 @@ async function fetchWebDecks() {
     
     tbody.innerHTML = "";
     
+    const selectAllCheckbox = document.getElementById("selectAllWebDecksCheckbox");
+    if (selectAllCheckbox) {
+      selectAllCheckbox.checked = false;
+      selectAllCheckbox.indeterminate = false;
+    }
+    updateBulkActionVisibility();
+
     const selectedCategory = populateWebDeckCategoryFilter(data || []);
     const visibleDecks = selectedCategory
       ? (data || []).filter((deck) => normalizeDeckCategory(deck.category) === selectedCategory)
@@ -631,13 +638,13 @@ async function fetchWebDecks() {
     const categories = webDeckCategories;
 
     if (!data || data.length === 0) {
-      tbody.innerHTML = "<tr><td colspan=\"4\" class=\"web-decks-empty\">No web decks found.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">No web decks found.</td></tr>";
       setStatus("Web decks loaded.");
       return;
     }
 
     if (!visibleDecks.length) {
-      tbody.innerHTML = "<tr><td colspan=\"4\" class=\"web-decks-empty\">No decks in this category.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">No decks in this category.</td></tr>";
       setStatus("Web decks loaded.");
       return;
     }
@@ -646,6 +653,18 @@ async function fetchWebDecks() {
       const accessed = formatWebDeckAccessDate(deckLastAccessedAt(deck));
       const category = normalizeDeckCategory(deck.category);
       const tr = document.createElement("tr");
+
+      const tdSelect = document.createElement("td");
+      tdSelect.dataset.label = "Select";
+      tdSelect.className = "web-deck-select-cell";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "web-deck-row-checkbox";
+      checkbox.dataset.deckId = deck.id;
+      checkbox.addEventListener("change", () => {
+        updateBulkActionVisibility();
+      });
+      tdSelect.appendChild(checkbox);
 
       const tdTitle = document.createElement("td");
       tdTitle.dataset.label = "Title";
@@ -706,6 +725,7 @@ async function fetchWebDecks() {
       actionsWrap.appendChild(delBtn);
       tdActions.appendChild(actionsWrap);
       
+      tr.appendChild(tdSelect);
       tr.appendChild(tdTitle);
       tr.appendChild(tdCategory);
       tr.appendChild(tdDate);
@@ -867,7 +887,7 @@ function createWebDeckCategoryControl(deck, currentCategory, categories = webDec
 }
 
 function closeWebDeckExportMenus(exceptMenu = null) {
-  document.querySelectorAll(".web-deck-export-menu, .web-decks-global-export-menu").forEach((menu) => {
+  document.querySelectorAll(".web-deck-export-menu, .web-decks-global-export-menu, .bulk-export-menu").forEach((menu) => {
     if (menu !== exceptMenu) {
       menu.hidden = true;
       const trigger = menu.previousElementSibling;
@@ -1830,6 +1850,12 @@ const el = {
   replayUncategorizedBtn: document.querySelector("#replayUncategorizedBtn"),
   replayAllBtn: document.querySelector("#replayAllBtn"),
   deckSummary: document.querySelector("#deckSummary"),
+  importSelectorPanel: document.querySelector("#importSelectorPanel"),
+  importSelectorListTable: document.querySelector("#importSelectorListTable"),
+  selectAllImportSelectorCheckbox: document.querySelector("#selectAllImportSelectorCheckbox"),
+  importSelectorLoadBtn: document.querySelector("#importSelectorLoadBtn"),
+  importSelectorCancelBtn: document.querySelector("#importSelectorCancelBtn"),
+  closeImportSelectorBtn: document.querySelector("#closeImportSelectorBtn"),
 };
 
 marked.setOptions({
@@ -3879,6 +3905,239 @@ function closeAllCardsPanel() {
   unlockPageScroll();
 }
 
+function goToCard(cardId) {
+  let index = state.cards.findIndex(c => c.id === cardId);
+  if (index === -1) {
+    // Revert to studying all master cards
+    state.cards = state.masterCards.slice();
+    index = state.cards.findIndex(c => c.id === cardId);
+  }
+  if (index !== -1) {
+    state.current = index;
+    state.previewCard = null;
+    showCard();
+    closeAllCardsPanel();
+  } else {
+    setStatus("Card not found.", "error");
+  }
+}
+
+function deleteAllCard(cardId) {
+  if (!confirm("Delete this card?")) return;
+  state.masterCards = state.masterCards.filter(c => c.id !== cardId);
+  state.cards = state.cards.filter(c => c.id !== cardId);
+  delete state.statusById[cardId];
+  
+  if (state.current >= state.cards.length) {
+    state.current = Math.max(0, state.cards.length - 1);
+  }
+  
+  savePersistedDeck();
+  showCard();
+  renderAllCards();
+  setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
+}
+
+function updateBulkActionVisibility() {
+  const selectedCheckboxes = document.querySelectorAll(".web-deck-row-checkbox:checked");
+  const count = selectedCheckboxes.length;
+  const bulkBar = document.getElementById("webDecksBulkActions");
+  const countSpan = document.getElementById("selectedDecksCount");
+  
+  if (countSpan) countSpan.textContent = count;
+  
+  if (bulkBar) {
+    bulkBar.hidden = count === 0;
+  }
+
+  const allCheckboxes = document.querySelectorAll(".web-deck-row-checkbox");
+  const selectAllCheckbox = document.getElementById("selectAllWebDecksCheckbox");
+  if (selectAllCheckbox && allCheckboxes.length > 0) {
+    selectAllCheckbox.checked = selectedCheckboxes.length === allCheckboxes.length;
+    selectAllCheckbox.indeterminate = selectedCheckboxes.length > 0 && selectedCheckboxes.length < allCheckboxes.length;
+  }
+}
+
+async function loadSelectedWebDecks(deckIds) {
+  if (!deckIds.length || !supabaseClient) return;
+  setStatus(`Loading ${deckIds.length} decks from web...`);
+  try {
+    const combinedCards = [];
+    const combinedStatusById = {};
+    const titles = [];
+    let combinedCategory = "";
+
+    for (const deckId of deckIds) {
+      const { data: deckData, error: deckError } = await supabaseClient
+        .from("decks")
+        .select("*")
+        .eq("id", deckId)
+        .single();
+      if (deckError) throw deckError;
+
+      const { data: cardsData, error: cardsError } = await supabaseClient
+        .from("cards")
+        .select("*")
+        .eq("deck_id", deckId)
+        .order("position", { ascending: true });
+      if (cardsError) throw cardsError;
+
+      titles.push(deckData.title || "Untitled");
+      if (!combinedCategory) {
+        combinedCategory = normalizeDeckCategory(deckData.category);
+      }
+
+      cardsData.forEach((rawCard, index) => {
+        const id = String(rawCard.id || `${index}-${rawCard.question.slice(0, 32)}`);
+        const status = normalizeCardStatus(rawCard.status);
+        if (status) {
+          combinedStatusById[id] = status;
+        }
+        combinedCards.push({ id, question: rawCard.question, answer: rawCard.answer });
+      });
+    }
+
+    state.deckId = null;
+    state.masterCards = combinedCards;
+    resetStudyDeck(state.masterCards);
+    state.statusById = combinedStatusById;
+    state.current = 0;
+    state.deckTitle = titles.join(" + ");
+    state.deckCategory = combinedCategory;
+    state.sourceTitle = state.deckTitle;
+    state.importTitleHint = state.deckTitle;
+
+    syncResults();
+    savePersistedDeck();
+    closeAllCardsPanel();
+    document.getElementById("webDecksPanel").hidden = true;
+    unlockPageScroll();
+    showCard();
+    setStatus(`Successfully loaded ${deckIds.length} decks.`);
+  } catch (error) {
+    console.error("Failed to load selected web decks", error);
+    setStatus("Failed to load selected web decks.", "error");
+  }
+}
+
+async function deleteSelectedWebDecks(deckIds) {
+  if (!deckIds.length || !supabaseClient) return;
+  if (!confirm(`Are you sure you want to delete ${deckIds.length} selected decks from the web?`)) return;
+  
+  setStatus(`Deleting ${deckIds.length} decks...`);
+  try {
+    for (const deckId of deckIds) {
+      const { error } = await supabaseClient.from("decks").delete().eq("id", deckId);
+      if (error) throw error;
+      if (state.deckId === deckId) {
+        state.deckId = null;
+      }
+    }
+    savePersistedDeck();
+    setStatus(`Successfully deleted ${deckIds.length} decks.`);
+    fetchWebDecks();
+  } catch (error) {
+    console.error("Failed to delete selected web decks", error);
+    setStatus("Failed to delete selected web decks.", "error");
+  }
+}
+
+async function changeSelectedWebDecksCategory(deckIds) {
+  if (!deckIds.length || !supabaseClient) return;
+
+  const nextCategory = prompt("Enter new category name for selected decks:", "General");
+  if (nextCategory === null) return;
+  const category = normalizeDeckCategory(nextCategory.trim());
+  if (!category) {
+    setStatus("Category cannot be empty.", "error");
+    return;
+  }
+
+  setStatus(`Updating category for ${deckIds.length} decks...`);
+  try {
+    for (const deckId of deckIds) {
+      await applyWebDeckCategory(deckId, category);
+      if (state.deckId === deckId) {
+        state.deckCategory = category;
+      }
+    }
+    savePersistedDeck();
+    updateMeta();
+    setStatus(`Updated category for ${deckIds.length} decks.`);
+    fetchWebDecks();
+  } catch (error) {
+    console.error("Failed to update selected decks category", error);
+    setStatus("Failed to update selected decks category.", "error");
+  }
+}
+
+async function exportSelectedWebDecks(deckIds, format) {
+  if (!deckIds.length || !supabaseClient) return;
+
+  try {
+    setStatus(`Exporting ${deckIds.length} web decks...`);
+    const payloads = [];
+    for (const deckId of deckIds) {
+      const payload = await fetchWebDeckPayload(deckId);
+      payloads.push(payload);
+    }
+
+    if (format === "pdf") {
+      const cards = [];
+      const statusById = {};
+      payloads.forEach((payload) => {
+        cards.push({
+          type: "deck-divider",
+          title: payload.deck.title,
+          category: payload.deck.category
+        });
+        payload.cards.forEach((card) => {
+          const id = `${payload.deck.id}:${card.id}`;
+          cards.push({
+            id,
+            question: card.question,
+            answer: card.answer,
+            position: cards.length
+          });
+          const status = normalizeCardStatus(card.status);
+          if (status) statusById[id] = status;
+        });
+      });
+      await exportCardsPdf("Selected Web Decks", cards, { fileBaseName: "selected-web-decks", statusById });
+    } else if (format === "markdown") {
+      downloadTextFile(
+        payloads.map(webDeckPayloadMarkdown).join("\n\n---\n\n"),
+        "selected-web-decks.md",
+        "text/markdown;charset=utf-8"
+      );
+      setStatus("Exported selected web decks as Markdown.");
+    } else if (format === "sql") {
+      downloadTextFile(buildDeckSql(payloads, "Selected Web Decks SQL Export"), "selected-web-decks.sql", "application/sql;charset=utf-8");
+      setStatus("Exported selected web decks as SQL.");
+    } else {
+      downloadTextFile(
+        `${JSON.stringify({
+          app: "markdown-flashcards",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          decks: payloads.map(deckPayloadSnapshot)
+        }, null, 2)}\n`,
+        "selected-web-decks.json",
+        "application/json;charset=utf-8"
+      );
+      setStatus("Exported selected web decks as JSON.");
+    }
+    
+    for (const deckId of deckIds) {
+      await touchWebDeckAccess(deckId);
+    }
+    fetchWebDecks();
+  } catch (error) {
+    console.error("Failed to export selected web decks", error);
+    setStatus("Failed to export selected web decks.", "error");
+  }
+}
+
 function setAllCardStatus(cardId, status) {
   if (state.statusById[cardId] === status) {
     delete state.statusById[cardId];
@@ -4537,8 +4796,170 @@ function animateToCard(direction, updateState) {
   }, 210);
 }
 
+function detectDecksInMarkdown(markdown) {
+  const source = removeEmptyHeadingGroups(stripReaderMetadata(markdown));
+  const lines = source.split("\n");
+  const deckSections = [];
+  let currentDeck = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(/^#\s+(.+)$/);
+    if (match) {
+      if (currentDeck) {
+        deckSections.push(currentDeck);
+      }
+      currentDeck = {
+        title: match[1].trim(),
+        category: "General",
+        lines: []
+      };
+    } else if (currentDeck) {
+      const catMatch = line.match(/^Category:\s*(.+)$/i);
+      if (catMatch) {
+        currentDeck.category = catMatch[1].trim();
+      } else {
+        const isDeckId = /^Deck ID:\s*/i.test(line);
+        const isExported = /^Exported:\s*/i.test(line);
+        if (!isDeckId && !isExported) {
+          currentDeck.lines.push(line);
+        }
+      }
+    } else {
+      const trimmed = line.trim();
+      if (trimmed) {
+        currentDeck = {
+          title: "",
+          category: "General",
+          lines: [line]
+        };
+      }
+    }
+  }
+  if (currentDeck) {
+    deckSections.push(currentDeck);
+  }
+
+  const parsedDecks = [];
+  deckSections.forEach((d) => {
+    const content = d.lines.join("\n").trim();
+    if (!content) return;
+    const cards = parseCards(content);
+    if (cards.length > 0) {
+      parsedDecks.push({
+        title: d.title || "",
+        category: d.category || "General",
+        cards: cards,
+        content: content
+      });
+    }
+  });
+
+  return parsedDecks;
+}
+
+let currentDetectedDecks = [];
+let currentImportTitleHint = "";
+
+function showImportDecksSelector(decks, titleHint) {
+  currentDetectedDecks = decks;
+  currentImportTitleHint = titleHint;
+
+  el.importSelectorListTable.innerHTML = decks.map((deck, index) => {
+    const deckTitle = deck.title || titleHint || `Deck ${index + 1}`;
+    return `
+      <tr>
+        <td style="text-align: center; vertical-align: middle;">
+          <input type="checkbox" class="import-selector-checkbox" data-index="${index}" checked style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent);">
+        </td>
+        <td style="vertical-align: middle; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;"><strong>${escapeHtml(deckTitle)}</strong></td>
+        <td style="vertical-align: middle;"><span class="cornell-status" data-status="uncategorized">${escapeHtml(deck.category)}</span></td>
+        <td style="vertical-align: middle; text-align: right; padding-right: 14px; font-weight: 800;">${deck.cards.length}</td>
+      </tr>
+    `;
+  }).join("");
+
+  el.selectAllImportSelectorCheckbox.checked = true;
+  el.importSelectorPanel.hidden = false;
+  lockPageScroll();
+}
+
+function closeImportSelectorPanel() {
+  el.importSelectorPanel.hidden = true;
+  unlockPageScroll();
+}
+
+function toggleAllImportSelector() {
+  const checked = el.selectAllImportSelectorCheckbox.checked;
+  const checkboxes = el.importSelectorListTable.querySelectorAll(".import-selector-checkbox");
+  checkboxes.forEach((cb) => {
+    cb.checked = checked;
+  });
+}
+
+async function loadSelectedImportDecks() {
+  const checkboxes = el.importSelectorListTable.querySelectorAll(".import-selector-checkbox");
+  const selectedDecks = [];
+  checkboxes.forEach((cb) => {
+    if (cb.checked) {
+      const index = parseInt(cb.dataset.index, 10);
+      selectedDecks.push(currentDetectedDecks[index]);
+    }
+  });
+
+  if (selectedDecks.length === 0) {
+    setStatus("Please select at least one deck to import.", "error");
+    return;
+  }
+
+  closeImportSelectorPanel();
+
+  let combinedCards = [];
+  selectedDecks.forEach((deck) => {
+    combinedCards = combinedCards.concat(deck.cards);
+  });
+
+  const cards = combinedCards.map((card, index) => ({
+    id: `${index}-${card.question.slice(0, 32)}`,
+    question: card.question,
+    answer: card.answer
+  }));
+
+  state.masterCards = cards.slice();
+  state.deckId = null;
+  resetStudyDeck(state.masterCards);
+
+  if (selectedDecks.length === 1) {
+    state.deckTitle = selectedDecks[0].title || currentImportTitleHint || "Imported Deck";
+    state.deckCategory = selectedDecks[0].category || defaultDeckCategory;
+  } else {
+    state.deckTitle = `Combined: ${selectedDecks.map(d => d.title || "Untitled").join(", ")}`.slice(0, 80);
+    state.deckCategory = defaultDeckCategory;
+  }
+  state.sourceTitle = state.deckTitle;
+
+  closeAllCardsPanel();
+  closeImportPanel();
+
+  if (cards.length) {
+    setStatus(`Imported ${selectedDecks.length} deck(s) with ${cards.length} total card(s).`);
+    savePersistedDeck();
+  } else {
+    savePersistedDeck();
+  }
+
+  showCard();
+}
+
 function buildCards(titleHint = state.importTitleHint || "", append = false) {
   const source = stripReaderMetadata(el.sourceInput.value);
+  if (!append) {
+    const detectedDecks = detectDecksInMarkdown(source);
+    if (detectedDecks.length > 1) {
+      showImportDecksSelector(detectedDecks, titleHint);
+      return 0;
+    }
+  }
   const cards = parseCards(source);
   const headingCount = countQuestionHeadings(source);
   const importTitle = titleFromImportHint(titleHint);
@@ -4583,6 +5004,9 @@ function navigateCard(direction, animationDirection = direction) {
 
   // Allow going one step past the last card to show the end-of-deck summary
   if (direction > 0 && state.current >= state.cards.length - 1) {
+    if (state.current >= state.cards.length) {
+      return; // Already on summary, don't try to go past it
+    }
     animateToCard(animationDirection, () => {
       state.current = state.cards.length; // triggers summary in showCard
       state.previewCard = null;
@@ -4811,8 +5235,9 @@ function exportMarkdown(scope = "all") {
   const title = scope === "known" ? "Known" : scope === "review" ? "Review" : scope === "uncategorized" ? "Uncategorized" : "All Cards";
   const uncategorized = uncategorizedCards();
   const output = [
-    "# Flashcard Export",
+    `# ${state.deckTitle || "Flashcard Export"}`,
     "",
+    `Category: ${state.deckCategory || defaultDeckCategory}`,
     `Exported: ${new Date().toISOString()}`,
     "",
     formatCardList(title, cards),
@@ -5079,10 +5504,12 @@ function cornellCardHtml(card, index, { answerVisible = false, print = false, st
           ${print ? "" : `<span class="all-card-status-label cornell-status" data-all-status-label data-status="${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>`}
           ${print ? "" : `
             <div class="all-card-actions" aria-label="Card controls">
+              <button class="all-card-goto" type="button" data-all-goto title="Go to card in main view" aria-label="Go to card in main view">&#128065;</button>
               <button class="all-card-add" type="button" data-all-add-after title="Insert card after this one" aria-label="Insert card after this one">+</button>
               <button class="all-card-edit" type="button" data-all-edit-current title="Edit question" aria-label="Edit question">&#9998;</button>
               <button class="all-card-review" type="button" data-all-status="review">Review</button>
               <button class="all-card-known" type="button" data-all-status="known">Known</button>
+              <button class="all-card-delete" type="button" data-all-delete title="Delete card" aria-label="Delete card">&#128465;</button>
             </div>
           `}
         </div>
@@ -5783,7 +6210,7 @@ async function importPastedMarkdown() {
 }
 
 function currentCardCanMove() {
-  return Boolean(state.previewCard || state.cards[state.current]);
+  return Boolean(state.previewCard || state.cards[state.current] || (state.cards.length > 0 && state.current === state.cards.length));
 }
 
 function closestElement(target, selector) {
@@ -6236,9 +6663,80 @@ el.webDecksBtn.addEventListener("click", () => {
   openWebDecksPanel();
 });
 el.closeImportBtn.addEventListener("click", closeImportPanel);
+el.closeImportSelectorBtn.addEventListener("click", closeImportSelectorPanel);
+el.importSelectorCancelBtn.addEventListener("click", closeImportSelectorPanel);
+el.selectAllImportSelectorCheckbox.addEventListener("change", toggleAllImportSelector);
+el.importSelectorLoadBtn.addEventListener("click", loadSelectedImportDecks);
 el.editDeckTitleBtn.addEventListener("click", editCurrentDeckTitle);
 el.editDeckCategoryBtn?.addEventListener("click", editCurrentDeckCategory);
 el.webDeckCategoryFilter?.addEventListener("change", fetchWebDecks);
+
+// Web Decks selection & bulk actions event listener initialization
+const selectAllCheckbox = document.getElementById("selectAllWebDecksCheckbox");
+if (selectAllCheckbox) {
+  selectAllCheckbox.addEventListener("change", (e) => {
+    const checked = e.target.checked;
+    document.querySelectorAll(".web-deck-row-checkbox").forEach((cb) => {
+      cb.checked = checked;
+    });
+    updateBulkActionVisibility();
+  });
+}
+
+const bulkLoadBtn = document.getElementById("bulkLoadBtn");
+if (bulkLoadBtn) {
+  bulkLoadBtn.addEventListener("click", () => {
+    const selectedIds = Array.from(document.querySelectorAll(".web-deck-row-checkbox:checked")).map(cb => cb.dataset.deckId);
+    if (selectedIds.length > 0) {
+      loadSelectedWebDecks(selectedIds);
+    }
+  });
+}
+
+const bulkCategoryBtn = document.getElementById("bulkCategoryBtn");
+if (bulkCategoryBtn) {
+  bulkCategoryBtn.addEventListener("click", () => {
+    const selectedIds = Array.from(document.querySelectorAll(".web-deck-row-checkbox:checked")).map(cb => cb.dataset.deckId);
+    if (selectedIds.length > 0) {
+      changeSelectedWebDecksCategory(selectedIds);
+    }
+  });
+}
+
+const bulkDeleteBtn = document.getElementById("bulkDeleteBtn");
+if (bulkDeleteBtn) {
+  bulkDeleteBtn.addEventListener("click", () => {
+    const selectedIds = Array.from(document.querySelectorAll(".web-deck-row-checkbox:checked")).map(cb => cb.dataset.deckId);
+    if (selectedIds.length > 0) {
+      deleteSelectedWebDecks(selectedIds);
+    }
+  });
+}
+
+const bulkExportBtn = document.getElementById("bulkExportBtn");
+const bulkExportMenu = document.getElementById("bulkExportMenu");
+if (bulkExportBtn && bulkExportMenu) {
+  bulkExportBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const shouldOpen = bulkExportMenu.hidden;
+    closeWebDeckExportMenus(bulkExportMenu);
+    bulkExportMenu.hidden = !shouldOpen;
+    bulkExportBtn.setAttribute("aria-expanded", String(shouldOpen));
+  });
+
+  bulkExportMenu.querySelectorAll("[data-bulk-export]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      bulkExportMenu.hidden = true;
+      bulkExportBtn.setAttribute("aria-expanded", "false");
+      const format = btn.dataset.bulkExport;
+      const selectedIds = Array.from(document.querySelectorAll(".web-deck-row-checkbox:checked")).map(cb => cb.dataset.deckId);
+      if (selectedIds.length > 0) {
+        exportSelectedWebDecks(selectedIds, format);
+      }
+    });
+  });
+}
 el.globalWebExportBtn?.addEventListener("click", (event) => {
   event.stopPropagation();
   const shouldOpen = el.globalWebExportMenu?.hidden;
@@ -6309,6 +6807,20 @@ el.toggleAllAnswersBtn?.addEventListener("click", () => {
 });
 el.closeAllCardsBtn.addEventListener("click", closeAllCardsPanel);
 el.allCardsList.addEventListener("click", (event) => {
+  const gotoButton = event.target.closest("[data-all-goto]");
+  if (gotoButton) {
+    event.stopPropagation();
+    goToCard(gotoButton.closest(".all-card").dataset.cardId);
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-all-delete]");
+  if (deleteButton) {
+    event.stopPropagation();
+    deleteAllCard(deleteButton.closest(".all-card").dataset.cardId);
+    return;
+  }
+
   const addAfterButton = event.target.closest("[data-all-add-after]");
   if (addAfterButton) {
     event.stopPropagation();
@@ -6474,9 +6986,11 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".theme-select")) {
     setThemeMenuOpen(false);
   }
-  if (!event.target.closest(".web-deck-export-wrap, .web-decks-global-export")) {
+  if (!event.target.closest(".web-deck-export-wrap, .web-decks-global-export, .bulk-export-dropdown")) {
     closeWebDeckExportMenus();
     el.globalWebExportBtn?.setAttribute("aria-expanded", "false");
+    const bulkExportBtn = document.getElementById("bulkExportBtn");
+    if (bulkExportBtn) bulkExportBtn.setAttribute("aria-expanded", "false");
   }
   if (!event.target.closest(".menu-wrap")) {
     el.exportMenu.hidden = true;
