@@ -1498,6 +1498,19 @@ button:disabled {
   padding: var(--answer-padding);
 }
 
+/* When the question contains a code block, pack content from the top instead of
+   centering — centering with fixed-height code blocks creates large empty gaps */
+.card-question .rendered:has(pre) {
+  align-content: start;
+}
+
+/* Cap code block height inside the question face so it can't crowd out text.
+   The block scrolls internally if the code is taller than the cap. */
+.card-question .rendered pre {
+  max-height: calc(var(--card-max-height, 74vh) * 0.45);
+  margin-block: 0.5em;
+}
+
 .card-question .rendered :is(h1, h2, h3, p) {
   overflow-wrap: anywhere;
 }

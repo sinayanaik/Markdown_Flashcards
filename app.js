@@ -5321,7 +5321,23 @@ function fitLiveQuestion() {
   const maxQuestionFontSize = numericStyleValue(settings.questionMaxFontSize) ?? numericStyleValue(styleDefaults.questionMaxFontSize) ?? 64;
   const availableHeight = Math.max(face.clientHeight - paddingY - occupiedHeight - gapHeight, 1);
   const availableWidth = Math.max(face.clientWidth - paddingX, 1);
-  const targetHeight = Math.max(availableHeight * fillRatio, 1);
+  // Pre-measure fixed-height elements (code blocks / scrollable children) whose height
+  // doesn't change as we vary --question-fit-font-size, so the target can account for them.
+  const isScrollableChild = (child) => {
+    const s = getComputedStyle(child);
+    return s.overflowX === "auto" || s.overflowX === "scroll"
+      || s.overflow === "auto" || s.overflow === "scroll";
+  };
+  const fixedContentHeight = Array.from(node.children).reduce((sum, child) => {
+    if (getComputedStyle(child).display === "none") return sum;
+    if (!isScrollableChild(child)) return sum;
+    const s = getComputedStyle(child);
+    return sum + child.getBoundingClientRect().height
+      + (parseFloat(s.marginTop) || 0) + (parseFloat(s.marginBottom) || 0);
+  }, 0);
+  // Space available for scalable text after reserving room for code blocks
+  const textAvailableHeight = Math.max(availableHeight - fixedContentHeight, 1);
+  const targetHeight = Math.max(textAvailableHeight * fillRatio, 1);
   const searchCeiling = Math.max(1, Math.min(maxQuestionFontSize, 360, targetHeight / Math.max(lineHeight, 0.1) * 2.2, availableWidth * 1.6));
   let low = 1;
   let high = searchCeiling;
@@ -5342,17 +5358,11 @@ function fitLiveQuestion() {
     let bottom = -Infinity;
     let left = Infinity;
     let width = 0;
-    let fitTop = Infinity;
-    let fitBottom = -Infinity;
+    let fitHeight = 0;  // sum of scalable (text) element heights — not a bounding box
 
     children.forEach((child) => {
       const childStyle = getComputedStyle(child);
-      const overflowX = childStyle.overflowX;
-      const overflow = childStyle.overflow;
-      // Elements with their own overflow (e.g. <pre>) manage horizontal scroll internally
-      // and use a fixed font-size that doesn't scale with --question-fit-font-size
-      const isScrollable = overflowX === "auto" || overflowX === "scroll"
-        || overflow === "auto" || overflow === "scroll";
+      const scrollable = isScrollableChild(child);
       const rect = child.getBoundingClientRect();
       const marginTop = parseFloat(childStyle.marginTop) || 0;
       const marginRight = parseFloat(childStyle.marginRight) || 0;
@@ -5363,30 +5373,30 @@ function fitLiveQuestion() {
       bottom = Math.max(bottom, rect.bottom + marginBottom);
       left = Math.min(left, rect.left - marginLeft);
       // Use rendered rect.width for scrollable elements — their scrollWidth includes
-      // off-screen content that won't overflow the question container visually
-      const effectiveWidth = isScrollable ? rect.width : child.scrollWidth;
+      // off-screen code that doesn't overflow the container visually
+      const effectiveWidth = scrollable ? rect.width : child.scrollWidth;
       width = Math.max(width, rect.width + marginLeft + marginRight, effectiveWidth + marginLeft + marginRight);
-      // Only include non-scrollable (scalable) children in the fit-target height
-      if (!isScrollable) {
-        fitTop = Math.min(fitTop, rect.top - marginTop);
-        fitBottom = Math.max(fitBottom, rect.bottom + marginBottom);
+      // Accumulate only scalable children for the fit-height — summing, not bounding box,
+      // so a code block sandwiched between text elements doesn't inflate the measurement
+      if (!scrollable) {
+        fitHeight += rect.height + marginTop + marginBottom;
       }
     });
 
     return {
       width: Math.max(width, right - left),
       height: Math.max(0, bottom - top),
-      fitHeight: fitTop === Infinity ? 0 : Math.max(0, fitBottom - fitTop)
+      fitHeight
     };
   };
 
   const fits = () => {
     const contentSize = questionContentSize();
-    // No scalable text (e.g. question is only a code block) — nothing to shrink, use max size
+    // No scalable text (question is only a code block) — nothing to fit, use max size
     if (contentSize.fitHeight === 0) return true;
     return contentSize.width <= Math.max(node.clientWidth, availableWidth) + 4
       && contentSize.fitHeight <= targetHeight + 2
-      && contentSize.fitHeight <= availableHeight + 2;
+      && contentSize.fitHeight <= textAvailableHeight + 2;
   };
 
   for (let index = 0; index < 10; index += 1) {
