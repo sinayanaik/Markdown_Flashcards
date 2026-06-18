@@ -15,8 +15,6 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
-    <script src="https://unpkg.com/nomnoml/dist/nomnoml.js"></script>
     <link rel="stylesheet" href="styles.css?v=20260613-4">
   </head>
   <body>
@@ -362,11 +360,11 @@
       </div>
     </section>
 
-    <section class="sync-modal" id="syncModal" hidden aria-label="Sync Details" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center;">
-      <div class="sync-modal-content" style="background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; max-width: 400px; width: 90%;">
-        <h2 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.25rem;">Sync Confirmation</h2>
-        <div id="syncDetailsContent" style="margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;"></div>
-        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+    <section class="sync-modal" id="syncModal" hidden aria-label="Sync Details">
+      <div class="sync-modal-content">
+        <h2>Sync Confirmation</h2>
+        <div id="syncDetailsContent" class="sync-modal-details"></div>
+        <div class="sync-modal-actions">
           <button id="cancelSyncBtn" type="button" class="sync-modal-btn">Cancel</button>
           <button id="confirmSyncBtn" type="button" class="sync-modal-btn is-primary">Confirm Sync</button>
         </div>
@@ -420,7 +418,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom@4.5.0/dist/panzoom.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/graphre/dist/graphre.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
     <script src="app.js?v=20260613-4"></script>

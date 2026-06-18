@@ -454,7 +454,7 @@ function setKnownWebDeckCategories(categories = []) {
 }
 
 function populateWebDeckCategoryFilter(decks = []) {
-  const filter = document.getElementById("webDeckCategoryFilter");
+  const filter = el.webDeckCategoryFilter;
   if (!filter) return "";
 
   const selected = filter.value || "";
@@ -619,15 +619,14 @@ async function fetchWebDecks() {
       
     if (error) throw error;
     
-    const tbody = document.getElementById("webDecksListTable");
+    const tbody = el.webDecksListTable;
     if (!tbody) return;
-    
+
     tbody.innerHTML = "";
-    
-    const selectAllCheckbox = document.getElementById("selectAllWebDecksCheckbox");
-    if (selectAllCheckbox) {
-      selectAllCheckbox.checked = false;
-      selectAllCheckbox.indeterminate = false;
+
+    if (el.selectAllWebDecksCheckbox) {
+      el.selectAllWebDecksCheckbox.checked = false;
+      el.selectAllWebDecksCheckbox.indeterminate = false;
     }
     updateBulkActionVisibility();
 
@@ -776,7 +775,6 @@ async function applyWebDeckCategory(deckId, category) {
 
   if (state.deckId === deckId) {
     state.deckCategory = normalized;
-    savePersistedDeck();
     updateMeta();
   }
 
@@ -962,7 +960,6 @@ async function renameWebDeck(deckId, currentTitle = "") {
     if (state.deckId === deckId) {
       state.deckTitle = title;
       state.sourceTitle = title;
-      savePersistedDeck();
       updateMeta();
     }
 
@@ -971,24 +968,6 @@ async function renameWebDeck(deckId, currentTitle = "") {
   } catch (error) {
     console.error("Failed to rename web deck", error);
     setStatus("Failed to rename web deck.", "error");
-  }
-}
-
-async function recategorizeWebDeck(deckId, currentCategory = defaultDeckCategory) {
-  if (!deckId || !supabaseClient) return;
-
-  const category = await chooseDeckCategory(currentCategory);
-  if (category === null) return;
-
-  try {
-    setStatus("Updating deck category...");
-    await applyWebDeckCategory(deckId, category);
-
-    setStatus("Deck category updated.");
-    fetchWebDecks();
-  } catch (error) {
-    console.error("Failed to update deck category", error);
-    setStatus("Failed to update deck category. Run the deck category SQL migration first.", "error");
   }
 }
 
@@ -1312,7 +1291,6 @@ async function deleteWebDeck(deckId) {
     
     if (state.deckId === deckId) {
       state.deckId = null;
-      savePersistedDeck();
     }
     
     setStatus("Deck deleted successfully.");
@@ -1369,9 +1347,8 @@ async function loadWebDeck(deckId) {
     syncResults();
     await touchWebDeckAccess(deckData.id);
     closeAllCardsPanel();
-    savePersistedDeck();
     setStatus(`Loaded ${cards.length} cards from web successfully.`);
-    document.getElementById("webDecksPanel").hidden = true;
+    el.webDecksPanel.hidden = true;
     unlockPageScroll();
     closeImportPanel();
     showCard();
@@ -1530,8 +1507,8 @@ function calculateSyncDiff(localCards, webCards, statusById = {}) {
 }
 
 async function showSyncModal() {
-  const modal = document.getElementById("syncModal");
-  const content = document.getElementById("syncDetailsContent");
+  const modal = el.syncModal;
+  const content = el.syncDetailsContent;
   const confirmBtn = document.getElementById("confirmSyncBtn");
   
   if (!state.masterCards.length) {
@@ -1624,7 +1601,7 @@ async function showSyncModal() {
 
 async function syncDeckToWeb() {
   if (!supabaseClient) return;
-  document.getElementById("syncModal").hidden = true;
+  el.syncModal.hidden = true;
   
   if (!state.masterCards.length) {
     setStatus("No deck to sync.", "error");
@@ -1712,7 +1689,6 @@ async function syncDeckToWeb() {
     }
 
     setStatus("Deck synced to web successfully.");
-    savePersistedDeck();
   } catch (error) {
     const errorMessage = String(error?.message || "");
     setStatus(
@@ -1856,6 +1832,13 @@ const el = {
   importSelectorLoadBtn: document.querySelector("#importSelectorLoadBtn"),
   importSelectorCancelBtn: document.querySelector("#importSelectorCancelBtn"),
   closeImportSelectorBtn: document.querySelector("#closeImportSelectorBtn"),
+  questionEditToolbar: document.querySelector("#questionEditToolbar"),
+  answerEditToolbar: document.querySelector("#answerEditToolbar"),
+  syncModal: document.querySelector("#syncModal"),
+  syncDetailsContent: document.querySelector("#syncDetailsContent"),
+  webDecksPanel: document.querySelector("#webDecksPanel"),
+  webDecksListTable: document.querySelector("#webDecksListTable"),
+  selectAllWebDecksCheckbox: document.querySelector("#selectAllWebDecksCheckbox"),
 };
 
 marked.setOptions({
@@ -2626,14 +2609,12 @@ function setDeckTitle(title, options = {}) {
   if (options.updateSourceTitle || !state.sourceTitle) {
     state.sourceTitle = normalized;
   }
-  if (options.save !== false) savePersistedDeck();
-  updateMeta();
+  if (options.save !== false)  updateMeta();
 }
 
 function setDeckCategory(category, options = {}) {
   state.deckCategory = normalizeDeckCategory(category);
-  if (options.save !== false) savePersistedDeck();
-  updateMeta();
+  if (options.save !== false)  updateMeta();
 }
 
 async function editCurrentDeckTitle() {
@@ -2699,11 +2680,8 @@ function openImportPanel() {
 }
 
 function openWebDecksPanel() {
-  const panel = document.getElementById("webDecksPanel");
-  if (!panel) return;
-
   lockPageScroll();
-  panel.hidden = false;
+  el.webDecksPanel.hidden = false;
 }
 
 function closeImportPanel() {
@@ -3932,7 +3910,6 @@ function deleteAllCard(cardId) {
     state.current = Math.max(0, state.cards.length - 1);
   }
   
-  savePersistedDeck();
   showCard();
   renderAllCards();
   setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
@@ -3951,10 +3928,9 @@ function updateBulkActionVisibility() {
   }
 
   const allCheckboxes = document.querySelectorAll(".web-deck-row-checkbox");
-  const selectAllCheckbox = document.getElementById("selectAllWebDecksCheckbox");
-  if (selectAllCheckbox && allCheckboxes.length > 0) {
-    selectAllCheckbox.checked = selectedCheckboxes.length === allCheckboxes.length;
-    selectAllCheckbox.indeterminate = selectedCheckboxes.length > 0 && selectedCheckboxes.length < allCheckboxes.length;
+  if (el.selectAllWebDecksCheckbox && allCheckboxes.length > 0) {
+    el.selectAllWebDecksCheckbox.checked = selectedCheckboxes.length === allCheckboxes.length;
+    el.selectAllWebDecksCheckbox.indeterminate = selectedCheckboxes.length > 0 && selectedCheckboxes.length < allCheckboxes.length;
   }
 }
 
@@ -4008,9 +3984,8 @@ async function loadSelectedWebDecks(deckIds) {
     state.importTitleHint = state.deckTitle;
 
     syncResults();
-    savePersistedDeck();
     closeAllCardsPanel();
-    document.getElementById("webDecksPanel").hidden = true;
+    el.webDecksPanel.hidden = true;
     unlockPageScroll();
     showCard();
     setStatus(`Successfully loaded ${deckIds.length} decks.`);
@@ -4033,7 +4008,6 @@ async function deleteSelectedWebDecks(deckIds) {
         state.deckId = null;
       }
     }
-    savePersistedDeck();
     setStatus(`Successfully deleted ${deckIds.length} decks.`);
     fetchWebDecks();
   } catch (error) {
@@ -4061,7 +4035,6 @@ async function changeSelectedWebDecksCategory(deckIds) {
         state.deckCategory = category;
       }
     }
-    savePersistedDeck();
     updateMeta();
     setStatus(`Updated category for ${deckIds.length} decks.`);
     fetchWebDecks();
@@ -4145,7 +4118,6 @@ function setAllCardStatus(cardId, status) {
     state.statusById[cardId] = status;
   }
   syncResults();
-  savePersistedDeck();
   updateMeta();
   updateAllCardStatuses();
 }
@@ -4194,7 +4166,6 @@ function insertCardAfter(cardId) {
   }
 
   state.previewCard = null;
-  savePersistedDeck();
   updateMeta();
   showCard();
   refreshAllCardsAround(newCard.id).then((item) => {
@@ -4224,7 +4195,6 @@ function finishMasterCardReorder(cardId, shouldRefreshActiveDeck, currentCardId)
 
   state.previewCard = null;
   syncResults();
-  savePersistedDeck();
   updateMeta();
   showCard();
 
@@ -4418,7 +4388,6 @@ function saveAllCardEditor(item) {
   }
 
   card[side] = value;
-  savePersistedDeck();
   updateMeta();
   if (state.cards[state.current]?.id === card.id || state.previewCard?.id === card.id) {
     showCard();
@@ -4791,7 +4760,6 @@ function animateToCard(direction, updateState) {
   window.setTimeout(() => {
     if (state.transitionToken !== token) return;
     updateState();
-    savePersistedDeck();
     showCard(direction);
   }, 210);
 }
@@ -4943,9 +4911,6 @@ async function loadSelectedImportDecks() {
 
   if (cards.length) {
     setStatus(`Imported ${selectedDecks.length} deck(s) with ${cards.length} total card(s).`);
-    savePersistedDeck();
-  } else {
-    savePersistedDeck();
   }
 
   showCard();
@@ -4979,10 +4944,8 @@ function buildCards(titleHint = state.importTitleHint || "", append = false) {
 
   if (cards.length) {
     setStatus(`Built ${cards.length} card${cards.length === 1 ? "" : "s"}.`);
-    savePersistedDeck();
     closeImportPanel();
   } else {
-    savePersistedDeck();
     const message = headingCount
       ? `Found ${headingCount} question heading${headingCount === 1 ? "" : "s"}, but no answer text. This Notion page is exposing collapsed toggle titles only; export Markdown or paste expanded toggle content.`
       : "No cards found. Use :: card blocks with a --- separator, legacy > toggle blocks, Q:/A: blocks, or ##/###/#### headings with answer content.";
@@ -5032,7 +4995,6 @@ function moveCard(result) {
   el.card.style.transform = "";
   state.statusById[card.id] = result;
   syncResults();
-  savePersistedDeck();
 
   if (state.previewCard) {
     state.previewCard = null;
@@ -5059,7 +5021,6 @@ function shuffleCards() {
 function resetQuiz() {
   resetStudyDeck(state.masterCards);
   setStatus("Studying all cards.");
-  savePersistedDeck();
   showCard();
 }
 
@@ -5145,18 +5106,6 @@ function clearBrowserPersistence() {
   }
 }
 
-function savePersistedDeck() {
-  try {
-    if (!state.masterCards.length) {
-      localStorage.removeItem(deckStorageKey);
-      return;
-    }
-    localStorage.setItem(deckStorageKey, JSON.stringify(deckSnapshot()));
-  } catch (error) {
-    console.warn("Could not save deck state", error);
-  }
-}
-
 function loadDeckSnapshot(payload, titleHint = "", append = false) {
   if (!payload || !Array.isArray(payload.cards)) {
     throw new Error("Invalid flashcard JSON");
@@ -5202,24 +5151,7 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
   }
   syncResults();
   closeAllCardsPanel();
-  savePersistedDeck();
   showCard();
-}
-
-function loadPersistedDeck() {
-  try {
-    const stored = localStorage.getItem(deckStorageKey);
-    if (!stored) return false;
-
-    loadDeckSnapshot(JSON.parse(stored), "Saved deck");
-    setStatus(`Restored ${state.masterCards.length} saved card${state.masterCards.length === 1 ? "" : "s"}.`);
-    closeImportPanel();
-    return true;
-  } catch (error) {
-    console.warn("Could not restore saved deck", error);
-    localStorage.removeItem(deckStorageKey);
-    return false;
-  }
 }
 
 function cardsForScope(scope) {
@@ -6612,7 +6544,6 @@ function createNewDeck() {
   state.importTitleHint = "New Deck";
   state.masterCards = [createBlankCard()];
   resetStudyDeck(state.masterCards);
-  savePersistedDeck();
   closeImportPanel();
   closeAllCardsPanel();
   showCard();
@@ -6621,25 +6552,16 @@ function createNewDeck() {
 
 
 
-if (document.getElementById("closeWebDecksBtn")) {
-  document.getElementById("closeWebDecksBtn").addEventListener("click", () => {
-    document.getElementById("webDecksPanel").hidden = true;
-    unlockPageScroll();
-  });
-}
-if (document.getElementById("syncBtn")) {
-  document.getElementById("syncBtn").addEventListener("click", showSyncModal);
-}
-if (document.getElementById("cancelSyncBtn")) {
-  document.getElementById("cancelSyncBtn").addEventListener("click", () => {
-    document.getElementById("syncModal").hidden = true;
-  });
-}
-if (document.getElementById("confirmSyncBtn")) {
-  document.getElementById("confirmSyncBtn").addEventListener("click", syncDeckToWeb);
-}
-
-if (document.getElementById("refreshWebDecksBtn")) document.getElementById("refreshWebDecksBtn").addEventListener("click", fetchWebDecks);
+document.getElementById("closeWebDecksBtn")?.addEventListener("click", () => {
+  el.webDecksPanel.hidden = true;
+  unlockPageScroll();
+});
+document.getElementById("syncBtn")?.addEventListener("click", showSyncModal);
+document.getElementById("cancelSyncBtn")?.addEventListener("click", () => {
+  el.syncModal.hidden = true;
+});
+document.getElementById("confirmSyncBtn")?.addEventListener("click", syncDeckToWeb);
+document.getElementById("refreshWebDecksBtn")?.addEventListener("click", fetchWebDecks);
 
 el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
@@ -6672,16 +6594,13 @@ el.editDeckCategoryBtn?.addEventListener("click", editCurrentDeckCategory);
 el.webDeckCategoryFilter?.addEventListener("change", fetchWebDecks);
 
 // Web Decks selection & bulk actions event listener initialization
-const selectAllCheckbox = document.getElementById("selectAllWebDecksCheckbox");
-if (selectAllCheckbox) {
-  selectAllCheckbox.addEventListener("change", (e) => {
-    const checked = e.target.checked;
-    document.querySelectorAll(".web-deck-row-checkbox").forEach((cb) => {
-      cb.checked = checked;
-    });
-    updateBulkActionVisibility();
+el.selectAllWebDecksCheckbox?.addEventListener("change", (e) => {
+  const checked = e.target.checked;
+  document.querySelectorAll(".web-deck-row-checkbox").forEach((cb) => {
+    cb.checked = checked;
   });
-}
+  updateBulkActionVisibility();
+});
 
 const bulkLoadBtn = document.getElementById("bulkLoadBtn");
 if (bulkLoadBtn) {
@@ -6791,9 +6710,9 @@ el.importPanel.addEventListener("touchstart", handleStylePanelTouchStart, { pass
 el.importPanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
 el.importPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
 
-document.getElementById("webDecksPanel").addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
-document.getElementById("webDecksPanel").addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
-document.getElementById("webDecksPanel").addEventListener("wheel", handleStylePanelWheel, { passive: false });
+el.webDecksPanel.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+el.webDecksPanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+el.webDecksPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
 
 el.diagramModalBody.addEventListener("wheel", handleDiagramWheel, { passive: false });
 el.diagramModalBody.addEventListener("pointerdown", handleDiagramPointerDown);
@@ -6968,7 +6887,7 @@ document.addEventListener("keydown", (event) => {
     closeAllCardsPanel();
     closeStylePanel();
     closeImportPanel();
-    document.getElementById("webDecksPanel").hidden = true;
+    el.webDecksPanel.hidden = true;
     unlockPageScroll();
   }
   if (!el.allCardsPanel.hidden) return;
@@ -7037,7 +6956,7 @@ function toggleEditMode(side) {
   const btn = isQuestion ? el.editQuestionBtn : el.editAnswerBtn;
   const view = isQuestion ? el.questionView : el.answerView;
   const edit = isQuestion ? el.questionEdit : el.answerEdit;
-  const toolbar = isQuestion ? document.getElementById("questionEditToolbar") : document.getElementById("answerEditToolbar");
+  const toolbar = isQuestion ? el.questionEditToolbar : el.answerEditToolbar;
   const currentCard = state.cards[state.current];
   
   if (!currentCard) return;
@@ -7076,7 +6995,6 @@ function toggleEditMode(side) {
       if (isQuestion) scheduleLiveQuestionFit();
     });
     
-    savePersistedDeck();
     setStatus(state.deckId ? "Card updated locally. Sync to update the web deck." : "Card updated.");
   }
 }
@@ -7111,7 +7029,6 @@ if (el.addCardBtn) {
     const newCard = createBlankCard();
     state.masterCards.splice(state.current + 1, 0, newCard);
     state.cards.splice(state.current + 1, 0, newCard);
-    savePersistedDeck();
     navigateCard(1, "next");
     setStatus("Card added. Click the edit icon to modify it.");
   });
@@ -7132,7 +7049,6 @@ if (el.deleteCardBtn) {
       state.current = Math.max(0, state.cards.length - 1);
     }
     
-    savePersistedDeck();
     showCard();
     setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
   });
@@ -7234,22 +7150,13 @@ document.addEventListener("paste", (event) => {
     markdown = plainText;
   }
 
-  let inserted = false;
-  try {
-    target.focus();
-    inserted = document.execCommand("insertText", false, markdown);
-  } catch (e) {
-    console.warn("execCommand failed, falling back to manual insertion", e);
-  }
-
-  if (!inserted) {
-    const start = target.selectionStart;
-    const end = target.selectionEnd;
-    const val = target.value;
-    target.value = val.substring(0, start) + markdown + val.substring(end);
-    target.selectionStart = target.selectionEnd = start + markdown.length;
-    target.dispatchEvent(new Event("input", { bubbles: true }));
-  }
+  target.focus();
+  const start = target.selectionStart;
+  const end = target.selectionEnd;
+  const val = target.value;
+  target.value = val.substring(0, start) + markdown + val.substring(end);
+  target.selectionStart = target.selectionEnd = start + markdown.length;
+  target.dispatchEvent(new Event("input", { bubbles: true }));
 });
 
 // Dynamic HTML template for the inline edit toolbar
@@ -7309,10 +7216,10 @@ function createToolbarHtml() {
 
 // Populate toolbars for static question & answer fields on load
 function initToolbars() {
-  const qToolbar = document.getElementById("questionEditToolbar");
+  const qToolbar = el.questionEditToolbar;
   if (qToolbar) qToolbar.innerHTML = createToolbarHtml();
 
-  const aToolbar = document.getElementById("answerEditToolbar");
+  const aToolbar = el.answerEditToolbar;
   if (aToolbar) aToolbar.innerHTML = createToolbarHtml();
 
   if (el.questionEdit) enableSyntaxHighlighting(el.questionEdit);
@@ -7575,19 +7482,10 @@ function handleToolbarClick(event) {
 
   const replacement = formatFn(selectedText);
 
-  let inserted = false;
-  try {
-    textarea.focus();
-    inserted = document.execCommand("insertText", false, replacement);
-  } catch (e) {
-    console.warn("execCommand failed, manual fallback used", e);
-  }
-
-  if (!inserted) {
-    const val = textarea.value;
-    textarea.value = val.substring(0, start) + replacement + val.substring(end);
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-  }
+  textarea.focus();
+  const val = textarea.value;
+  textarea.value = val.substring(0, start) + replacement + val.substring(end);
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
 
   // Restore selection
   textarea.selectionStart = start;
