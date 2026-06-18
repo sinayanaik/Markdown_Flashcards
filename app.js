@@ -5333,10 +5333,8 @@ function fitLiveQuestion() {
     const children = Array.from(node.children).filter((child) => getComputedStyle(child).display !== "none");
     if (!children.length) {
       const nodeStyle = getComputedStyle(node);
-      return {
-        width: Math.min(node.scrollWidth, Math.max(node.clientWidth, availableWidth)),
-        height: parseFloat(nodeStyle.lineHeight) || node.scrollHeight
-      };
+      const h = parseFloat(nodeStyle.lineHeight) || node.scrollHeight;
+      return { width: Math.min(node.scrollWidth, Math.max(node.clientWidth, availableWidth)), height: h, fitHeight: h };
     }
 
     let top = Infinity;
@@ -5344,9 +5342,17 @@ function fitLiveQuestion() {
     let bottom = -Infinity;
     let left = Infinity;
     let width = 0;
+    let fitTop = Infinity;
+    let fitBottom = -Infinity;
 
     children.forEach((child) => {
       const childStyle = getComputedStyle(child);
+      const overflowX = childStyle.overflowX;
+      const overflow = childStyle.overflow;
+      // Elements with their own overflow (e.g. <pre>) manage horizontal scroll internally
+      // and use a fixed font-size that doesn't scale with --question-fit-font-size
+      const isScrollable = overflowX === "auto" || overflowX === "scroll"
+        || overflow === "auto" || overflow === "scroll";
       const rect = child.getBoundingClientRect();
       const marginTop = parseFloat(childStyle.marginTop) || 0;
       const marginRight = parseFloat(childStyle.marginRight) || 0;
@@ -5356,20 +5362,31 @@ function fitLiveQuestion() {
       right = Math.max(right, rect.right + marginRight);
       bottom = Math.max(bottom, rect.bottom + marginBottom);
       left = Math.min(left, rect.left - marginLeft);
-      width = Math.max(width, rect.width + marginLeft + marginRight, child.scrollWidth + marginLeft + marginRight);
+      // Use rendered rect.width for scrollable elements — their scrollWidth includes
+      // off-screen content that won't overflow the question container visually
+      const effectiveWidth = isScrollable ? rect.width : child.scrollWidth;
+      width = Math.max(width, rect.width + marginLeft + marginRight, effectiveWidth + marginLeft + marginRight);
+      // Only include non-scrollable (scalable) children in the fit-target height
+      if (!isScrollable) {
+        fitTop = Math.min(fitTop, rect.top - marginTop);
+        fitBottom = Math.max(fitBottom, rect.bottom + marginBottom);
+      }
     });
 
     return {
       width: Math.max(width, right - left),
-      height: Math.max(0, bottom - top)
+      height: Math.max(0, bottom - top),
+      fitHeight: fitTop === Infinity ? 0 : Math.max(0, fitBottom - fitTop)
     };
   };
 
   const fits = () => {
     const contentSize = questionContentSize();
+    // No scalable text (e.g. question is only a code block) — nothing to shrink, use max size
+    if (contentSize.fitHeight === 0) return true;
     return contentSize.width <= Math.max(node.clientWidth, availableWidth) + 4
-      && contentSize.height <= targetHeight + 2
-      && contentSize.height <= availableHeight + 2;
+      && contentSize.fitHeight <= targetHeight + 2
+      && contentSize.fitHeight <= availableHeight + 2;
   };
 
   for (let index = 0; index < 10; index += 1) {
