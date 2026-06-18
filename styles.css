@@ -1508,7 +1508,7 @@ button:disabled {
    The block scrolls internally if the code is taller than the cap. */
 .card-question .rendered pre {
   max-height: calc(var(--card-max-height, 74vh) * 0.45);
-  margin-block: 0.5em;
+  margin-block: 0.4em;
 }
 
 .card-question .rendered :is(h1, h2, h3, p) {
@@ -1638,12 +1638,12 @@ button:disabled {
 }
 
 .rendered pre code[class*="language-"] {
-  padding: 14px 16px;
+  padding: 8px 12px;
   text-shadow: none;
 }
 
 .rendered pre.has-code-language code[class*="language-"] {
-  padding-top: 34px;
+  padding-top: 26px;
 }
 
 .rendered pre[class*="language-"] {
@@ -1710,22 +1710,36 @@ button:disabled {
   color: #fdba74;
 }
 
-.rendered pre.has-code-language::before {
+.rendered pre .code-copy-btn {
   position: absolute;
-  z-index: 1;
-  top: 8px;
-  right: 10px;
+  z-index: 2;
+  top: 6px;
+  right: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: #9fb3ae;
-  content: attr(data-language);
-  font-size: 0.62rem;
+  font-size: 0.6rem;
   font-weight: 900;
+  font-family: var(--app-font-family);
   letter-spacing: 0.08em;
   line-height: 1;
-  padding: 5px 8px;
-  pointer-events: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.rendered pre .code-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: #dbe7e4;
+}
+
+.rendered pre .code-copy-btn.is-copied {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.22);
 }
 
 .rendered blockquote {

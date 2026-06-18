@@ -3486,6 +3486,32 @@ function enhanceCodeBlocks(container) {
     if (declaredLanguage && pre) {
       pre.classList.add("has-code-language");
       pre.dataset.language = codeLanguageLabel(declaredLanguage);
+
+      // Inject a real button for the language badge so it can be clicked to copy.
+      // Guard against double-injection when the block is re-rendered.
+      if (!pre.querySelector(".code-copy-btn")) {
+        const label = codeLanguageLabel(declaredLanguage);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "code-copy-btn";
+        btn.textContent = label;
+        btn.title = "Copy code";
+        btn.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          try {
+            await navigator.clipboard.writeText(code.textContent ?? "");
+            btn.textContent = "✓";
+            btn.classList.add("is-copied");
+            setTimeout(() => {
+              btn.textContent = label;
+              btn.classList.remove("is-copied");
+            }, 1400);
+          } catch {
+            // clipboard unavailable — silent fail
+          }
+        });
+        pre.appendChild(btn);
+      }
     }
 
     if (!window.Prism || !normalizedLanguage || code.dataset.highlighted === "yes") return;
