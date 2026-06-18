@@ -1,54 +1,464 @@
-# Flashcards
+# Markdown Flashcards
 
-A static GitHub Pages app that turns Markdown into swipe flashcards.
-
-## How Cards Are Parsed
-
-The primary flashcard format is a `::` card block with a `---` separator:
-
-```md
-::
-## Front
+A static web app that turns Markdown into swipeable flashcards, with Supabase-backed cloud storage and multi-user authentication. No build step, no framework — just open it in a browser.
 
 ---
 
-## Back
-::
-```
+## Table of Contents
 
-Everything before `---` becomes the front. Everything after it becomes the back. Both sides render as Markdown.
-Blank lines are optional around the markers, so compact blocks like `::## Front`, `---## Back`, and `## Back::` are also accepted.
+- [Features](#features)
+- [Self-Hosting](#self-hosting)
+- [Supabase Setup](#supabase-setup)
+- [First Launch](#first-launch)
+- [Card Formats](#card-formats)
+- [Importing Decks](#importing-decks)
+- [Toolbar Reference](#toolbar-reference)
+- [Studying](#studying)
+- [All Cards Panel](#all-cards-panel)
+- [Exporting](#exporting)
+- [Web Decks (Cloud Sync)](#web-decks-cloud-sync)
+- [Style Settings](#style-settings)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [PWA / Offline Support](#pwa--offline-support)
+- [Architecture](#architecture)
 
-The app also accepts legacy formats:
-
-- `##`, `###`, or `####` headings followed by answer content until the next heading
-- Study-note headings such as `### Explain ...`, `### Describe ...`, `### Summary ...`, or headings with labeled sections like `**Translation:**`, `**Meaning:**`, and `**Word Meanings:**`
-- Notion toggle exports where each toggle appears as a blockquote
-- `<details><summary>Question</summary>Answer</details>`
-- `Q: ...` / `A: ...` blocks
+---
 
 ## Features
 
-- Swipe left or press `ArrowRight` for the next card.
-- Swipe right or press `ArrowLeft` for the previous card.
-- Use the explicit `Review` and `Known` buttons to categorize cards.
-- On mobile, vertical gestures are reserved for scrolling the page and long card content.
-- Click or tap the card, press `Space`, or press `Enter` to flip.
-- Renders Markdown, tables, code blocks, LaTeX with KaTeX, and Mermaid diagrams.
-- Imports pasted Markdown, uploaded `.md` / `.txt` / `.json` / `.zip` files, direct raw Markdown URLs, and public pages through Jina Reader fallback.
-- Persists the current deck and known/review markers in the browser.
-- Dark mode, compact deck-first layout, Markdown, JSON, SQL, and Cornell PDF export.
-- Web decks can be assigned a simple category, filtered by category, and sorted by last access.
+- **Markdown rendering** — full GFM, tables, code blocks with syntax highlighting (Prism), LaTeX math (KaTeX), Mermaid diagrams, and nomnoml diagrams
+- **Multiple import sources** — paste Markdown, upload `.md` / `.txt` / `.json` / `.zip`, fetch from a raw URL, or use Jina Reader for public web pages
+- **Swipe + keyboard navigation** — swipe left/right on mobile, arrow keys on desktop
+- **Known / Review categorization** — cards can be marked Known or Review and replayed in filtered sessions
+- **Inline card editing** — edit question or answer text directly in the study view
+- **All Cards panel** — browse, search, and edit every card in a deck at once
+- **Cloud sync** — push any local deck to Supabase; pull it back on any device
+- **Multi-user auth** — email + password login; no credentials stored in the source code
+- **Per-project config** — Supabase URL and anon key are entered at first launch and stored in `localStorage`; swap them anytime
+- **Exports** — Markdown, JSON, SQL, and Cornell Notes PDF (filtered by Known / Review / All)
+- **Themes** — 10 built-in themes (dark and light variants) with a full style editor for fonts, sizes, and colours
+- **PWA** — installable on desktop and mobile, works offline after first load
 
-Private Notion pages cannot be read securely by a static GitHub Pages app because using the Notion API requires a secret token. Public Notion pages can also hide collapsed toggle bodies from URL readers; if the import finds only question headings, export the page as Markdown or paste the expanded toggle content.
+---
 
-## GitHub Pages
+## Self-Hosting
 
-Commit these files to a GitHub repository:
+The entire app is three files: `index.html`, `styles.css`, `app.js`. All dependencies are loaded from CDN at runtime.
 
-- `index.html`
-- `styles.css`
-- `app.js`
-- `README.md`
+### Option 1 — Local (development / personal use)
 
-Then enable GitHub Pages from the repository settings and select the branch that contains these files.
+```bash
+git clone <repo-url>
+cd Markdown_Flashcards
+python3 -m http.server 8080
+```
+
+Open `http://localhost:8080` in your browser.
+
+> **Do not open `index.html` directly as a `file://` URL.** Supabase Auth blocks requests from `file://` origins. Always serve over HTTP.
+
+### Option 2 — GitHub Pages
+
+1. Push the repo to GitHub
+2. Go to **Settings → Pages**
+3. Set source to the branch containing the files
+4. Access at `https://<your-username>.github.io/<repo-name>/`
+
+### Option 3 — Netlify / Vercel
+
+Drag and drop the project folder into Netlify Drop, or connect the GitHub repo. No build command or output directory needed.
+
+---
+
+## Supabase Setup
+
+Each deployment needs its own Supabase project. The app connects to whichever project the user configures on first launch.
+
+### 1. Create a Supabase project
+
+Go to [supabase.com](https://supabase.com) → New project.
+
+### 2. Create the tables
+
+Open the **SQL Editor** in your Supabase dashboard and run:
+
+```sql
+-- Decks table
+CREATE TABLE public.decks (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'Uncategorized',
+  current_card_index INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  last_accessed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX decks_category_last_accessed_at_idx
+  ON public.decks (category, last_accessed_at DESC);
+
+CREATE INDEX decks_last_accessed_at_idx
+  ON public.decks (last_accessed_at DESC);
+
+-- Cards table
+CREATE TABLE public.cards (
+  id TEXT PRIMARY KEY,
+  deck_id TEXT REFERENCES public.decks(id) ON DELETE CASCADE,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  position INT NOT NULL,
+  status TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Style settings table (one shared row keyed to 'global')
+CREATE TABLE public.app_style_settings (
+  id TEXT PRIMARY KEY DEFAULT 'global',
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### 3. Enable Row Level Security and add policies
+
+```sql
+-- Enable RLS
+ALTER TABLE public.decks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_style_settings ENABLE ROW LEVEL SECURITY;
+
+-- Any authenticated (logged-in) user gets full access
+CREATE POLICY "Authenticated full access" ON public.decks
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Authenticated full access" ON public.cards
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+CREATE POLICY "Authenticated full access" ON public.app_style_settings
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+```
+
+### 4. Create a user account
+
+In Supabase Dashboard → **Authentication → Users → Add user**.  
+Enter an email and password. The user is created immediately — no email required.
+
+To allow self sign-up from the app: **Authentication → Providers → Email → turn off "Confirm email"**.
+
+### 5. Get your API credentials
+
+In Supabase Dashboard → **Project Settings → API**:
+
+| Field | Looks like |
+|---|---|
+| **Project URL** | `https://xxxxx.supabase.co` |
+| **anon / public key** | `sb_publishable_...` or `eyJ...` (long string) |
+
+You will paste these into the app on first launch.
+
+---
+
+## First Launch
+
+1. Open the app — a **Connect your Supabase project** screen appears
+2. Paste your **Project URL** and **Anon Key** → click **Connect**
+   - The app runs a quick test query to confirm the credentials work before saving them
+3. The **Sign In** screen appears — log in with the email and password you created in the dashboard
+4. The main app loads
+
+Credentials are saved in your browser's `localStorage`. On every subsequent visit the app skips setup and goes straight to the login screen.
+
+**To switch to a different Supabase project** — click **"Change Supabase project"** at the bottom of the login screen. This clears the saved credentials and shows the setup screen again.
+
+---
+
+## Card Formats
+
+The app supports multiple Markdown input formats. The two formats below cover the vast majority of use cases.
+
+### Format 1 — `::` Delimited blocks (recommended)
+
+Wrap each card in `::` markers and separate the front from the back with `---`:
+
+```markdown
+::
+What is the powerhouse of the cell?
+---
+The mitochondria.
+::
+
+::
+Explain Newton's second law.
+---
+**F = ma** — force equals mass times acceleration.
+
+This means a larger force is needed to accelerate a heavier object.
+::
+```
+
+- Everything before `---` → front of the card (question)
+- Everything after `---` → back of the card (answer)
+- Both sides render full Markdown (bold, code blocks, LaTeX, diagrams, etc.)
+- Blank lines around `::` and `---` are optional
+
+### Format 2 — Heading-based
+
+Any `##`, `###`, or `####` heading becomes the front of a card. The content below it (until the next heading) becomes the back:
+
+```markdown
+## What is photosynthesis?
+
+The process by which plants convert sunlight into glucose
+using CO₂ and water.
+
+### What is osmosis?
+
+The movement of water across a semi-permeable membrane
+from a region of low solute concentration to high.
+```
+
+This format works well for importing existing study notes or Wikipedia-style documents without reformatting them.
+
+### Format 3 — Notion toggle export (blockquote style)
+
+When you export a Notion page as Markdown, toggles appear as blockquotes. The app detects this and treats them as cards:
+
+```markdown
+> What is the capital of France?
+Paris.
+
+> Define entropy.
+A measure of disorder or randomness in a thermodynamic system.
+```
+
+---
+
+## Importing Decks
+
+Click **Deck → Import** in the top-left toolbar to open the Import panel.
+
+### Import methods
+
+#### Paste Markdown
+1. Click **Paste Markdown**
+2. Paste your content into the editor
+3. Click **Preview** to see how many cards were detected
+4. Click **Import** to load the deck
+
+#### Upload a file
+Click **Choose file** or drag and drop onto the panel. Supported formats:
+
+| File type | What happens |
+|---|---|
+| `.md` / `.txt` | Parsed as Markdown using the card formats above |
+| `.json` | Re-imported with full card state (statuses, positions) |
+| `.zip` | All `.md` and `.json` files inside are listed; choose which decks to load |
+
+#### Fetch from URL
+Paste a raw Markdown URL into the URL bar and click **Fetch**.  
+For public web pages (not raw Markdown), the app falls back to Jina Reader automatically.
+
+> **Notion pages:** Public pages work via Jina Reader. Private pages must be exported as Markdown first — the Notion API requires a secret token that a static app cannot safely hold.
+
+#### Load Sample
+Click **Load Sample** to instantly load a built-in example deck. Good for trying the app before creating your own content.
+
+### Appending vs replacing
+By default importing replaces the current deck. To add cards to an existing deck without replacing it, use **Deck → Import** and choose the append option in the paste editor.
+
+---
+
+## Toolbar Reference
+
+### Deck menu (top-left)
+
+| Button | Action |
+|---|---|
+| **Deck** | Opens the deck menu |
+| **New Deck** | Clears the current deck and starts a blank one |
+| **Import** | Opens the Import panel to load cards from a file, URL, or paste |
+| **Web Decks** | Opens the Web Decks panel to browse and load decks stored in Supabase |
+
+### Main toolbar buttons
+
+| Button | Action |
+|---|---|
+| **Sync** | Syncs the currently loaded local deck to your Supabase database |
+| **Export** | Opens the export menu (see [Exporting](#exporting)) |
+| **All** | Opens the All Cards panel — browse and edit every card at once |
+| **Aa** | Opens the Style Settings panel to customise fonts, sizes, and theme |
+| **Sign out** | Signs out of the current session and returns to the login screen |
+
+### Study view buttons
+
+| Button | Action |
+|---|---|
+| **← Review** | Marks the current card as Review (needs more practice) |
+| **Known →** | Marks the current card as Known |
+| **✎** (pencil, question side) | Switches the question to edit mode |
+| **✎** (pencil, answer side) | Switches the answer to edit mode |
+| **+** | Adds a new blank card after the current position |
+| **✕** | Deletes the current card |
+| **◀ ▶** | Navigate to previous / next card |
+
+### End-of-deck replay buttons
+
+These appear when you reach the last card:
+
+| Button | Action |
+|---|---|
+| **Replay Review** | Restarts the session with only Review-marked cards |
+| **Replay Known** | Restarts with only Known-marked cards |
+| **Replay Uncategorized** | Restarts with cards not yet marked either way |
+| **Replay All** | Restarts with all cards in the deck |
+
+---
+
+## Studying
+
+- **Flip the card** — click/tap the card, or press `Space` / `Enter`
+- **Navigate** — swipe left (next) or right (previous) on mobile; `→` / `↓` and `←` / `↑` on desktop
+- **Mark Known** — click **Known →** or swipe right past the threshold; the card moves to the Known stack (right panel)
+- **Mark Review** — click **← Review** or swipe left past the threshold; the card moves to the Review stack (left panel)
+- **Click a card in the stack** — loads that specific card directly
+- **Progress bar** — the thin bar at the top of the card area shows how far through the deck you are
+- **Score display** — the header shows `Known X / Review Y` as a live count
+
+---
+
+## All Cards Panel
+
+Click **All** in the toolbar to open a full list of every card in the current deck.
+
+- **Search** — type in the search box to filter cards by question or answer text
+- **Toggle answers** — click **Show All Answers** / **Hide All Answers** to expand or collapse every answer at once
+- **Edit inline** — click the pencil icon on any card to edit the question or answer directly in the list
+- **Delete a card** — click the **✕** button on a card row
+- **Status badges** — each card shows its current Known / Review / Uncategorized status
+
+---
+
+## Exporting
+
+Click **Export** in the toolbar. Choose a scope and format:
+
+### Scopes
+
+| Scope | Which cards are included |
+|---|---|
+| **Known** | Only cards marked as Known |
+| **Review** | Only cards marked as Review |
+| **All** | Every card in the deck |
+
+### Formats
+
+| Format | Description |
+|---|---|
+| **Cornell PDF** | Printable Cornell Notes layout — question on the left column, answer on the right. Opens a print dialog automatically. |
+| **Markdown** | The deck as a `.md` file using `::` block format |
+| **JSON** | Full deck with card statuses — can be re-imported into this app |
+| **SQL** | `INSERT` statements compatible with Supabase / PostgreSQL |
+
+---
+
+## Web Decks (Cloud Sync)
+
+Web Decks are decks stored in Supabase. They are available on any device and any browser that is logged into the same account.
+
+### Syncing a local deck to the cloud
+
+1. Load a deck locally (import or create)
+2. Click **Sync** in the toolbar
+3. A preview diff appears showing what changed vs. the existing cloud version
+4. Choose **Overwrite** (fully replace the cloud copy) or **Merge** (keep any cloud-only cards)
+5. Click **Confirm Sync**
+
+The sync confirmation modal shows:
+- Cards that will be **added**
+- Cards that will be **updated**
+- Cards that will be **deleted**
+
+### Web Decks panel buttons
+
+Open **Deck → Web Decks** to see the panel.
+
+| Button | Action |
+|---|---|
+| **Refresh** | Reloads the deck list from Supabase |
+| **Load** (per deck) | Loads that deck into the study view |
+| Deck title (click) | Opens an inline editor to rename the deck |
+| Category badge (click) | Opens a dropdown to change or create a category |
+| **Delete** (per deck) | Permanently deletes the deck and all its cards from Supabase |
+| Export icon (per deck) | Exports that single deck as Markdown, JSON, SQL, or Cornell PDF |
+| **Checkbox** | Select a deck for bulk actions |
+| **Load Selected** | Loads all checked decks, merging them into one session |
+| **Delete Selected** | Permanently deletes all checked decks |
+| **Export Selected** | Exports all checked decks as a single file |
+| **Export All** | Exports every deck in the database as a single file |
+| Category filter dropdown | Filters the list to show only decks in the selected category |
+
+---
+
+## Style Settings
+
+Click **Aa** in the toolbar to open the style panel.
+
+| Control | What it changes |
+|---|---|
+| **Theme** | Switches between 10 built-in colour themes (dark and light variants) |
+| **Question font** | Font family for the front of the card |
+| **Answer font** | Font family for the back of the card |
+| **Question size** | Font size for the question |
+| **Answer size** | Font size for the answer |
+| **Question fill** | What percentage of the card height the front occupies |
+| **Card width** | How wide the card is relative to the screen |
+| **Sync Style** | Saves your current style settings to Supabase so they apply on every device |
+| **Load Style** | Loads the last-synced style from Supabase (overwrites local settings) |
+
+Style profiles are separate for desktop and mobile, so the card can look different on different screen sizes.
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `Space` / `Enter` | Flip card (show answer / hide answer) |
+| `→` / `↓` | Next card |
+| `←` / `↑` | Previous card |
+| `Escape` | Close any open panel or modal |
+
+---
+
+## PWA / Offline Support
+
+When served over HTTPS (GitHub Pages, Netlify, etc.), the app registers a service worker and can be installed as a PWA:
+
+- **Desktop** — browser shows an "Install app" button in the address bar
+- **Mobile** — use "Add to Home Screen" in the browser menu
+
+Once installed and cached, card navigation and local deck features work fully offline. Supabase sync, Web Decks, and login require an active internet connection.
+
+---
+
+## Architecture
+
+| Concern | Approach |
+|---|---|
+| Framework | None — plain HTML + CSS + JS, no build step |
+| Markdown rendering | [marked](https://marked.js.org/) + [DOMPurify](https://github.com/cure53/DOMPurify) |
+| Math | [KaTeX](https://katex.org/) via `auto-render` |
+| Diagrams | [Mermaid](https://mermaid.js.org/) + [nomnoml](https://nomnoml.com/) |
+| Code highlighting | [Prism](https://prismjs.com/) (autoloader) |
+| PDF export | Print-to-PDF via a generated standalone document |
+| ZIP import/export | [JSZip](https://stuk.github.io/jszip/) |
+| Markdown export | [Turndown](https://github.com/mixmark-io/turndown) |
+| Database | [Supabase](https://supabase.com/) (Postgres + Auth + RLS) |
+| Auth | Supabase email + password (`signInWithPassword`) |
+| Config storage | `localStorage` — URL and anon key never touch the source code |
+| Offline | Service worker + Cache API |
+| Deployment | Any static host — GitHub Pages, Netlify, Vercel, local server |
+
+The entire application logic lives in `app.js`. There are no modules, no transpilation, and no runtime dependencies beyond what the CDN `<script>` tags load.

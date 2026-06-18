@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark-amoled">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -47,6 +47,7 @@
           <button class="icon-button" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">
             <span aria-hidden="true">Aa</span>
           </button>
+          <button class="tool-button" id="logoutBtn" type="button" title="Sign out" hidden>Sign out</button>
         </div>
 
         <div class="deck-meta">
@@ -403,6 +404,46 @@
         </div>
       </div>
     </section>
+
+    <div id="setupOverlay" class="login-overlay" hidden>
+      <div class="login-card">
+        <h1 class="login-title">Flashcards</h1>
+        <p class="setup-subtitle">Connect your Supabase project</p>
+        <form id="setupForm" novalidate>
+          <div class="login-field">
+            <label for="setupUrl">Project URL</label>
+            <input id="setupUrl" type="url" placeholder="https://xxxxx.supabase.co" autocomplete="off" required />
+          </div>
+          <div class="login-field">
+            <label for="setupKey">Anon / Public Key</label>
+            <input id="setupKey" type="text" placeholder="your-anon-key" autocomplete="off" required />
+          </div>
+          <p class="setup-hint">Find these in Supabase Dashboard &rarr; Project Settings &rarr; API</p>
+          <p id="setupError" class="login-error" aria-live="polite"></p>
+          <button id="setupSubmitBtn" class="login-btn-primary" type="submit">Connect</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="loginOverlay" class="login-overlay" hidden>
+      <div class="login-card">
+        <h1 class="login-title">Flashcards</h1>
+        <form id="loginForm" data-mode="login" novalidate>
+          <div class="login-field">
+            <label for="loginEmail">Email</label>
+            <input id="loginEmail" type="email" placeholder="you@example.com" autocomplete="email" required />
+          </div>
+          <div class="login-field">
+            <label for="loginPassword">Password</label>
+            <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" required />
+          </div>
+          <p id="loginError" class="login-error" aria-live="polite"></p>
+          <button id="loginSubmitBtn" class="login-btn-primary" type="submit">Sign In</button>
+          <button id="loginToggleBtn" class="login-btn-secondary" type="button">Create account</button>
+          <button id="loginChangeProjectBtn" class="login-btn-link" type="button">Change Supabase project</button>
+        </form>
+      </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@14.1.2/marked.min.js"></script>

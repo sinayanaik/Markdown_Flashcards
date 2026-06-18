@@ -414,10 +414,79 @@ const styleCssVariables = {
 };
 
 
-// Supabase Integration
-const supabaseUrl = "https://jxihukiaeqpkyatfdoso.supabase.co";
-const supabaseKey = "sb_publishable_DWc8wA59N2av1QpAfYqqpw_v4k5q7aY";
-const supabaseClient = window.supabase ? window.supabase.createClient(supabaseUrl, supabaseKey) : null;
+// Supabase config is stored in localStorage — no hardcoded credentials.
+// Users enter their own project URL and anon key on first launch.
+const SUPABASE_CONFIG_STORAGE_KEY = "flashcards_supabase_config";
+
+function loadSupabaseConfig() {
+  try {
+    const raw = localStorage.getItem(SUPABASE_CONFIG_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSupabaseConfig(url, key) {
+  localStorage.setItem(SUPABASE_CONFIG_STORAGE_KEY, JSON.stringify({ url: url.trim(), key: key.trim() }));
+}
+
+function clearSupabaseConfig() {
+  localStorage.removeItem(SUPABASE_CONFIG_STORAGE_KEY);
+}
+
+let supabaseClient = null;
+
+function initSupabaseClient() {
+  const config = loadSupabaseConfig();
+  if (!config?.url || !config?.key) return false;
+  if (!window.supabase) return false;
+  supabaseClient = window.supabase.createClient(config.url, config.key);
+  return true;
+}
+
+async function getCurrentUser() {
+  if (!supabaseClient) return null;
+  const { data } = await supabaseClient.auth.getUser();
+  return data?.user ?? null;
+}
+
+async function handleLogin(email, password) {
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+async function handleSignup(email, password) {
+  const { data, error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+async function handleLogout() {
+  if (supabaseClient) await supabaseClient.auth.signOut();
+}
+
+function showSetupScreen() {
+  document.getElementById("setupOverlay").hidden = false;
+  document.getElementById("loginOverlay").hidden = true;
+  document.querySelector(".app-shell").hidden = true;
+  document.getElementById("logoutBtn").hidden = true;
+}
+
+function showLoginScreen() {
+  document.getElementById("setupOverlay").hidden = true;
+  document.getElementById("loginOverlay").hidden = false;
+  document.querySelector(".app-shell").hidden = true;
+  document.getElementById("logoutBtn").hidden = true;
+}
+
+function showAuthenticatedUI() {
+  document.getElementById("setupOverlay").hidden = true;
+  document.getElementById("loginOverlay").hidden = true;
+  document.querySelector(".app-shell").hidden = false;
+  document.getElementById("logoutBtn").hidden = false;
+}
 
 
 function normalizeDeckCategory(value) {
@@ -1621,7 +1690,7 @@ async function syncDeckToWeb() {
 
     setStatus(`Syncing... (1/3) Saving deck info "${deckTitle}"`);
     const now = new Date().toISOString();
-    
+
     const deckData = {
       id: state.deckId,
       title: deckTitle,
@@ -1839,6 +1908,7 @@ const el = {
   webDecksPanel: document.querySelector("#webDecksPanel"),
   webDecksListTable: document.querySelector("#webDecksListTable"),
   selectAllWebDecksCheckbox: document.querySelector("#selectAllWebDecksCheckbox"),
+  logoutBtn: document.querySelector("#logoutBtn"),
 };
 
 marked.setOptions({
@@ -6552,6 +6622,80 @@ function createNewDeck() {
 
 
 
+document.getElementById("setupForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const url = document.getElementById("setupUrl").value.trim();
+  const key = document.getElementById("setupKey").value.trim();
+  const errEl = document.getElementById("setupError");
+  const submitBtn = document.getElementById("setupSubmitBtn");
+  errEl.textContent = "";
+
+  if (!url.startsWith("https://") || !url.includes(".supabase.co")) {
+    errEl.textContent = "URL should look like: https://xxxxx.supabase.co";
+    return;
+  }
+
+  submitBtn.disabled = true;
+  try {
+    // Test the credentials before saving
+    const testClient = window.supabase.createClient(url, key);
+    const { error } = await testClient.from("decks").select("id").limit(1);
+    if (error && error.code !== "PGRST116") throw error;
+    saveSupabaseConfig(url, key);
+    initSupabaseClient();
+    showLoginScreen();
+  } catch (err) {
+    errEl.textContent = "Could not connect. Check your URL and anon key.";
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+document.getElementById("setupResetBtn")?.addEventListener("click", () => {
+  clearSupabaseConfig();
+  supabaseClient = null;
+  showSetupScreen();
+});
+
+document.getElementById("loginForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const isSignup = document.getElementById("loginForm").dataset.mode === "signup";
+  const errEl = document.getElementById("loginError");
+  const submitBtn = document.getElementById("loginSubmitBtn");
+  errEl.textContent = "";
+  submitBtn.disabled = true;
+  try {
+    if (isSignup) {
+      await handleSignup(email, password);
+    } else {
+      await handleLogin(email, password);
+    }
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+document.getElementById("loginToggleBtn")?.addEventListener("click", () => {
+  const form = document.getElementById("loginForm");
+  const isSignup = form.dataset.mode === "signup";
+  form.dataset.mode = isSignup ? "login" : "signup";
+  document.getElementById("loginSubmitBtn").textContent = isSignup ? "Sign In" : "Create Account";
+  document.getElementById("loginToggleBtn").textContent = isSignup ? "Create account" : "Back to sign in";
+  document.getElementById("loginError").textContent = "";
+});
+
+document.getElementById("loginChangeProjectBtn")?.addEventListener("click", () => {
+  clearSupabaseConfig();
+  supabaseClient = null;
+  showSetupScreen();
+});
+
+document.getElementById("logoutBtn")?.addEventListener("click", handleLogout);
+
 document.getElementById("closeWebDecksBtn")?.addEventListener("click", () => {
   el.webDecksPanel.hidden = true;
   unlockPageScroll();
@@ -6940,16 +7084,55 @@ if (styleMobileMedia?.addEventListener) {
   styleMobileMedia.addListener(handleStyleEnvironmentChange);
 }
 
-clearBrowserPersistence();
-setStyleProfiles(defaultStyleProfiles);
-applyActiveStyleSettings({ force: true });
-renderThemeMenu();
-setTheme("dark-amoled");
-setStatus("");
-showCard();
-loadStyleFromWeb();
-installManifestLink();
-registerServiceWorker();
+let appInitialized = false;
+
+function initAppForUser() {
+  clearBrowserPersistence();
+  setStyleProfiles(defaultStyleProfiles);
+  applyActiveStyleSettings({ force: true });
+  renderThemeMenu();
+  setTheme("dark-amoled");
+  setStatus("");
+  showCard();
+  loadStyleFromWeb();
+  installManifestLink();
+  registerServiceWorker();
+}
+
+async function bootApp() {
+  const hasConfig = initSupabaseClient();
+
+  if (!hasConfig) {
+    showSetupScreen();
+    return;
+  }
+
+  const user = await getCurrentUser();
+  if (user) {
+    showAuthenticatedUI();
+    if (!appInitialized) {
+      appInitialized = true;
+      initAppForUser();
+    }
+  } else {
+    showLoginScreen();
+  }
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      showAuthenticatedUI();
+      if (!appInitialized) {
+        appInitialized = true;
+        initAppForUser();
+      }
+    } else {
+      appInitialized = false;
+      showLoginScreen();
+    }
+  });
+}
+
+bootApp();
 
 function toggleEditMode(side) {
   const isQuestion = side === 'question';
