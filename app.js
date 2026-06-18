@@ -5168,9 +5168,9 @@ function deckSnapshot() {
 function clearBrowserPersistence() {
   try {
     localStorage.removeItem(deckStorageKey);
-    localStorage.removeItem(styleStorageKey);
     localStorage.removeItem(themeStorageKey);
     localStorage.removeItem("flashcards_style_cache");
+    // styleStorageKey is intentionally kept — styles persist locally across sessions
   } catch (error) {
     console.warn("Could not clear browser persistence", error);
   }
@@ -6622,33 +6622,32 @@ function createNewDeck() {
 
 
 
-document.getElementById("setupForm")?.addEventListener("submit", async (e) => {
+document.getElementById("setupForm")?.addEventListener("submit", (e) => {
   e.preventDefault();
   const url = document.getElementById("setupUrl").value.trim();
   const key = document.getElementById("setupKey").value.trim();
   const errEl = document.getElementById("setupError");
-  const submitBtn = document.getElementById("setupSubmitBtn");
   errEl.textContent = "";
 
-  if (!url.startsWith("https://") || !url.includes(".supabase.co")) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".supabase.co")) {
+      errEl.textContent = "URL should look like: https://xxxxx.supabase.co";
+      return;
+    }
+  } catch {
     errEl.textContent = "URL should look like: https://xxxxx.supabase.co";
     return;
   }
-
-  submitBtn.disabled = true;
-  try {
-    // Test the credentials before saving
-    const testClient = window.supabase.createClient(url, key);
-    const { error } = await testClient.from("decks").select("id").limit(1);
-    if (error && error.code !== "PGRST116") throw error;
-    saveSupabaseConfig(url, key);
-    initSupabaseClient();
-    showLoginScreen();
-  } catch (err) {
-    errEl.textContent = "Could not connect. Check your URL and anon key.";
-  } finally {
-    submitBtn.disabled = false;
+  if (!key || key.length < 20) {
+    errEl.textContent = "Anon key looks too short — paste the full key.";
+    return;
   }
+
+  saveSupabaseConfig(url, key);
+  initSupabaseClient();
+  setupAuthListener();
+  showLoginScreen();
 });
 
 document.getElementById("setupResetBtn")?.addEventListener("click", () => {
@@ -7088,15 +7087,37 @@ let appInitialized = false;
 
 function initAppForUser() {
   clearBrowserPersistence();
-  setStyleProfiles(defaultStyleProfiles);
+  setStyleProfiles(loadLocalStyleSettings());
   applyActiveStyleSettings({ force: true });
   renderThemeMenu();
   setTheme("dark-amoled");
   setStatus("");
   showCard();
-  loadStyleFromWeb();
+  setStyleStatus("Local style");
   installManifestLink();
   registerServiceWorker();
+}
+
+let authListenerSubscription = null;
+
+function setupAuthListener() {
+  if (authListenerSubscription) {
+    authListenerSubscription.unsubscribe();
+    authListenerSubscription = null;
+  }
+  const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      showAuthenticatedUI();
+      if (!appInitialized) {
+        appInitialized = true;
+        initAppForUser();
+      }
+    } else if (event === "SIGNED_OUT") {
+      appInitialized = false;
+      showLoginScreen();
+    }
+  });
+  authListenerSubscription = data.subscription;
 }
 
 async function bootApp() {
@@ -7106,6 +7127,8 @@ async function bootApp() {
     showSetupScreen();
     return;
   }
+
+  setupAuthListener();
 
   const user = await getCurrentUser();
   if (user) {
@@ -7117,19 +7140,6 @@ async function bootApp() {
   } else {
     showLoginScreen();
   }
-
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    if (session?.user) {
-      showAuthenticatedUI();
-      if (!appInitialized) {
-        appInitialized = true;
-        initAppForUser();
-      }
-    } else {
-      appInitialized = false;
-      showLoginScreen();
-    }
-  });
 }
 
 bootApp();
