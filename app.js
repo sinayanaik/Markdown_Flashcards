@@ -2088,8 +2088,8 @@ function resolveFontFamily(value) {
   return fontFamilyChoices[value] || value;
 }
 
-function styleValue(source, key) {
-  return Object.prototype.hasOwnProperty.call(source, key) ? String(source[key]) : styleDefaults[key];
+function styleValue(source, key, defaults = styleDefaults) {
+  return Object.prototype.hasOwnProperty.call(source, key) ? String(source[key]) : defaults[key];
 }
 
 function decimalPlaces(value) {
@@ -2167,7 +2167,7 @@ function normalizeStyleSettings(raw = {}, profile = "desktop") {
   const source = migrateLegacyStyleSettings(raw || {});
   const defaults = defaultStyleProfiles[profile] || styleDefaults;
   return Object.keys(styleDefaults).reduce((normalized, key) => {
-    normalized[key] = normalizeStyleValue(key, styleValue(source, key), defaults[key]);
+    normalized[key] = normalizeStyleValue(key, styleValue(source, key, defaults), defaults[key]);
     return normalized;
   }, {});
 }

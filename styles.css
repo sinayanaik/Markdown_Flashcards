@@ -1471,18 +1471,15 @@ button:disabled {
 }
 
 .card-question .rendered {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 var(--question-fill);
   font-family: var(--question-font-family);
   font-size: min(var(--question-fit-font-size, var(--content-font-size)), var(--question-max-font-size));
   line-height: var(--question-line-height);
   font-weight: var(--question-font-weight);
   padding: var(--question-padding);
-}
-
-.card-question .rendered {
-  display: grid;
-  width: 100%;
-  min-height: 0;
-  flex: 1 1 var(--question-fill);
   align-content: var(--question-vertical-align);
   justify-items: var(--question-justify-items);
   text-align: var(--question-align);
@@ -3148,7 +3145,7 @@ textarea {
 }
 
 .all-card .rendered {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--app-font-family);
   font-size: 0.95rem;
   font-weight: 400;
   line-height: 1.45;
@@ -4135,7 +4132,7 @@ textarea {
 
   .card-question .rendered {
     font-size: min(var(--question-fit-font-size, var(--content-font-size)), var(--question-max-font-size));
-    padding-inline: 6px;
+    padding-inline: var(--question-padding);
   }
 
   .card-question .rendered > * {
