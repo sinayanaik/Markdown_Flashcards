@@ -800,7 +800,8 @@ async function fetchWebDecks() {
       mobileMeta.className = "web-deck-mobile-meta";
       const mobileCat = document.createElement("span");
       mobileCat.className = "web-deck-cat-pill";
-      mobileCat.textContent = category || "Uncategorized";
+      mobileCat.textContent = category;
+      if (!category || category === defaultDeckCategory) mobileCat.hidden = true;
       const mobileDate = document.createElement("span");
       mobileDate.className = "web-deck-mobile-date";
       mobileDate.textContent = accessed.date;
@@ -809,10 +810,13 @@ async function fetchWebDecks() {
       mobileMeta.appendChild(mobileDate);
       actionsWrap.appendChild(mobileMeta);
 
-      actionsWrap.appendChild(renameBtn);
-      actionsWrap.appendChild(loadBtn);
-      actionsWrap.appendChild(exportWrap);
-      actionsWrap.appendChild(delBtn);
+      const buttonRow = document.createElement("div");
+      buttonRow.className = "web-deck-button-row";
+      buttonRow.appendChild(loadBtn);
+      buttonRow.appendChild(exportWrap);
+      buttonRow.appendChild(renameBtn);
+      buttonRow.appendChild(delBtn);
+      actionsWrap.appendChild(buttonRow);
       tdActions.appendChild(actionsWrap);
       
       tr.appendChild(tdSelect);

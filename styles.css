@@ -604,6 +604,11 @@ button:disabled {
   position: relative;
 }
 
+.web-deck-button-row {
+  display: flex;
+  gap: 6px;
+}
+
 .web-deck-action {
   min-width: 66px;
   min-height: 36px;
@@ -4642,15 +4647,15 @@ textarea {
     grid-template-columns: 20px 1fr;
     grid-template-rows: auto auto;
     column-gap: 8px;
-    row-gap: 5px;
+    row-gap: 8px;
     align-items: start;
-    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--panel-2) 52%, transparent);
-    padding: 10px 12px;
+    background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+    padding: 12px 12px 10px;
   }
 
-  .web-decks-table tr + tr { margin-top: 7px; }
+  .web-decks-table tr + tr { margin-top: 8px; }
 
   .web-decks-table td {
     display: flex;
@@ -4709,26 +4714,25 @@ textarea {
     font-weight: 800;
   }
 
-  /* Actions wrapper: flex-wrap, all on same compact area */
+  /* Actions wrapper: column — meta row above button row */
   .web-deck-actions {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
+    flex-direction: column;
+    gap: 6px;
     width: 100%;
   }
 
-  /* Mobile meta row: category pill + count + date — full row */
+  /* Meta row: category pill + count badge + date */
   .web-deck-mobile-meta {
     display: flex;
     align-items: center;
     gap: 5px;
     width: 100%;
     flex-shrink: 0;
-    margin-bottom: 2px;
   }
 
   .web-deck-cat-pill {
+    display: inline-flex;
     font-size: 0.58rem;
     font-weight: 900;
     letter-spacing: 0.05em;
@@ -4747,25 +4751,38 @@ textarea {
   }
 
   .web-deck-mobile-date {
+    display: inline;
     font-size: 0.6rem;
     color: var(--muted);
     margin-left: auto;
     white-space: nowrap;
   }
 
-  /* Action buttons: compact */
-  .web-deck-rename {
-    font-size: 0.62rem;
-    padding: 0 7px;
-    min-height: 24px;
-    height: 24px;
+  /* Button row: all actions in one even row */
+  .web-deck-button-row {
+    display: flex;
+    gap: 5px;
+    width: 100%;
   }
 
+  .web-deck-export-wrap {
+    flex: 1 1 auto;
+    display: flex;
+  }
+
+  .web-deck-export-wrap .web-deck-export {
+    width: 100%;
+  }
+
+  /* All action buttons: uniform height, stretch to fill row evenly */
+  .web-deck-rename,
   .web-deck-action {
-    min-height: 28px;
-    height: 28px;
-    font-size: 0.72rem;
-    padding: 0 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 30px;
+    height: 30px;
+    font-size: 0.7rem;
+    padding: 0 6px;
   }
 
   .web-decks-tools {
@@ -4811,16 +4828,22 @@ textarea {
     -webkit-line-clamp: unset;
   }
 
-  .web-deck-actions {
+  .web-deck-button-row {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    justify-content: stretch;
-    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
   }
 
-  .web-deck-action {
+  .web-deck-export-wrap {
+    display: flex;
+  }
+
+  .web-deck-action,
+  .web-deck-rename {
     width: 100%;
-    min-height: 40px;
+    min-height: 34px;
+    height: 34px;
+    flex: unset;
   }
 
   .web-deck-export {
