@@ -15,23 +15,29 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260613-4">
+    <link rel="stylesheet" href="styles.css?v=20260623-12">
   </head>
   <body>
     <main class="app-shell">
+      <div class="mobile-backdrop" id="mobileBackdrop" hidden></div>
       <header class="appbar">
-        <div class="toolbar">
-          <div class="menu-wrap deck-menu-wrap">
-            <button class="tool-button" id="deckMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">Deck</button>
-            <div class="deck-menu" id="deckMenu" hidden>
-              <button id="newDeckBtn" type="button">New Deck</button>
-              <button id="importBtn" type="button">Import</button>
-              <button id="webDecksBtn" type="button">Web Decks</button>
-            </div>
+        <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open menu" aria-expanded="false">&#9776;</button>
+        <div class="toolbar" id="mainToolbar">
+          <div class="toolbar-drawer-head">
+            <span class="toolbar-drawer-title">Flashcards</span>
+            <button class="toolbar-close-btn" id="toolbarCloseBtn" type="button" aria-label="Close menu">&#215;</button>
           </div>
-          <button class="tool-button" id="syncBtn" type="button" title="Sync current deck to Web">Sync</button>
+
+          <span class="drawer-section-label">Decks</span>
+          <button class="tool-button" id="newDeckBtn" type="button">&#43; New Deck</button>
+          <button class="tool-button" id="importBtn" type="button">&#8679; Import from File</button>
+          <button class="tool-button" id="webDecksBtn" type="button">&#9782; Web Decks</button>
+
+          <span class="drawer-section-label">Study</span>
+          <button class="tool-button" id="allCardsBtn" type="button">&#8801; Browse All Cards</button>
+          <button class="tool-button" id="syncBtn" type="button" title="Sync current deck to Web">&#8635; Sync to Cloud</button>
           <div class="menu-wrap">
-            <button class="tool-button" id="exportBtn" type="button">Export</button>
+            <button class="tool-button" id="exportBtn" type="button">&#8659; Export Cards&#8230;</button>
             <div class="export-menu" id="exportMenu" hidden>
               <span class="export-group-label">Known</span>
               <button type="button" data-export="pdf" data-scope="known">Cornell PDF</button>
@@ -48,22 +54,25 @@
               <button type="button" data-export="sql" data-scope="all">SQL</button>
             </div>
           </div>
-          <button class="tool-button" id="allCardsBtn" type="button">All</button>
-          <span class="toolbar-break" aria-hidden="true"></span>
-          <button class="tool-button" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">Style</button>
-          <button class="tool-button tool-button-info" id="helpBtn" type="button" title="How to use this app" aria-label="Help">?</button>
-          <button class="tool-button" id="logoutBtn" type="button" title="Sign out" hidden>Sign out</button>
+
+          <span class="drawer-section-label">App</span>
+          <button class="tool-button" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">&#9711; Themes</button>
+          <button class="tool-button tool-button-info" id="helpBtn" type="button" title="How to use this app" aria-label="Help">&#63; Help &amp; Guide</button>
+          <button class="tool-button" id="logoutBtn" type="button" title="Sign out" hidden>&#8594; Sign Out</button>
         </div>
 
         <div class="deck-meta">
           <span class="deck-title-wrap" id="deckTitleWrap" hidden>
             <span class="deck-title" id="deckTitle"></span>
             <button class="deck-title-edit" id="editDeckTitleBtn" type="button" title="Edit deck title" aria-label="Edit deck title">&#9998;</button>
-            <span class="deck-category" id="deckCategory">Uncategorized</span>
-            <button class="deck-title-edit deck-category-edit" id="editDeckCategoryBtn" type="button" title="Edit deck category" aria-label="Edit deck category">#</button>
           </span>
-          <span id="positionText">0/0</span>
-          <strong id="scoreText">Known 0 / Review 0</strong>
+          <span class="deck-meta-row2" id="deckMeta2Row" hidden>
+            <span class="deck-category" id="deckCategory">Uncategorized</span>
+            <button class="deck-title-edit deck-category-edit" id="editDeckCategoryBtn" type="button" title="Edit deck category" aria-label="Edit deck category">&#9998;</button>
+            <span class="deck-meta-sep" aria-hidden="true"></span>
+            <span id="positionText">0/0</span>
+            <strong id="scoreText">Known 0 / Review 0</strong>
+          </span>
         </div>
       </header>
 
@@ -651,6 +660,6 @@ What year was the Eiffel Tower built?
     <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
-    <script src="app.js?v=20260613-4"></script>
+    <script src="app.js?v=20260623-12"></script>
   </body>
 </html>

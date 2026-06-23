@@ -383,44 +383,80 @@ button:disabled {
 }
 
 .appbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: stretch;
-  gap: 6px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .deck-meta {
-  display: grid;
-  grid-template-columns: auto auto;
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1;
   min-width: 0;
-  align-items: baseline;
-  justify-content: center;
-  justify-items: center;
-  gap: 4px 12px;
+  align-items: center;
+  gap: 2px 8px;
   color: var(--muted);
   font-size: 0.82rem;
-  white-space: nowrap;
+  overflow: hidden;
 }
 
 .deck-title-wrap {
   display: inline-flex;
-  grid-column: 1 / -1;
+  width: 100%;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-width: min(100%, 760px);
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .deck-title {
-  max-width: 100%;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: color-mix(in srgb, var(--accent) 72%, var(--muted));
   font-size: 0.74rem;
   font-weight: 850;
   letter-spacing: 0.02em;
-  text-overflow: ellipsis;
   text-transform: uppercase;
+  cursor: pointer;
+}
+
+.deck-title:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.deck-meta-row2 {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.deck-meta-sep {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.35;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.deck-meta-spacer {
+  flex: 0;
 }
 
 .deck-title-edit,
@@ -456,6 +492,13 @@ button:disabled {
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.deck-category:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent);
 }
 
 .deck-category-edit {
@@ -480,10 +523,29 @@ button:disabled {
 .web-deck-title,
 .web-deck-category {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: start;
   gap: 8px;
   min-width: 0;
+}
+
+.web-deck-card-count {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-2) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  align-self: center;
+}
+
+/* Mobile-only web deck elements: hidden on desktop */
+.web-deck-mobile-meta,
+.web-deck-cat-pill,
+.web-deck-mobile-date {
+  display: none;
 }
 
 .web-deck-title-text {
@@ -662,9 +724,69 @@ button:disabled {
 }
 
 .toolbar {
-  min-width: 0;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(272px, 88vw);
+  z-index: 500;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  gap: 0;
+  background: color-mix(in srgb, var(--panel-2) 97%, var(--accent));
+  border-right: 1px solid color-mix(in srgb, var(--line) 70%, var(--accent));
+  box-shadow: 6px 0 40px rgba(0, 0, 0, 0.55);
+  transform: translateX(-110%);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+}
+
+.toolbar.mobile-open {
+  transform: translateX(0);
+}
+
+.toolbar-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.toolbar-drawer-title {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.toolbar-close-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toolbar-close-btn:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .tool-button,
@@ -733,7 +855,98 @@ button:disabled {
 }
 
 .toolbar-break {
-  display: none;
+  display: block;
+  flex: 0 0 auto;
+  height: 0;
+  width: 100%;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+  margin: 4px 0;
+}
+
+/* ── Side drawer: section labels ── */
+.drawer-section-label {
+  display: block;
+  width: 100%;
+  padding: 14px 18px 5px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--muted) 55%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
+  flex-shrink: 0;
+}
+
+.drawer-section-label:first-of-type {
+  border-top: none;
+  padding-top: 10px;
+}
+
+/* ── Drawer: every tool-button fills full width, left-aligned ── */
+.toolbar > .tool-button,
+.toolbar > .menu-wrap,
+.toolbar > .drawer-section-label {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.toolbar .tool-button {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 25%, transparent);
+  border-radius: 0;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 12px 20px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: transparent;
+  box-shadow: none;
+  min-height: 46px;
+  color: var(--text);
+}
+
+.toolbar .tool-button:hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+  border-color: transparent;
+  transform: none;
+  box-shadow: none;
+}
+
+.toolbar .tool-button.tool-button-info {
+  color: var(--accent);
+}
+
+/* Export menu opens inline inside the drawer (not as a floating popup) */
+.toolbar .export-menu:not([hidden]) {
+  position: static;
+  width: 100%;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 25%, transparent);
+  background: color-mix(in srgb, var(--panel-2) 40%, transparent);
+  box-shadow: none;
+  padding: 6px 0;
+  gap: 2px;
+}
+
+.toolbar .export-menu button {
+  border-radius: 0;
+  padding: 7px 20px 7px 32px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: none;
+  border-bottom: none;
+  background: transparent;
+  min-height: 32px;
+}
+
+.toolbar .export-menu button:hover {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
 }
 
 .icon-button {
@@ -1258,6 +1471,41 @@ button:disabled {
 
 .mobile-stack-toggle {
   display: none;
+}
+
+.mobile-menu-btn {
+  display: flex;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, var(--accent));
+  border-radius: var(--toolbar-button-radius);
+  background: color-mix(in srgb, var(--panel-2) 70%, var(--panel));
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.mobile-menu-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mobile-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 499;
+  backdrop-filter: blur(2px);
+}
+
+.mobile-backdrop.is-open {
+  display: block;
 }
 
 .result-head {
@@ -3883,190 +4131,127 @@ textarea {
   .app-shell {
     width: min(var(--app-mobile-width), 100vw);
     max-width: 100vw;
-    height: auto;
-    min-height: var(--app-mobile-height);
-    overflow-x: hidden;
-    overflow-y: auto;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
     padding: 6px;
   }
 
-  .appbar {
-    gap: 6px;
-  }
-
-  .deck-meta,
-  .toolbar {
-    min-width: 0;
-  }
-
+  /* ── Compact deck-meta: lives in the appbar flex row ── */
   .deck-meta {
-    grid-template-columns: auto auto;
-    gap: 4px 8px;
-    white-space: nowrap;
+    gap: 2px 0;
   }
 
+  /* Title row: 2-line clamp + pencil right after */
   .deck-title-wrap {
-    max-width: min(100%, 92vw);
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 4px;
+    overflow: hidden;
   }
 
   .deck-title {
-    font-size: 0.72rem;
-  }
-
-  .deck-meta strong {
-    font-size: 0.82rem;
-  }
-
-  /* ── Mobile toolbar: 2-row layout ─────────────────────────── */
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: stretch;
-    gap: 5px;
-    padding: 5px 5px 5px;
-    background: color-mix(in srgb, var(--panel-2) 65%, var(--panel));
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  /* Primary row items (Deck, Sync, Export, All) fill the first row equally */
-  .toolbar > .deck-menu-wrap,
-  .toolbar > #syncBtn,
-  .toolbar > .menu-wrap:not(.deck-menu-wrap),
-  .toolbar > #allCardsBtn {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  /* Break element: forces new flex row + draws a subtle divider line */
-  .toolbar-break {
-    display: block;
-    flex: 0 0 100%;
-    height: 1px;
-    background: color-mix(in srgb, var(--line) 55%, transparent);
-    border: none;
-    margin: 1px 0;
-  }
-
-  /* Secondary row: Style, ?, Sign out — equal-width, fill the second row */
-  #styleBtn,
-  #helpBtn,
-  #logoutBtn {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  .menu-wrap {
-    position: relative;
-    min-width: 0;
-  }
-
-  .export-menu {
-    top: calc(100% + 6px);
-    right: auto;
-    left: 0;
-    width: min(220px, calc(100vw - 16px));
-  }
-
-  .deck-menu {
-    top: calc(100% + 6px);
-    width: min(190px, calc(100vw - 16px));
-  }
-
-  /* All primary-row toolbar buttons */
-  .toolbar > .tool-button,
-  .toolbar > .icon-button,
-  .toolbar .menu-wrap > .tool-button {
-    width: 100%;
-    min-height: 40px;
-    min-width: 0;
-    padding: 0 4px;
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     font-weight: 900;
-    border-color: color-mix(in srgb, var(--line) 75%, var(--accent));
-    letter-spacing: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    flex: 1;
   }
 
-  /* Secondary row buttons: smaller, more subtle */
-  #styleBtn.tool-button,
-  #helpBtn.tool-button,
-  #logoutBtn.tool-button {
-    min-height: 32px;
-    font-size: 0.72rem;
-    font-weight: 800;
+  /* Both pencil buttons: visible, compact, clearly a button */
+  .deck-title-edit {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    min-height: 20px;
+    font-size: 0.62rem;
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+    background: color-mix(in srgb, var(--panel-2) 90%, transparent);
+    box-shadow: none;
     color: var(--muted);
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
   }
 
-  #styleBtn:hover,
-  #helpBtn:hover,
-  #logoutBtn:hover {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-    background: color-mix(in srgb, var(--accent) 7%, var(--panel));
-    box-shadow: none;
-    transform: none;
+  /* Category pencil sits right after the badge, vertically centered */
+  .deck-category-edit {
+    align-self: center;
+    margin-left: -2px;
   }
 
-  #helpBtn.tool-button {
-    color: var(--accent);
-    opacity: 0.8;
+  /* Row2: category badge + separator + position + score */
+  .deck-meta-row2 {
+    gap: 4px;
   }
 
-  .quiz-panel {
-    height: auto;
-    min-height: 0;
-    width: 100%;
-    max-width: 100%;
-    justify-self: center;
-    grid-template-rows: auto auto auto auto auto;
-    gap: 8px;
-    padding: var(--quiz-panel-padding);
-    box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
+  .deck-category {
+    min-height: 16px;
+    font-size: 0.56rem;
+    padding: 0 6px;
+    letter-spacing: 0.06em;
   }
 
+  #positionText {
+    font-size: 0.66rem;
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  #scoreText {
+    font-size: 0.66rem;
+    font-weight: 700;
+  }
+
+  /* ── Mobile core layout: quiz-panel fills viewport, toggle+panels scroll below ── */
   .study-layout {
     display: grid;
     width: 100%;
-    height: auto;
+    height: 100%;
     min-height: 0;
-    grid-template-rows: auto auto minmax(96px, 24dvh);
+    /* Row 1 = minmax(100%,auto): quiz-panel gets AT LEAST full available height,
+       pushing toggle + panels into overflow (scroll to reach them). */
+    grid-template-rows: minmax(100%, auto) auto auto;
     grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Explicit grid placement so HTML source order doesn't dictate visual order */
+  .quiz-panel   { grid-row: 1; grid-column: 1; }
+  .mobile-stack-toggle { grid-row: 2; grid-column: 1; }
+  .result-panel { grid-row: 3; grid-column: 1; }
+
+  .quiz-panel {
+    /* 3-row grid: progress bar | card (fills 1fr) | action controls
+       Shuffle/Restart and replay-actions spill into implicit rows
+       and are clipped by overflow:hidden — deck-summary overlay
+       inside the card handles end-of-deck replay. */
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    grid-template-rows: auto 1fr auto;
     gap: 8px;
-    overflow: visible;
+    padding: var(--quiz-panel-padding);
+    box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
   }
 
   .result-panel {
-    width: min(100%, calc(100vw - 12px));
+    width: 100%;
     max-width: 100%;
-    height: 100%;
+    height: auto;
     max-height: none;
     min-height: 0;
-    justify-self: center;
-    order: 3;
     padding: 8px;
-  }
-
-  .quiz-panel {
-    height: auto;
-    min-height: 0;
-    order: 1;
   }
 
   .mobile-stack-toggle {
     display: grid;
-    width: min(100%, calc(100vw - 12px));
+    width: 100%;
     max-width: 100%;
-    justify-self: center;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    order: 2;
     gap: 6px;
     border: 1px solid var(--line);
     border-radius: var(--toolbar-button-radius);
@@ -4117,18 +4302,18 @@ textarea {
   .card {
     width: var(--card-mobile-width);
     max-width: 100%;
-    height: var(--card-mobile-max-height);
-    max-height: var(--card-mobile-max-height);
+    height: 100%;
+    max-height: none;
     min-height: 0;
     border-radius: var(--card-radius);
   }
 
   .deck {
     width: 100%;
-    height: var(--card-mobile-max-height);
+    height: 100%;
     max-height: none;
     min-height: 0;
-    align-self: center;
+    align-self: stretch;
     align-items: center;
     justify-items: center;
     padding: 0;
@@ -4441,56 +4626,146 @@ textarea {
     margin-bottom: 10px;
   }
 
+  /* ── Web decks: simple 2-row card ── */
   .web-decks-table,
-  .web-decks-table tbody,
-  .web-decks-table tr,
-  .web-decks-table td {
+  .web-decks-table tbody {
     display: block;
     width: 100%;
   }
 
-  .web-decks-table thead {
-    display: none;
-  }
+  .web-decks-table thead { display: none; }
 
+  /* 2-column grid: [checkbox] | [content]
+     Row 1 = title, Row 2 = all actions/meta */
   .web-decks-table tr {
-    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 8px;
+    row-gap: 5px;
+    align-items: start;
+    border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
     border-radius: 10px;
     background: color-mix(in srgb, var(--panel-2) 52%, transparent);
-    padding: 10px;
+    padding: 10px 12px;
   }
 
-  .web-decks-table tr + tr {
-    margin-top: 10px;
-  }
+  .web-decks-table tr + tr { margin-top: 7px; }
 
   .web-decks-table td {
-    display: grid;
-    grid-template-columns: minmax(86px, auto) minmax(0, 1fr);
-    width: 100% !important;
-    align-items: start;
-    gap: 8px;
+    display: flex;
+    align-items: center;
+    width: auto !important;
     border: 0;
-    padding: 6px 0;
+    padding: 0;
     text-align: left !important;
   }
 
-  .web-decks-table td::before {
-    color: var(--muted);
-    content: attr(data-label);
-    font-size: 0.74rem;
-    font-weight: 900;
-    line-height: 1.35;
-    text-transform: uppercase;
+  .web-decks-table td::before { display: none; }
+
+  /* Checkbox: col 1, spans both rows */
+  .web-decks-table td:nth-child(1) {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    align-self: flex-start;
+    padding-top: 3px;
+  }
+
+  /* Title: row 1, col 2 */
+  .web-decks-table td:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1;
+    align-items: flex-start;
+  }
+
+  /* Desktop-only category td: hidden on mobile */
+  .web-decks-table td:nth-child(3) { display: none; }
+
+  /* Desktop-only date td: hidden on mobile */
+  .web-decks-table td:nth-child(4) { display: none; }
+
+  /* Actions td: row 2, col 2 — contains mobile-meta + buttons */
+  .web-decks-table td:nth-child(5) {
+    grid-column: 2;
+    grid-row: 2;
+    align-items: flex-start;
   }
 
   .web-decks-empty {
     display: block !important;
     text-align: center !important;
+    grid-column: 1 / -1;
   }
 
-  .web-decks-empty::before {
-    display: none;
+  .web-decks-empty::before { display: none; }
+
+  /* Title cell: block, full width */
+  .web-deck-title { display: block; width: 100%; }
+
+  .web-deck-title-text {
+    display: block;
+    -webkit-line-clamp: 2;
+    font-size: 0.85rem;
+    font-weight: 800;
+  }
+
+  /* Actions wrapper: flex-wrap, all on same compact area */
+  .web-deck-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+  }
+
+  /* Mobile meta row: category pill + count + date — full row */
+  .web-deck-mobile-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+  }
+
+  .web-deck-cat-pill {
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--line));
+    border-radius: 999px;
+    padding: 1px 7px;
+    white-space: nowrap;
+  }
+
+  .web-deck-card-count {
+    font-size: 0.6rem;
+    padding: 1px 5px;
+  }
+
+  .web-deck-mobile-date {
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* Action buttons: compact */
+  .web-deck-rename {
+    font-size: 0.62rem;
+    padding: 0 7px;
+    min-height: 24px;
+    height: 24px;
+  }
+
+  .web-deck-action {
+    min-height: 28px;
+    height: 28px;
+    font-size: 0.72rem;
+    padding: 0 10px;
   }
 
   .web-decks-tools {
@@ -4524,11 +4799,6 @@ textarea {
   .web-decks-refresh {
     flex: 0 0 auto;
     white-space: nowrap;
-  }
-
-  .web-deck-title,
-  .web-deck-category {
-    align-items: start;
   }
 
   .web-deck-title-text,
@@ -4577,14 +4847,6 @@ textarea {
     overflow: visible;
   }
 
-  .appbar {
-    gap: 8px;
-  }
-
-  .toolbar {
-    justify-content: center;
-  }
-
   .study-layout {
     height: auto;
     grid-template-columns: minmax(0, 1fr);
@@ -4617,20 +4879,6 @@ textarea {
 @media (max-width: 420px) {
   .app-shell {
     width: min(var(--app-mobile-width), 100vw);
-  }
-
-  .deck-meta {
-    grid-template-columns: auto auto;
-    gap: 3px 8px;
-  }
-
-  .deck-title-wrap {
-    grid-column: 1 / -1;
-  }
-
-  .quiz-panel {
-    height: auto;
-    min-height: 0;
   }
 
   .deck {

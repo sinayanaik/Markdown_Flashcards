@@ -684,7 +684,7 @@ async function fetchWebDecks() {
     setStatus("Fetching web decks...");
     const { data, error } = await supabaseClient
       .from("decks")
-      .select("*")
+      .select("*, cards(count)")
       .order("last_accessed_at", { ascending: false, nullsFirst: false })
       .order("updated_at", { ascending: false });
       
@@ -745,6 +745,12 @@ async function fetchWebDecks() {
       titleText.className = "web-deck-title-text";
       titleText.textContent = deck.title || "Untitled";
 
+      const cardCount = deck.cards?.[0]?.count ?? null;
+      const countBadge = document.createElement("span");
+      countBadge.className = "web-deck-card-count";
+      countBadge.textContent = cardCount !== null ? `${cardCount} cards` : "";
+      if (cardCount === null) countBadge.hidden = true;
+
       const renameBtn = document.createElement("button");
       renameBtn.className = "web-deck-rename";
       renameBtn.type = "button";
@@ -754,7 +760,6 @@ async function fetchWebDecks() {
       renameBtn.onclick = () => renameWebDeck(deck.id, deck.title || "Untitled");
 
       titleWrap.appendChild(titleText);
-      titleWrap.appendChild(renameBtn);
       tdTitle.appendChild(titleWrap);
 
       const tdDate = document.createElement("td");
@@ -790,6 +795,21 @@ async function fetchWebDecks() {
       delBtn.textContent = "Delete";
       delBtn.onclick = () => deleteWebDeck(deck.id);
       
+      // Mobile-only meta row: category pill + count + date (all hidden on desktop via CSS)
+      const mobileMeta = document.createElement("div");
+      mobileMeta.className = "web-deck-mobile-meta";
+      const mobileCat = document.createElement("span");
+      mobileCat.className = "web-deck-cat-pill";
+      mobileCat.textContent = category || "Uncategorized";
+      const mobileDate = document.createElement("span");
+      mobileDate.className = "web-deck-mobile-date";
+      mobileDate.textContent = accessed.date;
+      mobileMeta.appendChild(mobileCat);
+      if (cardCount !== null) mobileMeta.appendChild(countBadge);
+      mobileMeta.appendChild(mobileDate);
+      actionsWrap.appendChild(mobileMeta);
+
+      actionsWrap.appendChild(renameBtn);
       actionsWrap.appendChild(loadBtn);
       actionsWrap.appendChild(exportWrap);
       actionsWrap.appendChild(delBtn);
@@ -1851,6 +1871,7 @@ const el = {
   themeMenu: document.querySelector("#themeMenu"),
   themeCurrentLabel: document.querySelector("#themeCurrentLabel"),
   deckTitleWrap: document.querySelector("#deckTitleWrap"),
+  deckMeta2Row: document.querySelector("#deckMeta2Row"),
   deckTitle: document.querySelector("#deckTitle"),
   editDeckTitleBtn: document.querySelector("#editDeckTitleBtn"),
   deckCategory: document.querySelector("#deckCategory"),
@@ -4747,6 +4768,7 @@ function updateMeta() {
   el.deckTitle.textContent = state.deckTitle;
   el.deckTitle.title = state.deckTitle;
   el.deckTitleWrap.hidden = state.masterCards.length === 0;
+  if (el.deckMeta2Row) el.deckMeta2Row.hidden = state.masterCards.length === 0;
   el.editDeckTitleBtn.disabled = state.masterCards.length === 0;
   if (el.deckCategory) {
     el.deckCategory.textContent = normalizeDeckCategory(state.deckCategory);
@@ -7922,4 +7944,50 @@ function handleToolbarClick(event) {
   document.querySelectorAll(".edit-toolbar .toolbar-dropdown").forEach(d => {
     d.classList.remove("is-open");
   });
+}
+
+// ── Hamburger menu (side drawer, all screen sizes) ───────────────
+{
+  const menuBtn = document.getElementById("mobileMenuBtn");
+  const toolbar = document.getElementById("mainToolbar");
+  const backdrop = document.getElementById("mobileBackdrop");
+  const closeBtn = document.getElementById("toolbarCloseBtn");
+
+  if (menuBtn && toolbar && backdrop) {
+    const openMenu = () => {
+      toolbar.classList.add("mobile-open");
+      backdrop.classList.add("is-open");
+      backdrop.hidden = false;
+      menuBtn.setAttribute("aria-expanded", "true");
+      document.body.style.overflow = "hidden";
+    };
+
+    const closeMenu = () => {
+      toolbar.classList.remove("mobile-open");
+      backdrop.classList.remove("is-open");
+      backdrop.hidden = true;
+      menuBtn.setAttribute("aria-expanded", "false");
+      document.body.style.overflow = "";
+    };
+
+    menuBtn.addEventListener("click", () => {
+      toolbar.classList.contains("mobile-open") ? closeMenu() : openMenu();
+    });
+
+    if (closeBtn) closeBtn.addEventListener("click", closeMenu);
+    backdrop.addEventListener("click", closeMenu);
+
+    toolbar.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      // Export has inline expansion inside the drawer — don't close for it
+      if (btn.id === "exportBtn") return;
+      // Close button, section-label clicks, and all other actions close the drawer
+      setTimeout(closeMenu, 150);
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && toolbar.classList.contains("mobile-open")) closeMenu();
+    });
+  }
 }
