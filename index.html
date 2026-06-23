@@ -33,20 +33,25 @@
           <div class="menu-wrap">
             <button class="tool-button" id="exportBtn" type="button">Export</button>
             <div class="export-menu" id="exportMenu" hidden>
-              <button type="button" data-export="pdf" data-scope="known">Known Cornell PDF</button>
-              <button type="button" data-export="sql" data-scope="known">Known SQL</button>
-              <button type="button" data-export="pdf" data-scope="review">Review Cornell PDF</button>
-              <button type="button" data-export="sql" data-scope="review">Review SQL</button>
-              <button type="button" data-export="pdf" data-scope="all">All Cornell PDF</button>
-              <button type="button" data-export="markdown" data-scope="all">All Markdown</button>
-              <button type="button" data-export="json" data-scope="all">All JSON</button>
-              <button type="button" data-export="sql" data-scope="all">All SQL</button>
+              <span class="export-group-label">Known</span>
+              <button type="button" data-export="pdf" data-scope="known">Cornell PDF</button>
+              <button type="button" data-export="sql" data-scope="known">SQL</button>
+              <hr class="export-divider">
+              <span class="export-group-label">Review</span>
+              <button type="button" data-export="pdf" data-scope="review">Cornell PDF</button>
+              <button type="button" data-export="sql" data-scope="review">SQL</button>
+              <hr class="export-divider">
+              <span class="export-group-label">All</span>
+              <button type="button" data-export="pdf" data-scope="all">Cornell PDF</button>
+              <button type="button" data-export="markdown" data-scope="all">Markdown</button>
+              <button type="button" data-export="json" data-scope="all">JSON</button>
+              <button type="button" data-export="sql" data-scope="all">SQL</button>
             </div>
           </div>
           <button class="tool-button" id="allCardsBtn" type="button">All</button>
-          <button class="icon-button" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">
-            <span aria-hidden="true">Aa</span>
-          </button>
+          <span class="toolbar-break" aria-hidden="true"></span>
+          <button class="tool-button" id="styleBtn" type="button" title="Edit style" aria-label="Edit style">Style</button>
+          <button class="tool-button tool-button-info" id="helpBtn" type="button" title="How to use this app" aria-label="Help">?</button>
           <button class="tool-button" id="logoutBtn" type="button" title="Sign out" hidden>Sign out</button>
         </div>
 
@@ -75,10 +80,39 @@
 
         <section class="quiz-panel" aria-label="Flashcard quiz">
           <div class="progress-track" aria-hidden="true">
-            <span id="progressBar"></span>
+            <span class="progress-known" id="progressKnown"></span>
+            <span class="progress-review" id="progressReview"></span>
+            <span class="progress-remaining" id="progressBar"></span>
           </div>
 
           <div class="deck" id="deck">
+            <div class="deck-empty-state" id="deckEmptyState" hidden>
+              <div class="deck-empty-icon" aria-hidden="true">📚</div>
+              <h2 class="deck-empty-title">No deck loaded</h2>
+              <p class="deck-empty-body">Choose how to get started:</p>
+              <div class="deck-empty-actions">
+                <button class="deck-empty-action" id="deckEmptyNewBtn" type="button">
+                  <span class="deck-empty-action-icon" aria-hidden="true">✦</span>
+                  New Deck
+                </button>
+                <button class="deck-empty-action" id="deckEmptyImportBtn" type="button">
+                  <span class="deck-empty-action-icon" aria-hidden="true">⬆</span>
+                  Import
+                </button>
+                <button class="deck-empty-action" id="deckEmptyWebBtn" type="button">
+                  <span class="deck-empty-action-icon" aria-hidden="true">☁</span>
+                  Web Decks
+                </button>
+              </div>
+            </div>
+            <div class="swipe-hint" id="swipeHint" hidden aria-hidden="true">
+              <div class="swipe-hint-row">
+                <span class="swipe-hint-dir">← Review</span>
+                <span class="swipe-hint-center">Swipe to sort</span>
+                <span class="swipe-hint-dir">Known →</span>
+              </div>
+              <p class="swipe-hint-sub">Tap card to flip</p>
+            </div>
             <article class="card" id="card" tabindex="0" aria-label="Current quiz card">
               <div class="card-face card-question">
                 <div class="face-header">
@@ -112,11 +146,11 @@
           </div>
 
           <div class="controls" aria-label="Card actions">
-            <button class="review" id="reviewBtn" type="button" title="Review" aria-label="Mark card for review"><span aria-hidden="true">❌</span><span>Review</span></button>
-            <button class="nav-card" id="prevCardBtn" type="button" title="Previous card" aria-label="Previous card"><span aria-hidden="true">&#8592;</span><span>Prev</span></button>
-            <button class="nav-card" id="addCardBtn" type="button" title="Add card" aria-label="Add card"><span aria-hidden="true">+</span><span>Add</span></button>
-            <button class="nav-card" id="nextCardBtn" type="button" title="Next card" aria-label="Next card"><span>Next</span><span aria-hidden="true">&#8594;</span></button>
-            <button class="known" id="knownBtn" type="button" title="Known" aria-label="Mark card known"><span>Known</span><span aria-hidden="true">✅</span></button>
+            <button class="review" id="reviewBtn" type="button" title="Review" aria-label="Mark card for review" data-shortcut="Review (R)"><span aria-hidden="true">❌</span><span>Review</span></button>
+            <button class="nav-card" id="prevCardBtn" type="button" title="Previous card" aria-label="Previous card" data-shortcut="Prev (←)"><span aria-hidden="true">&#8592;</span><span>Prev</span></button>
+            <button class="nav-card" id="addCardBtn" type="button" title="Add card" aria-label="Add card" data-shortcut="Add"><span aria-hidden="true">+</span><span>Add</span></button>
+            <button class="nav-card" id="nextCardBtn" type="button" title="Next card" aria-label="Next card" data-shortcut="Next (→)"><span>Next</span><span aria-hidden="true">&#8594;</span></button>
+            <button class="known" id="knownBtn" type="button" title="Known" aria-label="Mark card known" data-shortcut="Known (K)"><span>Known</span><span aria-hidden="true">✅</span></button>
           </div>
           <div class="deck-utility-actions" aria-label="Deck actions">
             <button id="shuffleBtn" type="button" title="Shuffle" aria-label="Shuffle cards">
@@ -313,6 +347,7 @@
                 <option value="">All categories</option>
               </select>
             </label>
+            <button class="web-decks-refresh" id="refreshWebDecksBtn" type="button">Refresh List</button>
             <div class="web-decks-bulk-actions" id="webDecksBulkActions" hidden>
               <span class="bulk-title">Selected (<strong id="selectedDecksCount">0</strong>)</span>
               <div class="bulk-buttons">
@@ -357,7 +392,6 @@
             </tbody>
           </table>
         </div>
-        <button class="web-decks-refresh" id="refreshWebDecksBtn" type="button">Refresh List</button>
       </div>
     </section>
 
@@ -368,6 +402,162 @@
         <div class="sync-modal-actions">
           <button id="cancelSyncBtn" type="button" class="sync-modal-btn">Cancel</button>
           <button id="confirmSyncBtn" type="button" class="sync-modal-btn is-primary">Confirm Sync</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="help-modal" id="helpModal" hidden aria-label="How to use Flashcards">
+      <div class="help-modal-content">
+        <div class="help-modal-head">
+          <h2 class="help-modal-title">How to use Flashcards</h2>
+          <button class="icon-button" id="helpModalCloseBtn" type="button" aria-label="Close help">&#215;</button>
+        </div>
+        <div class="help-modal-body">
+
+          <section class="help-section">
+            <h3 class="help-section-title">1. Load a Deck</h3>
+            <p>Open the <strong>Deck</strong> menu in the toolbar to get started:</p>
+            <div class="help-btn-row">
+              <button type="button" class="tool-button" tabindex="-1">Deck ▾</button>
+            </div>
+            <ul class="help-list">
+              <li><strong>Import</strong> — paste Markdown, upload a <code>.md</code> file, or fetch from a URL</li>
+              <li><strong>New Deck</strong> — start a blank deck and add cards manually</li>
+              <li><strong>Web Decks</strong> — load a deck you previously synced (requires sign-in)</li>
+            </ul>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">2. Study Cards</h3>
+            <p>Each card has a <strong>question</strong> side and an <strong>answer</strong> side. Tap or press <kbd>Space</kbd> to flip:</p>
+            <div class="help-card-demo" aria-hidden="true">
+              <div class="help-card-face">Question side</div>
+              <div class="help-card-arrow">↕ flip</div>
+              <div class="help-card-face help-card-face-answer">Answer side</div>
+            </div>
+            <p>After reviewing the answer, sort the card using the action buttons:</p>
+            <div class="help-btn-row">
+              <button type="button" class="review help-demo-btn" tabindex="-1"><span aria-hidden="true">❌</span><span>Review</span></button>
+              <button type="button" class="nav-card help-demo-btn" tabindex="-1"><span aria-hidden="true">←</span></button>
+              <button type="button" class="nav-card help-demo-btn" tabindex="-1"><span aria-hidden="true">+</span></button>
+              <button type="button" class="nav-card help-demo-btn" tabindex="-1"><span aria-hidden="true">→</span></button>
+              <button type="button" class="known help-demo-btn" tabindex="-1"><span>Known</span><span aria-hidden="true">✅</span></button>
+            </div>
+            <table class="help-table">
+              <tr><td><button type="button" class="review help-demo-btn help-demo-btn-sm" tabindex="-1">❌ Review</button></td><td>Mark for re-study (moves to the Review pile)</td></tr>
+              <tr><td><button type="button" class="known help-demo-btn help-demo-btn-sm" tabindex="-1">✅ Known</button></td><td>Mark as learned (moves to the Known pile)</td></tr>
+              <tr><td><button type="button" class="nav-card help-demo-btn help-demo-btn-sm" tabindex="-1">← →</button></td><td>Navigate without sorting</td></tr>
+              <tr><td><button type="button" class="nav-card help-demo-btn help-demo-btn-sm" tabindex="-1">+</button></td><td>Add a new blank card after the current one</td></tr>
+            </table>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">3. Keyboard Shortcuts</h3>
+            <table class="help-table">
+              <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>Flip card</td></tr>
+              <tr><td><kbd>K</kbd></td><td>Mark Known</td></tr>
+              <tr><td><kbd>R</kbd></td><td>Mark for Review</td></tr>
+              <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Navigate cards</td></tr>
+            </table>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">4. Swipe Gestures (touch)</h3>
+            <table class="help-table">
+              <tr><td>Swipe <strong>right</strong></td><td>Mark Known ✅</td></tr>
+              <tr><td>Swipe <strong>left</strong></td><td>Mark for Review ❌</td></tr>
+              <tr><td>Swipe <strong>up / down</strong></td><td>Navigate to next / previous</td></tr>
+              <tr><td>Tap card</td><td>Flip to answer</td></tr>
+            </table>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">5. Edit Cards</h3>
+            <p>Click the pencil icon <button type="button" class="edit-card-btn help-demo-btn" tabindex="-1">✏</button> on the question or answer face to edit. Click the save icon <button type="button" class="edit-card-btn help-demo-btn" tabindex="-1">💾</button> to save. Edits are always committed when you navigate away.</p>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">6. Track Progress</h3>
+            <p>The coloured bar at the top of the card area shows your session progress:</p>
+            <div class="help-progress-demo" aria-hidden="true">
+              <div class="help-progress-known" style="width:30%"></div>
+              <div class="help-progress-review" style="width:20%"></div>
+              <div class="help-progress-remaining" style="width:25%"></div>
+            </div>
+            <div class="help-legend">
+              <span class="help-legend-dot" style="background:var(--known)"></span><span>Known</span>
+              <span class="help-legend-dot" style="background:var(--review)"></span><span>Review</span>
+              <span class="help-legend-dot" style="background:var(--accent)"></span><span>Progress</span>
+            </div>
+            <p>The left and right side panels show the stacks of Known and Review cards. Click any card brick there to preview it.</p>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">7. All Cards Panel</h3>
+            <p>Click <button type="button" class="tool-button help-demo-btn" tabindex="-1">All</button> to see every card in a scrollable Cornell-note view. You can edit, delete, or reorder cards from here.</p>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">8. Sync &amp; Export</h3>
+            <div class="help-btn-row">
+              <button type="button" class="tool-button help-demo-btn" tabindex="-1">Sync</button>
+              <button type="button" class="tool-button help-demo-btn" tabindex="-1">Export ▾</button>
+            </div>
+            <ul class="help-list">
+              <li><strong>Sync</strong> — save the current deck to the cloud (requires sign-in via the Sync button)</li>
+              <li><strong>Export → Markdown</strong> — download the full deck as a <code>.md</code> file</li>
+              <li><strong>Export → Cornell PDF</strong> — export Known or Review cards as printable notes</li>
+              <li><strong>Export → JSON / SQL</strong> — machine-readable formats for data portability</li>
+            </ul>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">9. Card Format</h3>
+            <p>When importing or pasting Markdown, use the <code>::</code> separator format:</p>
+            <pre class="help-code">::
+What is the capital of France?
+---
+Paris
+::
+
+::
+What year was the Eiffel Tower built?
+---
+1889
+::</pre>
+            <p>You can also use <code>##</code>, <code>###</code>, or <code>####</code> headings as card fronts, with the content below as the back.</p>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">10. Themes &amp; Style</h3>
+            <p>Click <button type="button" class="tool-button help-demo-btn" tabindex="-1">Style</button> to choose from 10 built-in themes, adjust font size, card radius, and more. Desktop and mobile save separate style profiles.</p>
+          </section>
+
+        </div>
+        <div class="help-modal-foot">
+          <button type="button" class="sync-modal-btn is-primary" id="helpModalCloseFootBtn">Got it</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="confirm-modal" id="confirmModal" hidden aria-label="Confirm action">
+      <div class="confirm-modal-content">
+        <p id="confirmModalMessage" class="confirm-modal-message"></p>
+        <div class="sync-modal-actions">
+          <button id="confirmModalCancelBtn" type="button" class="sync-modal-btn">Cancel</button>
+          <button id="confirmModalOkBtn" type="button" class="sync-modal-btn is-primary">Confirm</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="confirm-modal" id="promptModal" hidden aria-label="Enter value">
+      <div class="confirm-modal-content">
+        <h3 id="promptModalTitle" class="prompt-modal-title"></h3>
+        <p id="promptModalHint" class="confirm-modal-message"></p>
+        <input id="promptModalInput" type="text" class="prompt-modal-input" autocomplete="off">
+        <div class="sync-modal-actions">
+          <button id="promptModalCancelBtn" type="button" class="sync-modal-btn">Cancel</button>
+          <button id="promptModalOkBtn" type="button" class="sync-modal-btn is-primary">OK</button>
         </div>
       </div>
     </section>

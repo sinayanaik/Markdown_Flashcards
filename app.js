@@ -678,6 +678,8 @@ async function touchWebDeckAccess(deckId) {
 
 async function fetchWebDecks() {
   if (!supabaseClient) return;
+  const refreshBtn = document.getElementById("refreshWebDecksBtn");
+  if (refreshBtn) setButtonLoading(refreshBtn, true, "Loading…");
   try {
     setStatus("Fetching web decks...");
     const { data, error } = await supabaseClient
@@ -804,6 +806,8 @@ async function fetchWebDecks() {
   } catch (error) {
     console.error("Failed to fetch web decks", error);
     setStatus("Failed to fetch web decks.", "error");
+  } finally {
+    if (refreshBtn) setButtonLoading(refreshBtn, false);
   }
 }
 
@@ -1013,31 +1017,27 @@ function createWebDeckExportControl(deck) {
 async function renameWebDeck(deckId, currentTitle = "") {
   if (!deckId || !supabaseClient) return;
 
-  const nextTitle = prompt("Rename web deck", currentTitle || "Untitled");
-  if (nextTitle === null) return;
-
-  const title = nextTitle.trim();
-  if (!title) {
-    setStatus("Deck title cannot be empty.", "error");
-    return;
-  }
-
-  try {
-    setStatus("Renaming web deck...");
-    await updateWebDeckTitle(deckId, title);
-
-    if (state.deckId === deckId) {
-      state.deckTitle = title;
-      state.sourceTitle = title;
-      updateMeta();
+  showPromptModal("Rename Deck", "", currentTitle || "Untitled", async (nextTitle) => {
+    const title = nextTitle.trim();
+    if (!title) {
+      setStatus("Deck title cannot be empty.", "error");
+      return;
     }
-
-    setStatus("Web deck renamed.");
-    fetchWebDecks();
-  } catch (error) {
-    console.error("Failed to rename web deck", error);
-    setStatus("Failed to rename web deck.", "error");
-  }
+    try {
+      setStatus("Renaming web deck...");
+      await updateWebDeckTitle(deckId, title);
+      if (state.deckId === deckId) {
+        state.deckTitle = title;
+        state.sourceTitle = title;
+        updateMeta();
+      }
+      setStatus("Web deck renamed.");
+      fetchWebDecks();
+    } catch (error) {
+      console.error("Failed to rename web deck", error);
+      setStatus("Failed to rename web deck.", "error");
+    }
+  });
 }
 
 function downloadTextFile(content, filename, type = "text/plain;charset=utf-8") {
@@ -1351,23 +1351,19 @@ async function exportAllWebDecks(format) {
 
 async function deleteWebDeck(deckId) {
   if (!supabaseClient) return;
-  if (!confirm("Are you sure you want to delete this deck from the web?")) return;
-  
-  try {
-    setStatus("Deleting deck...");
-    const { error } = await supabaseClient.from("decks").delete().eq("id", deckId);
-    if (error) throw error;
-    
-    if (state.deckId === deckId) {
-      state.deckId = null;
+  showConfirmModal("Delete this deck from the web? This cannot be undone.", async () => {
+    try {
+      setStatus("Deleting deck...");
+      const { error } = await supabaseClient.from("decks").delete().eq("id", deckId);
+      if (error) throw error;
+      if (state.deckId === deckId) state.deckId = null;
+      setStatus("Deck deleted successfully.");
+      fetchWebDecks();
+    } catch (error) {
+      console.error("Failed to delete web deck", error);
+      setStatus("Failed to delete web deck.", "error");
     }
-    
-    setStatus("Deck deleted successfully.");
-    fetchWebDecks();
-  } catch (error) {
-    console.error("Failed to delete web deck", error);
-    setStatus("Failed to delete web deck.", "error");
-  }
+  }, { confirmLabel: "Delete", danger: true });
 }
 
 async function loadWebDeck(deckId) {
@@ -1678,7 +1674,7 @@ async function syncDeckToWeb() {
   }
 
   const syncBtn = document.getElementById("syncBtn");
-  if (syncBtn) syncBtn.disabled = true;
+  if (syncBtn) setButtonLoading(syncBtn, true, "Syncing…");
 
   try {
     const deckTitle = state.deckTitle || state.sourceTitle || "Untitled Deck";
@@ -1768,7 +1764,7 @@ async function syncDeckToWeb() {
     );
     console.error(error);
   } finally {
-    if (syncBtn) syncBtn.disabled = false;
+    if (syncBtn) setButtonLoading(syncBtn, false);
   }
 }
 
@@ -1885,6 +1881,20 @@ const el = {
   positionText: document.querySelector("#positionText"),
   scoreText: document.querySelector("#scoreText"),
   progressBar: document.querySelector("#progressBar"),
+  progressKnown: document.querySelector("#progressKnown"),
+  progressReview: document.querySelector("#progressReview"),
+  deckEmptyState: document.querySelector("#deckEmptyState"),
+  swipeHint: document.querySelector("#swipeHint"),
+  confirmModal: document.querySelector("#confirmModal"),
+  confirmModalMessage: document.querySelector("#confirmModalMessage"),
+  confirmModalOkBtn: document.querySelector("#confirmModalOkBtn"),
+  confirmModalCancelBtn: document.querySelector("#confirmModalCancelBtn"),
+  promptModal: document.querySelector("#promptModal"),
+  promptModalTitle: document.querySelector("#promptModalTitle"),
+  promptModalHint: document.querySelector("#promptModalHint"),
+  promptModalInput: document.querySelector("#promptModalInput"),
+  promptModalOkBtn: document.querySelector("#promptModalOkBtn"),
+  promptModalCancelBtn: document.querySelector("#promptModalCancelBtn"),
   statusText: document.querySelector("#statusText"),
   prevCardBtn: document.querySelector("#prevCardBtn"),
   nextCardBtn: document.querySelector("#nextCardBtn"),
@@ -2284,15 +2294,7 @@ function renderStyleControls() {
   styleControlGroups.forEach((group, groupIndex) => {
     const section = document.createElement("details");
     section.className = "style-section";
-    section.name = "style-accordion";
-    section.open = groupIndex === 0;
-    section.addEventListener("toggle", () => {
-      if (section.open) {
-        el.styleControls.querySelectorAll("details").forEach((node) => {
-          if (node !== section) node.open = false;
-        });
-      }
-    });
+    section.open = true;
 
     const heading = document.createElement("summary");
     heading.textContent = group.title;
@@ -2673,6 +2675,87 @@ function setStatus(message, type = "info") {
   el.statusText.classList.toggle("error", type === "error");
 }
 
+function setButtonLoading(btn, loading, text = "…") {
+  if (!btn) return;
+  if (loading) {
+    btn._loadingOriginalText = btn.textContent;
+    btn.textContent = text;
+    btn.disabled = true;
+  } else {
+    if (btn._loadingOriginalText !== undefined) btn.textContent = btn._loadingOriginalText;
+    btn.disabled = false;
+  }
+}
+
+function showConfirmModal(message, onConfirm, { confirmLabel = "Confirm", danger = false } = {}) {
+  if (!el.confirmModal) return onConfirm();
+  el.confirmModalMessage.textContent = message;
+  el.confirmModalOkBtn.textContent = confirmLabel;
+  el.confirmModalOkBtn.classList.toggle("is-danger", danger);
+  el.confirmModal.hidden = false;
+  lockPageScroll();
+  const cleanup = (confirmed) => {
+    el.confirmModal.hidden = true;
+    unlockPageScroll();
+    el.confirmModalOkBtn.onclick = null;
+    el.confirmModalCancelBtn.onclick = null;
+    if (confirmed) onConfirm();
+  };
+  el.confirmModalOkBtn.onclick = () => cleanup(true);
+  el.confirmModalCancelBtn.onclick = () => cleanup(false);
+}
+
+function showPromptModal(title, hint, defaultValue, onConfirm) {
+  if (!el.promptModal) {
+    const result = prompt(title, defaultValue);
+    if (result !== null) onConfirm(result);
+    return;
+  }
+  el.promptModalTitle.textContent = title;
+  el.promptModalHint.textContent = hint || "";
+  el.promptModalHint.hidden = !hint;
+  el.promptModalInput.value = defaultValue || "";
+  el.promptModal.hidden = false;
+  lockPageScroll();
+  requestAnimationFrame(() => el.promptModalInput.focus());
+  const cleanup = (confirmed) => {
+    el.promptModal.hidden = true;
+    unlockPageScroll();
+    el.promptModalOkBtn.onclick = null;
+    el.promptModalCancelBtn.onclick = null;
+    el.promptModalInput.onkeydown = null;
+    if (confirmed) onConfirm(el.promptModalInput.value);
+  };
+  el.promptModalOkBtn.onclick = () => cleanup(true);
+  el.promptModalCancelBtn.onclick = () => cleanup(false);
+  el.promptModalInput.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); cleanup(true); }
+    if (e.key === "Escape") { e.preventDefault(); cleanup(false); }
+  };
+}
+
+let swipeHintTimer = null;
+function maybeShowSwipeHint() {
+  if (!el.swipeHint) return;
+  if (localStorage.getItem("swipe-hint-seen")) return;
+  if (!("ontouchstart" in window) && navigator.maxTouchPoints < 1) return;
+  el.swipeHint.hidden = false;
+  swipeHintTimer = setTimeout(dismissSwipeHint, 3500);
+}
+
+function dismissSwipeHint() {
+  if (!el.swipeHint || el.swipeHint.hidden) return;
+  clearTimeout(swipeHintTimer);
+  localStorage.setItem("swipe-hint-seen", "1");
+  el.swipeHint.classList.add("is-fading");
+  setTimeout(() => {
+    if (el.swipeHint) {
+      el.swipeHint.hidden = true;
+      el.swipeHint.classList.remove("is-fading");
+    }
+  }, 420);
+}
+
 function setDeckTitle(title, options = {}) {
   const normalized = String(title || "").trim();
   state.deckTitle = normalized;
@@ -2693,29 +2776,26 @@ async function editCurrentDeckTitle() {
     return;
   }
 
-  const nextTitle = prompt("Edit deck title", state.deckTitle || state.sourceTitle || "Untitled Deck");
-  if (nextTitle === null) return;
-
-  const title = nextTitle.trim();
-  if (!title) {
-    setStatus("Deck title cannot be empty.", "error");
-    return;
-  }
-
-  setDeckTitle(title, { updateSourceTitle: true });
-  if (!state.deckId || !supabaseClient) {
-    setStatus("Deck title updated.");
-    return;
-  }
-
-  try {
-    setStatus("Updating web deck title...");
-    await updateWebDeckTitle(state.deckId, title);
-    setStatus("Deck title updated in the cloud.");
-  } catch (error) {
-    console.error("Failed to update web deck title", error);
-    setStatus("Deck title updated locally, but cloud rename failed.", "error");
-  }
+  showPromptModal("Edit Deck Title", "", state.deckTitle || state.sourceTitle || "Untitled Deck", async (nextTitle) => {
+    const title = nextTitle.trim();
+    if (!title) {
+      setStatus("Deck title cannot be empty.", "error");
+      return;
+    }
+    setDeckTitle(title, { updateSourceTitle: true });
+    if (!state.deckId || !supabaseClient) {
+      setStatus("Deck title updated.");
+      return;
+    }
+    try {
+      setStatus("Updating web deck title...");
+      await updateWebDeckTitle(state.deckId, title);
+      setStatus("Deck title updated in the cloud.");
+    } catch (error) {
+      console.error("Failed to update web deck title", error);
+      setStatus("Deck title updated locally, but cloud rename failed.", "error");
+    }
+  });
 }
 
 async function editCurrentDeckCategory() {
@@ -2756,10 +2836,6 @@ function openWebDecksPanel() {
 
 function closeImportPanel() {
   closePasteEditor(true);
-  if (state.cards.length === 0) {
-    createNewDeck();
-    return;
-  }
   el.importPanel.classList.remove("is-open");
   unlockPageScroll();
 }
@@ -3997,18 +4073,17 @@ function goToCard(cardId) {
 }
 
 function deleteAllCard(cardId) {
-  if (!confirm("Delete this card?")) return;
-  state.masterCards = state.masterCards.filter(c => c.id !== cardId);
-  state.cards = state.cards.filter(c => c.id !== cardId);
-  delete state.statusById[cardId];
-  
-  if (state.current >= state.cards.length) {
-    state.current = Math.max(0, state.cards.length - 1);
-  }
-  
-  showCard();
-  renderAllCards();
-  setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
+  showConfirmModal("Delete this card? This cannot be undone.", () => {
+    state.masterCards = state.masterCards.filter(c => c.id !== cardId);
+    state.cards = state.cards.filter(c => c.id !== cardId);
+    delete state.statusById[cardId];
+    if (state.current >= state.cards.length) {
+      state.current = Math.max(0, state.cards.length - 1);
+    }
+    showCard();
+    renderAllCards();
+    setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
+  }, { confirmLabel: "Delete", danger: true });
 }
 
 function updateBulkActionVisibility() {
@@ -4093,51 +4168,50 @@ async function loadSelectedWebDecks(deckIds) {
 
 async function deleteSelectedWebDecks(deckIds) {
   if (!deckIds.length || !supabaseClient) return;
-  if (!confirm(`Are you sure you want to delete ${deckIds.length} selected decks from the web?`)) return;
-  
-  setStatus(`Deleting ${deckIds.length} decks...`);
-  try {
-    for (const deckId of deckIds) {
-      const { error } = await supabaseClient.from("decks").delete().eq("id", deckId);
-      if (error) throw error;
-      if (state.deckId === deckId) {
-        state.deckId = null;
+  showConfirmModal(
+    `Delete ${deckIds.length} selected ${deckIds.length === 1 ? "deck" : "decks"} from the web? This cannot be undone.`,
+    async () => {
+      setStatus(`Deleting ${deckIds.length} decks...`);
+      try {
+        for (const deckId of deckIds) {
+          const { error } = await supabaseClient.from("decks").delete().eq("id", deckId);
+          if (error) throw error;
+          if (state.deckId === deckId) state.deckId = null;
+        }
+        setStatus(`Successfully deleted ${deckIds.length} decks.`);
+        fetchWebDecks();
+      } catch (error) {
+        console.error("Failed to delete selected web decks", error);
+        setStatus("Failed to delete selected web decks.", "error");
       }
-    }
-    setStatus(`Successfully deleted ${deckIds.length} decks.`);
-    fetchWebDecks();
-  } catch (error) {
-    console.error("Failed to delete selected web decks", error);
-    setStatus("Failed to delete selected web decks.", "error");
-  }
+    },
+    { confirmLabel: "Delete All", danger: true }
+  );
 }
 
 async function changeSelectedWebDecksCategory(deckIds) {
   if (!deckIds.length || !supabaseClient) return;
 
-  const nextCategory = prompt("Enter new category name for selected decks:", "General");
-  if (nextCategory === null) return;
-  const category = normalizeDeckCategory(nextCategory.trim());
-  if (!category) {
-    setStatus("Category cannot be empty.", "error");
-    return;
-  }
-
-  setStatus(`Updating category for ${deckIds.length} decks...`);
-  try {
-    for (const deckId of deckIds) {
-      await applyWebDeckCategory(deckId, category);
-      if (state.deckId === deckId) {
-        state.deckCategory = category;
-      }
+  showPromptModal("Set Category", `Apply to ${deckIds.length} selected decks`, "General", async (nextCategory) => {
+    const category = normalizeDeckCategory(nextCategory.trim());
+    if (!category) {
+      setStatus("Category cannot be empty.", "error");
+      return;
     }
-    updateMeta();
-    setStatus(`Updated category for ${deckIds.length} decks.`);
-    fetchWebDecks();
-  } catch (error) {
-    console.error("Failed to update selected decks category", error);
-    setStatus("Failed to update selected decks category.", "error");
-  }
+    setStatus(`Updating category for ${deckIds.length} decks...`);
+    try {
+      for (const deckId of deckIds) {
+        await applyWebDeckCategory(deckId, category);
+        if (state.deckId === deckId) state.deckCategory = category;
+      }
+      updateMeta();
+      setStatus(`Updated category for ${deckIds.length} decks.`);
+      fetchWebDecks();
+    } catch (error) {
+      console.error("Failed to update selected decks category", error);
+      setStatus("Failed to update selected decks category.", "error");
+    }
+  });
 }
 
 async function exportSelectedWebDecks(deckIds, format) {
@@ -4584,6 +4658,11 @@ async function renderAllCards() {
     template.innerHTML = cornellCardHtml(card, index, { answerVisible: allCardsAnswersVisible });
     const item = template.content.firstElementChild;
     item.cardData = card;
+    const dragHandle = document.createElement("div");
+    dragHandle.className = "all-card-drag-handle";
+    dragHandle.setAttribute("aria-hidden", "true");
+    dragHandle.textContent = "⠿";
+    item.prepend(dragHandle);
     const editor = document.createElement("div");
     editor.className = "all-card-editor";
     editor.hidden = true;
@@ -4667,7 +4746,12 @@ function updateMeta() {
   if (el.mobileReviewCount) el.mobileReviewCount.textContent = state.review;
   renderBrickList(el.knownBrickList, state.results.known, "known");
   renderBrickList(el.reviewBrickList, state.results.review, "review");
-  el.progressBar.style.width = total ? `${(finished / total) * 100}%` : "0";
+  const knownPct = total ? (state.results.known.length / state.masterCards.length) * 100 : 0;
+  const reviewPct = total ? (state.results.review.length / state.masterCards.length) * 100 : 0;
+  const remainingPct = total ? Math.max(0, (finished / total) * 100 - knownPct - reviewPct) : 0;
+  if (el.progressKnown) el.progressKnown.style.width = `${knownPct}%`;
+  if (el.progressReview) el.progressReview.style.width = `${reviewPct}%`;
+  el.progressBar.style.width = `${remainingPct}%`;
 
   const disabled = !state.previewCard && (total === 0 || state.current >= total);
   el.prevCardBtn.disabled = Boolean(state.previewCard) || total === 0 || state.current <= 0;
@@ -4817,21 +4901,27 @@ async function showCard(direction = 0) {
         el.deckSummary.innerHTML = buildDeckSummaryHtml();
         el.deckSummary.hidden = false;
       }
+      if (el.deckEmptyState) el.deckEmptyState.hidden = true;
+      el.card.hidden = false;
+      el.card.closest(".quiz-panel")?.classList.add("deck-complete");
     } else {
-      // No deck loaded
+      // No deck loaded — show styled empty state
       if (el.deckSummary) el.deckSummary.hidden = true;
-      await renderMarkdown(el.questionView, "Import a deck to begin.");
-      await renderMarkdown(el.answerView, "");
-      el.questionView.style.fontSize = "";
-      el.questionView.style.width = "";
-      el.questionView.style.removeProperty("--question-fit-font-size");
+      if (el.deckEmptyState) el.deckEmptyState.hidden = false;
+      el.card.hidden = true;
+      el.card.closest(".quiz-panel")?.classList.remove("deck-complete");
+      el.card.closest(".quiz-panel")?.classList.add("is-deck-empty");
     }
     updateMeta();
     return;
   }
 
-  // Normal card — hide summary overlay
+  // Normal card — hide summary overlay and empty state
   if (el.deckSummary) el.deckSummary.hidden = true;
+  if (el.deckEmptyState) el.deckEmptyState.hidden = true;
+  el.card.hidden = false;
+  el.card.closest(".quiz-panel")?.classList.remove("deck-complete", "is-deck-empty");
+  maybeShowSwipeHint();
   await renderMarkdown(el.questionView, card.question, true);
   await renderMarkdown(el.answerView, card.answer, true);
   scheduleLiveQuestionFit();
@@ -4855,6 +4945,7 @@ function animateToCard(direction, updateState) {
 
   window.setTimeout(() => {
     if (state.transitionToken !== token) return;
+    commitEditIfActive();
     updateState();
     showCard(direction);
   }, 210);
@@ -5093,6 +5184,7 @@ function moveCard(result) {
   syncResults();
 
   if (state.previewCard) {
+    commitEditIfActive();
     state.previewCard = null;
     setStatus(`Moved card to ${result}.`);
     showCard();
@@ -5115,12 +5207,14 @@ function shuffleCards() {
 }
 
 function resetQuiz() {
+  commitEditIfActive();
   resetStudyDeck(state.masterCards);
   setStatus("Studying all cards.");
   showCard();
 }
 
 function replayDeck(scope) {
+  commitEditIfActive();
   syncResults();
   const selected = scope === "known"
     ? state.results.known.slice()
@@ -5990,7 +6084,7 @@ async function fetchUrl() {
   }
 
   state.importTitleHint = url;
-  el.fetchBtn.disabled = true;
+  setButtonLoading(el.fetchBtn, true, "Fetching…");
   setStatus("Fetching source...");
 
   try {
@@ -6030,7 +6124,7 @@ async function fetchUrl() {
   } catch (error) {
     setStatus("Could not fetch this URL. If it is private Notion content, export Markdown or paste the page content.", "error");
   } finally {
-    el.fetchBtn.disabled = false;
+    setButtonLoading(el.fetchBtn, false);
   }
 }
 
@@ -6454,6 +6548,7 @@ function finishSwipe() {
 function handlePointerDown(event) {
   if (!currentCardCanMove() || isCardActionTarget(event.target)) return;
   if (isHorizontalScrollTarget(event.target)) return;
+  dismissSwipeHint();
   beginSwipe(event.clientX, event.clientY, event.pointerId, event.pointerType);
 }
 
@@ -6656,21 +6751,24 @@ function closeDeckMenu() {
 
 function createNewDeck() {
   closeDeckMenu();
+  const doCreate = () => {
+    state.deckId = null;
+    state.deckTitle = "New Deck";
+    state.deckCategory = defaultDeckCategory;
+    state.sourceTitle = "New Deck";
+    state.importTitleHint = "New Deck";
+    state.masterCards = [createBlankCard()];
+    resetStudyDeck(state.masterCards);
+    closeImportPanel();
+    closeAllCardsPanel();
+    showCard();
+    setStatus("Created new deck.");
+  };
   if (state.masterCards.length > 0) {
-    if (!confirm("Create a new deck? Unsaved local progress will be lost.")) return;
+    showConfirmModal("Create a new deck? Unsaved local progress will be lost.", doCreate, { confirmLabel: "Create New" });
+  } else {
+    doCreate();
   }
-
-  state.deckId = null;
-  state.deckTitle = "New Deck";
-  state.deckCategory = defaultDeckCategory;
-  state.sourceTitle = "New Deck";
-  state.importTitleHint = "New Deck";
-  state.masterCards = [createBlankCard()];
-  resetStudyDeck(state.masterCards);
-  closeImportPanel();
-  closeAllCardsPanel();
-  showCard();
-  setStatus("Created new deck.");
 }
 
 
@@ -7095,6 +7193,8 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "ArrowLeft") navigateCard(-1, "prev");
   if (event.key === "ArrowDown") navigateCard(1);
   if (event.key === "ArrowUp") navigateCard(-1);
+  if (event.key === "k" || event.key === "K") moveCard("known");
+  if (event.key === "r" || event.key === "R") moveCard("review");
 });
 
 document.addEventListener("click", (event) => {
@@ -7197,6 +7297,35 @@ async function bootApp() {
 
 bootApp();
 
+function commitEditIfActive() {
+  const sides = [
+    { side: "question", view: el.questionView, edit: el.questionEdit, toolbar: el.questionEditToolbar, btn: el.editQuestionBtn },
+    { side: "answer",   view: el.answerView,   edit: el.answerEdit,   toolbar: el.answerEditToolbar,   btn: el.editAnswerBtn },
+  ];
+  const card = state.cards[state.current];
+  for (const { side, view, edit, toolbar, btn } of sides) {
+    if (view.hidden === false) continue; // not in edit mode for this side
+    if (card) {
+      const newValue = edit.value.trim();
+      if (side === "question") card.question = newValue;
+      else card.answer = newValue;
+      const masterIndex = state.masterCards.findIndex(c => c.id === card.id);
+      if (masterIndex > -1) {
+        if (side === "question") state.masterCards[masterIndex].question = newValue;
+        else state.masterCards[masterIndex].answer = newValue;
+      }
+    }
+    view.hidden = false;
+    edit.hidden = true;
+    edit.value = "";
+    if (toolbar) toolbar.hidden = true;
+    if (btn) {
+      btn.innerHTML = "&#9998;";
+      btn.title = side === "question" ? "Edit question" : "Edit answer";
+    }
+  }
+}
+
 function toggleEditMode(side) {
   const isQuestion = side === 'question';
   const btn = isQuestion ? el.editQuestionBtn : el.editAnswerBtn;
@@ -7284,19 +7413,53 @@ if (el.deleteCardBtn) {
   el.deleteCardBtn.addEventListener("click", async (e) => {
     e.stopPropagation();
     if (!state.masterCards.length) return;
-    if (!confirm("Delete this card?")) return;
     const card = state.cards[state.current];
-    
-    state.masterCards = state.masterCards.filter(c => c.id !== card.id);
-    state.cards = state.cards.filter(c => c.id !== card.id);
-    delete state.statusById[card.id];
-    
-    if (state.current >= state.cards.length) {
-      state.current = Math.max(0, state.cards.length - 1);
-    }
-    
-    showCard();
-    setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
+    showConfirmModal("Delete this card? This cannot be undone.", () => {
+      state.masterCards = state.masterCards.filter(c => c.id !== card.id);
+      state.cards = state.cards.filter(c => c.id !== card.id);
+      delete state.statusById[card.id];
+      if (state.current >= state.cards.length) {
+        state.current = Math.max(0, state.cards.length - 1);
+      }
+      showCard();
+      setStatus(state.deckId ? "Card deleted locally. Sync to update the web deck." : "Card deleted.");
+    }, { confirmLabel: "Delete", danger: true });
+  });
+}
+
+const deckEmptyNewBtn = document.getElementById("deckEmptyNewBtn");
+const deckEmptyImportBtn2 = document.getElementById("deckEmptyImportBtn");
+const deckEmptyWebBtn = document.getElementById("deckEmptyWebBtn");
+if (deckEmptyNewBtn) deckEmptyNewBtn.addEventListener("click", () => createNewDeck());
+if (deckEmptyImportBtn2) deckEmptyImportBtn2.addEventListener("click", () => openImportPanel());
+if (deckEmptyWebBtn) deckEmptyWebBtn.addEventListener("click", () => openWebDecksPanel());
+
+const helpModal = document.getElementById("helpModal");
+const helpBtn = document.getElementById("helpBtn");
+const helpModalCloseBtn = document.getElementById("helpModalCloseBtn");
+const helpModalCloseFootBtn = document.getElementById("helpModalCloseFootBtn");
+
+function openHelpModal() {
+  if (!helpModal) return;
+  helpModal.hidden = false;
+  lockPageScroll();
+}
+
+function closeHelpModal() {
+  if (!helpModal) return;
+  helpModal.hidden = true;
+  unlockPageScroll();
+}
+
+if (helpBtn) helpBtn.addEventListener("click", openHelpModal);
+if (helpModalCloseBtn) helpModalCloseBtn.addEventListener("click", closeHelpModal);
+if (helpModalCloseFootBtn) helpModalCloseFootBtn.addEventListener("click", closeHelpModal);
+if (helpModal) {
+  helpModal.addEventListener("click", (e) => {
+    if (e.target === helpModal) closeHelpModal();
+  });
+  helpModal.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { e.stopPropagation(); closeHelpModal(); }
   });
 }
 
