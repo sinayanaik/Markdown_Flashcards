@@ -3291,6 +3291,23 @@ function resetStudyDeck(cards = state.masterCards) {
   resetResults();
 }
 
+function stripMarkdownPreview(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, "[code]")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^>\s*/gm, "")
+    .replace(/^[-*+]\s+/gm, "• ")
+    .replace(/\|/g, " ")
+    .replace(/^-{3,}$/gm, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function renderBrickList(container, cards, group) {
   container.innerHTML = "";
   cards.forEach((card, index) => {
@@ -3300,7 +3317,7 @@ function renderBrickList(container, cards, group) {
     item.title = "Preview this card";
     item.dataset.group = group;
     item.dataset.index = String(index);
-    item.textContent = `${index + 1}. ${card.question}`;
+    item.textContent = `${index + 1}. ${stripMarkdownPreview(card.question)}`;
     container.appendChild(item);
   });
 }
@@ -7191,8 +7208,6 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "ArrowRight") navigateCard(1, "next");
   if (event.key === "ArrowLeft") navigateCard(-1, "prev");
-  if (event.key === "ArrowDown") navigateCard(1);
-  if (event.key === "ArrowUp") navigateCard(-1);
   if (event.key === "k" || event.key === "K") moveCard("known");
   if (event.key === "r" || event.key === "R") moveCard("review");
 });

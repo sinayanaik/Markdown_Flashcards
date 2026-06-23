@@ -1337,6 +1337,10 @@ button:disabled {
   text-align: left;
   box-shadow: var(--brick-shadow);
   cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .brick:hover {
@@ -1629,12 +1633,12 @@ button:disabled {
   position: relative;
   overflow: auto;
   max-width: 100%;
-  margin: 1em 0;
+  margin: 0.55em 0;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
   border-radius: var(--diagram-radius);
   background: #0b1110;
   color: #dbe7e4;
-  font-size: var(--code-font-size);
+  font-size: 1em;
   line-height: var(--code-line-height);
   tab-size: 2;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -1664,12 +1668,12 @@ button:disabled {
 }
 
 .rendered pre code[class*="language-"] {
-  padding: 8px 12px;
+  padding: 6px 12px;
   text-shadow: none;
 }
 
 .rendered pre.has-code-language code[class*="language-"] {
-  padding-top: 26px;
+  padding-top: 24px;
 }
 
 .rendered pre[class*="language-"] {
