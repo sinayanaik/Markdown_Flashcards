@@ -1612,6 +1612,57 @@ button:disabled {
   transform: translateY(-2px);
 }
 
+/* Long-press feedback: a glowing border fills around the card perimeter,
+   completing exactly as the mode flips. */
+@property --hold-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.card.is-holding::before,
+.card.is-holding-complete::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  padding: 4px;                       /* border thickness */
+  pointer-events: none;
+  z-index: 30;
+  /* Mask trick: show only the padded border band, cut out the centre */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  filter:
+    drop-shadow(0 0 5px var(--accent))
+    drop-shadow(0 0 12px var(--accent));
+}
+
+.card.is-holding::before {
+  background: conic-gradient(
+    from -90deg,
+    var(--accent) var(--hold-angle),
+    color-mix(in srgb, var(--accent) 14%, transparent) var(--hold-angle)
+  );
+  animation: holdRingFill var(--hold-dur, 450ms) linear forwards;
+}
+
+@keyframes holdRingFill {
+  from { --hold-angle: 0deg; }
+  to   { --hold-angle: 360deg; }
+}
+
+/* Completion flash: full bright ring */
+.card.is-holding-complete::before {
+  background: var(--accent);
+  filter:
+    drop-shadow(0 0 9px var(--accent))
+    drop-shadow(0 0 20px var(--accent))
+    brightness(1.25);
+}
+
 .card.swipe-left {
   opacity: 0;
   transform: translateX(-42px) rotate(-1deg) scale(0.992);
@@ -5269,6 +5320,81 @@ textarea {
 .edit-card-btn:active {
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.22);
   transform: translateY(0);
+}
+
+.edit-toggle-pill {
+  width: 58px;
+  min-height: 30px;
+  height: 30px;
+  padding: 3px;
+  gap: 0;
+  border-radius: 999px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* sliding active indicator — default on right (view mode), slides left when editing */
+.edit-toggle-pill::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: calc(50%);
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  transition: left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 0;
+}
+
+.edit-toggle-pill.is-editing::before {
+  left: 3px;
+}
+
+.pill-seg {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.88rem;
+  line-height: 1;
+  transition: opacity 0.22s ease, color 0.22s ease;
+}
+
+/* View mode (default): eye active on right, pencil dimmed on left */
+.pill-seg-edit {
+  opacity: 0.28;
+  color: var(--muted);
+}
+
+.pill-seg-view {
+  opacity: 1;
+  color: var(--accent);
+}
+
+/* Edit mode: pencil active on left, eye dimmed on right */
+.edit-toggle-pill.is-editing .pill-seg-edit {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.edit-toggle-pill.is-editing .pill-seg-view {
+  opacity: 0.28;
+  color: var(--muted);
+}
+
+.edit-toggle-pill:hover::before {
+  background: color-mix(in srgb, var(--accent) 24%, var(--panel));
+}
+
+.edit-toggle-pill.is-editing {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
 }
 
 #deleteCardBtn {

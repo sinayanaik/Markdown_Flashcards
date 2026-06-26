@@ -73,6 +73,8 @@ const state = {
   dragging: false,
   dragMoved: false,
   suppressClickUntil: 0,
+  longPressTimer: null,
+  longPressFired: false,
   transitionToken: 0,
   styleSettings: {},
   styleProfiles: {
@@ -6460,6 +6462,56 @@ function dragVelocity(current, previous, time) {
   return (current - previous) / elapsed;
 }
 
+const LONG_PRESS_MS = 450;
+
+// A glowing conic-gradient border fills around the card perimeter over the
+// long-press duration (driven entirely by CSS on the .card element).
+function startHoldProgress() {
+  const card = el.card;
+  card.classList.remove("is-holding", "is-holding-complete");
+  void card.offsetWidth; // force reflow so the fill animation restarts cleanly
+  card.style.setProperty("--hold-dur", `${LONG_PRESS_MS}ms`);
+  card.classList.add("is-holding");
+}
+
+function stopHoldProgress() {
+  el.card.classList.remove("is-holding", "is-holding-complete");
+}
+
+// Flash the fully-lit border at the moment the mode flips, then clear it.
+function completeHoldProgress() {
+  el.card.classList.add("is-holding-complete");
+  setTimeout(() => {
+    el.card.classList.remove("is-holding", "is-holding-complete");
+  }, 200);
+}
+
+function startLongPress() {
+  cancelLongPress();
+  state.longPressFired = false;
+  if (state.previewCard || !state.cards[state.current]) return;
+  const side = state.flipped ? "answer" : "question";
+  const view = side === "question" ? el.questionView : el.answerView;
+  if (view.hidden) return; // already editing this face
+  startHoldProgress();
+  state.longPressTimer = setTimeout(() => {
+    state.longPressTimer = null;
+    state.longPressFired = true;
+    completeHoldProgress();
+    state.suppressClickUntil = performance.now() + 500;
+    window.getSelection()?.removeAllRanges();
+    toggleEditMode(side);
+  }, LONG_PRESS_MS);
+}
+
+function cancelLongPress() {
+  if (state.longPressTimer) {
+    clearTimeout(state.longPressTimer);
+    state.longPressTimer = null;
+  }
+  stopHoldProgress();
+}
+
 function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   const time = performance.now();
   state.dragging = false;
@@ -6475,9 +6527,11 @@ function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   state.dragPointerId = pointerId;
   state.dragPointerType = pointerType;
   state.dragCaptured = false;
+  startLongPress();
 }
 
 function resetCardDrag() {
+  cancelLongPress();
   state.dragging = false;
   state.dragPointerId = null;
   state.dragPointerType = "";
@@ -6488,6 +6542,7 @@ function resetCardDrag() {
 }
 
 function updateSwipe(clientX, clientY, event) {
+  if (state.longPressFired) return;
   if (event?.pointerType === "mouse" && hasCardTextSelection()) {
     if (state.dragCaptured && typeof state.dragPointerId === "number") {
       el.card.releasePointerCapture?.(state.dragPointerId);
@@ -6506,6 +6561,7 @@ function updateSwipe(clientX, clientY, event) {
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
   state.dragMoved = state.dragMoved || absX > 6 || absY > 6;
+  if (state.dragMoved) cancelLongPress();
 
   if (!state.dragging) {
     const hasHorizontalIntent = absX >= swipeConfig.intentDistance && absX >= absY * swipeConfig.intentRatio;
@@ -6555,6 +6611,7 @@ function updateSwipe(clientX, clientY, event) {
 }
 
 function finishSwipe() {
+  cancelLongPress();
   const dx = state.dragCurrentX - state.dragStartX;
   const dy = state.dragCurrentY - state.dragStartY;
   const absX = Math.abs(dx);
@@ -7193,6 +7250,12 @@ el.mobileStackToggle?.addEventListener("click", (event) => {
   });
 });
 el.card.addEventListener("click", (event) => {
+  // A long-press just opened edit mode — swallow the trailing click
+  if (state.longPressFired) {
+    state.longPressFired = false;
+    event.preventDefault();
+    return;
+  }
   if (performance.now() < state.suppressClickUntil) {
     event.preventDefault();
     return;
@@ -7204,7 +7267,9 @@ el.card.addEventListener("click", (event) => {
     return;
   }
   if (hasCardTextSelection()) return;
-  if (Math.abs(state.dragCurrentX - state.dragStartX) < 8 && Math.abs(state.dragCurrentY - state.dragStartY) < 8 && !isCardActionTarget(event.target)) flipCard();
+  const isDrag = Math.abs(state.dragCurrentX - state.dragStartX) >= 8 || Math.abs(state.dragCurrentY - state.dragStartY) >= 8;
+  if (isDrag || isCardActionTarget(event.target)) return;
+  flipCard();
 });
 el.card.addEventListener("pointerdown", handlePointerDown);
 el.card.addEventListener("pointermove", handlePointerMove);
@@ -7361,7 +7426,7 @@ function commitEditIfActive() {
     edit.value = "";
     if (toolbar) toolbar.hidden = true;
     if (btn) {
-      btn.innerHTML = "&#9998;";
+      btn.classList.remove('is-editing');
       btn.title = side === "question" ? "Edit question" : "Edit answer";
     }
   }
@@ -7384,8 +7449,10 @@ function toggleEditMode(side) {
     edit.hidden = false;
     if (toolbar) toolbar.hidden = false;
     edit.value = isQuestion ? currentCard.question : currentCard.answer;
-    btn.innerHTML = '&#128190;';
-    btn.title = 'Save';
+    if (btn) {
+      btn.classList.add('is-editing');
+      btn.title = 'Back to preview';
+    }
     edit.dispatchEvent(new Event("input", { bubbles: true }));
   } else {
     const newValue = edit.value.trim();
@@ -7394,7 +7461,7 @@ function toggleEditMode(side) {
     } else {
       currentCard.answer = newValue;
     }
-    
+
     const masterIndex = state.masterCards.findIndex(c => c.id === currentCard.id);
     if (masterIndex > -1) {
       if (isQuestion) state.masterCards[masterIndex].question = newValue;
@@ -7404,13 +7471,15 @@ function toggleEditMode(side) {
     view.hidden = false;
     edit.hidden = true;
     if (toolbar) toolbar.hidden = true;
-    btn.innerHTML = '&#9998;';
-    btn.title = isQuestion ? 'Edit question' : 'Edit answer';
-    
+    if (btn) {
+      btn.classList.remove('is-editing');
+      btn.title = isQuestion ? 'Edit question' : 'Edit answer';
+    }
+
     renderMarkdown(view, newValue, true).then(() => {
       if (isQuestion) scheduleLiveQuestionFit();
     });
-    
+
     setStatus(state.deckId ? "Card updated locally. Sync to update the web deck." : "Card updated.");
   }
 }
@@ -7427,6 +7496,49 @@ el.editAnswerBtn.addEventListener('click', (e) => {
 
 el.questionEdit.addEventListener('click', (e) => e.stopPropagation());
 el.answerEdit.addEventListener('click', (e) => e.stopPropagation());
+
+// Auto-save when focus leaves the textarea (blur), unless focus moved to the edit button (which handles its own toggle)
+el.questionEdit.addEventListener('blur', (e) => {
+  if (!el.questionEdit.hidden && e.relatedTarget !== el.editQuestionBtn) toggleEditMode('question');
+});
+el.answerEdit.addEventListener('blur', (e) => {
+  if (!el.answerEdit.hidden && e.relatedTarget !== el.editAnswerBtn) toggleEditMode('answer');
+});
+
+// Long-press inside the editor → commit and return to rendered view (reverse of long-press to edit)
+function attachExitLongPress(textarea, side) {
+  let timer = null;
+  let sx = 0;
+  let sy = 0;
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    stopHoldProgress();
+  };
+  textarea.addEventListener("pointerdown", (e) => {
+    clear();
+    sx = e.clientX;
+    sy = e.clientY;
+    startHoldProgress();
+    timer = setTimeout(() => {
+      timer = null;
+      completeHoldProgress();
+      state.suppressClickUntil = performance.now() + 500;
+      toggleEditMode(side); // commits edits and returns to rendered view
+    }, LONG_PRESS_MS);
+  });
+  textarea.addEventListener("pointermove", (e) => {
+    if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) clear();
+  });
+  textarea.addEventListener("pointerup", clear);
+  textarea.addEventListener("pointercancel", clear);
+  textarea.addEventListener("blur", clear);
+}
+
+attachExitLongPress(el.questionEdit, "question");
+attachExitLongPress(el.answerEdit, "answer");
 
 if (el.newDeckBtn) {
   el.newDeckBtn.addEventListener("click", createNewDeck);
