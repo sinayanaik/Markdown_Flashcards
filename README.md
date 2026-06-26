@@ -14,9 +14,12 @@ A static web app that turns Markdown into swipeable flashcards, with Supabase-ba
 - [Importing Decks](#importing-decks)
 - [Toolbar Reference](#toolbar-reference)
 - [Studying](#studying)
+- [Editing & Formatting Cards](#editing--formatting-cards)
+- [Quick Notes](#quick-notes)
 - [All Cards Panel](#all-cards-panel)
 - [Exporting](#exporting)
 - [Web Decks (Cloud Sync)](#web-decks-cloud-sync)
+- [Notifications](#notifications)
 - [Style Settings](#style-settings)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [PWA / Offline Support](#pwa--offline-support)
@@ -30,7 +33,9 @@ A static web app that turns Markdown into swipeable flashcards, with Supabase-ba
 - **Multiple import sources** — paste Markdown, upload `.md` / `.txt` / `.json` / `.zip`, fetch from a raw URL, or use Jina Reader for public web pages
 - **Swipe + keyboard navigation** — swipe left/right on mobile, arrow keys on desktop
 - **Known / Review categorization** — cards can be marked Known or Review and replayed in filtered sessions
-- **Inline card editing** — edit question or answer text directly in the study view
+- **Inline card editing** — edit question or answer text directly in the study view, with a rich **formatting toolbar** (bold, italic, underline, strikethrough, code, fonts, colours, bullet lists)
+- **Quick Notes** — select any text while editing an answer and save it straight to a dedicated `quick_notes` cloud deck with one click
+- **Toast confirmations** — every cloud action (sync, load, delete, rename, export, quick note) pops a toast so you always know it worked
 - **All Cards panel** — browse, search, and edit every card in a deck at once
 - **Cloud sync** — push any local deck to Supabase; pull it back on any device
 - **Multi-user auth** — email + password login; no credentials stored in the source code
@@ -285,7 +290,8 @@ By default importing replaces the current deck. To add cards to an existing deck
 
 | Button | Action |
 |---|---|
-| **Sync** | Syncs the currently loaded local deck to your Supabase database |
+| **Sync to Cloud** | Syncs the currently loaded local deck to your Supabase database (shows a confirmation toast) |
+| **Web Decks** | Opens the Web Decks panel (auto-loads the deck list) |
 | **Export** | Opens the export menu (see [Exporting](#exporting)) |
 | **All** | Opens the All Cards panel — browse and edit every card at once |
 | **Aa** | Opens the Style Settings panel to customise fonts, sizes, and theme |
@@ -297,8 +303,8 @@ By default importing replaces the current deck. To add cards to an existing deck
 |---|---|
 | **← Review** | Marks the current card as Review (needs more practice) |
 | **Known →** | Marks the current card as Known |
-| **✎** (pencil, question side) | Switches the question to edit mode |
-| **✎** (pencil, answer side) | Switches the answer to edit mode |
+| **✎** (pencil, question side) | Switches the question to edit mode (shows the formatting toolbar) |
+| **✎** (pencil, answer side) | Switches the answer to edit mode (formatting toolbar + **📌** Quick Note button) |
 | **+** | Adds a new blank card after the current position |
 | **✕** | Deletes the current card |
 | **◀ ▶** | Navigate to previous / next card |
@@ -325,6 +331,44 @@ These appear when you reach the last card:
 - **Click a card in the stack** — loads that specific card directly
 - **Progress bar** — the thin bar at the top of the card area shows how far through the deck you are
 - **Score display** — the header shows `Known X / Review Y` as a live count
+
+---
+
+## Editing & Formatting Cards
+
+Enter edit mode on the question or answer face in either of two ways:
+
+- Click the **pencil** (✎) icon on that face, or
+- **Long-press** the card
+
+While editing, a **formatting toolbar** appears above the text. Select a span of text, then click a button to wrap it in Markdown/HTML:
+
+| Button | Formatting |
+|---|---|
+| **B** / **I** / **U** | Bold, Italic, Underline |
+| **S** | Strikethrough |
+| **&lt;/&gt;** | Inline code |
+| **Aa** | Font family picker |
+| **🎨** | Text colour (includes "Clear colour") |
+| **-** | Toggle bullet list |
+| **Tx** | Clear all formatting from the selection |
+| **📌** | Save the selection as a Quick Note (answer toolbar only — see below) |
+
+Click the **save** (💾) icon to commit. Edits are also committed automatically whenever you navigate away from the card.
+
+---
+
+## Quick Notes
+
+Quick Notes let you capture a snippet of an answer into a separate deck without interrupting your study flow.
+
+1. Open an **answer** in edit mode (pencil icon or long-press, then flip to the answer side)
+2. **Select** the text you want to keep
+3. Click the **📌** button at the end of the formatting toolbar
+
+The selection is saved as a new card in a dedicated **`quick_notes`** cloud deck, which is created automatically the first time you use the feature. The selected text becomes the card's **question**, leaving the **answer blank** for you to fill in later. A toast confirms the save, and you can open the `quick_notes` deck any time from **Web Decks**.
+
+> **Requires sign-in.** Quick Notes are stored as a cloud deck in Supabase, so you must be logged in. If you are not connected/signed in, a toast explains why the note could not be saved.
 
 ---
 
@@ -370,7 +414,7 @@ Web Decks are decks stored in Supabase. They are available on any device and any
 ### Syncing a local deck to the cloud
 
 1. Load a deck locally (import or create)
-2. Click **Sync** in the toolbar
+2. Click **Sync to Cloud** in the toolbar
 3. A preview diff appears showing what changed vs. the existing cloud version
 4. Choose **Overwrite** (fully replace the cloud copy) or **Merge** (keep any cloud-only cards)
 5. Click **Confirm Sync**
@@ -380,13 +424,15 @@ The sync confirmation modal shows:
 - Cards that will be **updated**
 - Cards that will be **deleted**
 
+When the sync finishes, a toast confirms success (or reports the error) — see [Notifications](#notifications).
+
 ### Web Decks panel buttons
 
-Open **Deck → Web Decks** to see the panel.
+Open **Deck → Web Decks** to see the panel. The deck list is **fetched automatically every time you open the panel**, so it is never stale — use **Refresh List** any time you want to pull the latest manually.
 
 | Button | Action |
 |---|---|
-| **Refresh** | Reloads the deck list from Supabase |
+| **Refresh List** | Re-fetches the deck list from Supabase (the list also auto-loads on open) |
 | **Load** (per deck) | Loads that deck into the study view |
 | Deck title (click) | Opens an inline editor to rename the deck |
 | Category badge (click) | Opens a dropdown to change or create a category |
@@ -398,6 +444,19 @@ Open **Deck → Web Decks** to see the panel.
 | **Export Selected** | Exports all checked decks as a single file |
 | **Export All** | Exports every deck in the database as a single file |
 | Category filter dropdown | Filters the list to show only decks in the selected category |
+
+---
+
+## Notifications
+
+Every action that touches the cloud gives you immediate, unmistakable feedback through a **toast** — a small notification that slides in at the top-center of the screen and dismisses itself after a couple of seconds (click it to dismiss early). Because toasts are not tied to the button you clicked, you get confirmation no matter where the action was triggered from.
+
+| Result | Example toast |
+|---|---|
+| **Success** | ✓ "Synced *Deck* to cloud · N cards", "Deck loaded", "Saved to quick_notes", "Refreshed · N decks" |
+| **Error** | ✕ "Cloud sync failed", "Couldn't load deck", "Couldn't save quick note" |
+
+Toasts appear for syncing, loading, deleting, renaming, re-categorising, exporting (single, selected, and all), refreshing the Web Decks list, and saving Quick Notes. The detailed status text at the bottom of the screen is still updated as well.
 
 ---
 

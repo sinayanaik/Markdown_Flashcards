@@ -3267,6 +3267,87 @@ textarea {
   color: var(--danger);
 }
 
+/* ── Toast notifications (web-sync confirmations) ───────────────── */
+.toast-container {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(92vw, 440px);
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.38);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-12px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast.is-leaving {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+.toast-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: #fff;
+}
+
+.toast-msg {
+  line-height: 1.35;
+}
+
+.toast-success {
+  border-color: color-mix(in srgb, var(--known) 55%, var(--line));
+}
+.toast-success .toast-icon {
+  background: var(--known);
+}
+
+.toast-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+}
+.toast-error .toast-icon {
+  background: var(--danger);
+}
+
+.toast-info .toast-icon {
+  background: var(--accent-strong);
+}
+
 .print-root {
   display: none;
 }
@@ -5813,6 +5894,28 @@ textarea {
   box-shadow: none !important;
 }
 
+/* Thin separator before the quick-note button */
+.edit-toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 2px;
+  background: var(--line);
+}
+
+/* Quick note button — accent-tinted so it reads as a distinct action */
+.edit-toolbar button.toolbar-quick-note {
+  font-size: 0.85rem !important;
+  background-color: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+}
+
+.edit-toolbar button.toolbar-quick-note:hover {
+  background-color: color-mix(in srgb, var(--accent) 28%, var(--panel)) !important;
+}
+
+.edit-toolbar button.toolbar-quick-note.quick-note-saved {
+  background-color: color-mix(in srgb, var(--known) 35%, var(--panel)) !important;
+}
+
 /* Dropdowns in inline toolbar */
 .edit-toolbar .toolbar-dropdown {
   position: relative;
@@ -7037,6 +7140,42 @@ kbd {
   color: var(--text);
   overflow-x: auto;
   white-space: pre;
+}
+
+/* Inline mini-toast preview chip inside help copy */
+.help-toast-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid color-mix(in srgb, var(--known) 55%, var(--line));
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.help-toast-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--known);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.help-toast-chip-err {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+}
+
+.help-toast-chip-err .help-toast-chip-icon {
+  background: var(--danger);
 }
 
 /* Demo buttons in help modal inherit real control colours */

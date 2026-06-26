@@ -678,7 +678,7 @@ async function touchWebDeckAccess(deckId) {
 
 
 
-async function fetchWebDecks() {
+async function fetchWebDecks({ toast = false } = {}) {
   if (!supabaseClient) return;
   const refreshBtn = document.getElementById("refreshWebDecksBtn");
   if (refreshBtn) setButtonLoading(refreshBtn, true, "Loading…");
@@ -712,12 +712,14 @@ async function fetchWebDecks() {
     if (!data || data.length === 0) {
       tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">No web decks found.</td></tr>";
       setStatus("Web decks loaded.");
+      if (toast) showToast("No web decks found", "info");
       return;
     }
 
     if (!visibleDecks.length) {
       tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">No decks in this category.</td></tr>";
       setStatus("Web decks loaded.");
+      if (toast) showToast("No decks in this category", "info");
       return;
     }
     
@@ -829,9 +831,11 @@ async function fetchWebDecks() {
       tbody.appendChild(tr);
     });
     setStatus("Web decks updated.");
+    if (toast) showToast(`Refreshed · ${visibleDecks.length} ${visibleDecks.length === 1 ? "deck" : "decks"}`);
   } catch (error) {
     console.error("Failed to fetch web decks", error);
     setStatus("Failed to fetch web decks.", "error");
+    if (toast) showToast("Couldn't refresh web decks", "error");
   } finally {
     if (refreshBtn) setButtonLoading(refreshBtn, false);
   }
@@ -932,10 +936,12 @@ function createWebDeckCategoryControl(deck, currentCategory, categories = webDec
       setStatus("Updating deck category...");
       await applyWebDeckCategory(deck.id, nextCategory);
       setStatus("Deck category updated.");
+      showToast(`Category set to "${nextCategory}"`);
       fetchWebDecks();
     } catch (error) {
       console.error("Failed to update deck category", error);
       setStatus("Failed to update deck category. Run the deck category SQL migration first.", "error");
+      showToast("Couldn't update category", "error");
       saveBtn.disabled = false;
     }
   };
@@ -956,10 +962,12 @@ function createWebDeckCategoryControl(deck, currentCategory, categories = webDec
       setStatus("Updating deck category...");
       await applyWebDeckCategory(deck.id, nextCategory);
       setStatus("Deck category updated.");
+      showToast(`Category set to "${nextCategory}"`);
       fetchWebDecks();
     } catch (error) {
       console.error("Failed to update deck category", error);
       setStatus("Failed to update deck category. Run the deck category SQL migration first.", "error");
+      showToast("Couldn't update category", "error");
       select.disabled = false;
       select.value = normalizeDeckCategory(currentCategory);
     }
@@ -1058,10 +1066,12 @@ async function renameWebDeck(deckId, currentTitle = "") {
         updateMeta();
       }
       setStatus("Web deck renamed.");
+      showToast(`Renamed to "${title}"`);
       fetchWebDecks();
     } catch (error) {
       console.error("Failed to rename web deck", error);
       setStatus("Failed to rename web deck.", "error");
+      showToast("Couldn't rename deck", "error");
     }
   });
 }
@@ -1303,11 +1313,13 @@ async function exportWebDeck(deckId, format) {
       setStatus("Exported web deck as JSON.");
     }
 
+    if (format !== "pdf") showToast(`Exported "${payload.deck.title || "deck"}" as ${format.toUpperCase()}`);
     await touchWebDeckAccess(deckId);
     fetchWebDecks();
   } catch (error) {
     console.error("Failed to export web deck", error);
     setStatus("Failed to export web deck.", "error");
+    showToast("Export failed", "error");
   }
 }
 
@@ -1368,10 +1380,12 @@ async function exportAllWebDecks(format) {
       setStatus("Exported all web decks as JSON.");
     }
 
+    if (format !== "pdf") showToast(`Exported all web decks as ${format.toUpperCase()}`);
     fetchWebDecks();
   } catch (error) {
     console.error("Failed to export all web decks", error);
     setStatus("Failed to export all web decks.", "error");
+    showToast("Export failed", "error");
   }
 }
 
@@ -1384,10 +1398,12 @@ async function deleteWebDeck(deckId) {
       if (error) throw error;
       if (state.deckId === deckId) state.deckId = null;
       setStatus("Deck deleted successfully.");
+      showToast("Deck deleted from cloud");
       fetchWebDecks();
     } catch (error) {
       console.error("Failed to delete web deck", error);
       setStatus("Failed to delete web deck.", "error");
+      showToast("Couldn't delete deck", "error");
     }
   }, { confirmLabel: "Delete", danger: true });
 }
@@ -1439,12 +1455,14 @@ async function loadWebDeck(deckId) {
     await touchWebDeckAccess(deckData.id);
     closeAllCardsPanel();
     setStatus(`Loaded ${cards.length} cards from web successfully.`);
+    showToast(`Loaded "${state.deckTitle || "deck"}" · ${cards.length} cards`);
     el.webDecksPanel.hidden = true;
     unlockPageScroll();
     closeImportPanel();
     showCard();
   } catch (error) {
     setStatus("Failed to load deck from web.", "error");
+    showToast("Couldn't load deck", "error");
     console.error(error);
   }
 }
@@ -1780,6 +1798,7 @@ async function syncDeckToWeb() {
     }
 
     setStatus("Deck synced to web successfully.");
+    showToast(`Synced "${deckTitle}" to cloud · ${state.masterCards.length} cards`);
   } catch (error) {
     const errorMessage = String(error?.message || "");
     setStatus(
@@ -1788,6 +1807,7 @@ async function syncDeckToWeb() {
         : "Failed to sync deck to web.",
       "error"
     );
+    showToast("Cloud sync failed", "error");
     console.error(error);
   } finally {
     if (syncBtn) setButtonLoading(syncBtn, false);
@@ -2702,6 +2722,46 @@ function setStatus(message, type = "info") {
   el.statusText.classList.toggle("error", type === "error");
 }
 
+// Transient toast notification, anchored top-center, used to confirm that
+// web-sync actions (sync, load, delete, rename, export, quick note) actually
+// completed — visible regardless of where the triggering button lives.
+function showToast(message, type = "success") {
+  let container = document.getElementById("toastContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toastContainer";
+    container.className = "toast-container";
+    container.setAttribute("role", "status");
+    container.setAttribute("aria-live", "polite");
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  const icon = type === "error" ? "✕" : type === "info" ? "ℹ" : "✓";
+  const iconEl = document.createElement("span");
+  iconEl.className = "toast-icon";
+  iconEl.setAttribute("aria-hidden", "true");
+  iconEl.textContent = icon;
+  const msgEl = document.createElement("span");
+  msgEl.className = "toast-msg";
+  msgEl.textContent = message;
+  toast.append(iconEl, msgEl);
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add("is-visible"));
+
+  const duration = type === "error" ? 4200 : 2600;
+  const dismiss = () => {
+    clearTimeout(timer);
+    toast.classList.remove("is-visible");
+    toast.classList.add("is-leaving");
+    setTimeout(() => toast.remove(), 280);
+  };
+  const timer = setTimeout(dismiss, duration);
+  toast.addEventListener("click", dismiss);
+}
+
 function setButtonLoading(btn, loading, text = "…") {
   if (!btn) return;
   if (loading) {
@@ -2859,6 +2919,9 @@ function openImportPanel() {
 function openWebDecksPanel() {
   lockPageScroll();
   el.webDecksPanel.hidden = false;
+  // Prefetch the deck list on open so the panel is never stale/empty; the
+  // "Refresh List" button remains for an on-demand re-fetch.
+  fetchWebDecks();
 }
 
 function closeImportPanel() {
@@ -4204,9 +4267,11 @@ async function loadSelectedWebDecks(deckIds) {
     unlockPageScroll();
     showCard();
     setStatus(`Successfully loaded ${deckIds.length} decks.`);
+    showToast(`Loaded ${deckIds.length} decks · ${combinedCards.length} cards`);
   } catch (error) {
     console.error("Failed to load selected web decks", error);
     setStatus("Failed to load selected web decks.", "error");
+    showToast("Couldn't load selected decks", "error");
   }
 }
 
@@ -4223,10 +4288,12 @@ async function deleteSelectedWebDecks(deckIds) {
           if (state.deckId === deckId) state.deckId = null;
         }
         setStatus(`Successfully deleted ${deckIds.length} decks.`);
+        showToast(`Deleted ${deckIds.length} decks from cloud`);
         fetchWebDecks();
       } catch (error) {
         console.error("Failed to delete selected web decks", error);
         setStatus("Failed to delete selected web decks.", "error");
+        showToast("Couldn't delete selected decks", "error");
       }
     },
     { confirmLabel: "Delete All", danger: true }
@@ -4250,10 +4317,12 @@ async function changeSelectedWebDecksCategory(deckIds) {
       }
       updateMeta();
       setStatus(`Updated category for ${deckIds.length} decks.`);
+      showToast(`Set category "${category}" on ${deckIds.length} decks`);
       fetchWebDecks();
     } catch (error) {
       console.error("Failed to update selected decks category", error);
       setStatus("Failed to update selected decks category.", "error");
+      showToast("Couldn't update categories", "error");
     }
   });
 }
@@ -4315,6 +4384,7 @@ async function exportSelectedWebDecks(deckIds, format) {
       setStatus("Exported selected web decks as JSON.");
     }
     
+    if (format !== "pdf") showToast(`Exported ${deckIds.length} decks as ${format.toUpperCase()}`);
     for (const deckId of deckIds) {
       await touchWebDeckAccess(deckId);
     }
@@ -4322,6 +4392,7 @@ async function exportSelectedWebDecks(deckIds, format) {
   } catch (error) {
     console.error("Failed to export selected web decks", error);
     setStatus("Failed to export selected web decks.", "error");
+    showToast("Export failed", "error");
   }
 }
 
@@ -6955,7 +7026,7 @@ document.getElementById("cancelSyncBtn")?.addEventListener("click", () => {
   el.syncModal.hidden = true;
 });
 document.getElementById("confirmSyncBtn")?.addEventListener("click", syncDeckToWeb);
-document.getElementById("refreshWebDecksBtn")?.addEventListener("click", fetchWebDecks);
+document.getElementById("refreshWebDecksBtn")?.addEventListener("click", () => fetchWebDecks({ toast: true }));
 
 el.parseBtn.addEventListener("click", () => buildCards());
 el.sampleBtn.addEventListener("click", loadSample);
@@ -7721,8 +7792,14 @@ document.addEventListener("paste", (event) => {
   target.dispatchEvent(new Event("input", { bubbles: true }));
 });
 
-// Dynamic HTML template for the inline edit toolbar
-function createToolbarHtml() {
+// Dynamic HTML template for the inline edit toolbar.
+// Pass { quickNote: true } to append the "save selection to quick_notes" button.
+function createToolbarHtml(options = {}) {
+  const quickNoteBtn = options.quickNote
+    ? `
+    <span class="edit-toolbar-divider" aria-hidden="true"></span>
+    <button type="button" data-action="quick-note" class="toolbar-quick-note" title="Save selection to the quick_notes deck">📌</button>`
+    : "";
   return `
     <button type="button" data-action="bold" title="Bold"><b>B</b></button>
     <button type="button" data-action="italic" title="Italic"><i>I</i></button>
@@ -7772,7 +7849,7 @@ function createToolbarHtml() {
     </div>
 
     <button type="button" data-action="bullet" title="Toggle Bullet List">-</button>
-    <button type="button" data-action="clear-all" title="Clear Formatting">Tx</button>
+    <button type="button" data-action="clear-all" title="Clear Formatting">Tx</button>${quickNoteBtn}
   `;
 }
 
@@ -7782,7 +7859,7 @@ function initToolbars() {
   if (qToolbar) qToolbar.innerHTML = createToolbarHtml();
 
   const aToolbar = el.answerEditToolbar;
-  if (aToolbar) aToolbar.innerHTML = createToolbarHtml();
+  if (aToolbar) aToolbar.innerHTML = createToolbarHtml({ quickNote: true });
 
   if (el.questionEdit) enableSyntaxHighlighting(el.questionEdit);
   if (el.answerEdit) enableSyntaxHighlighting(el.answerEdit);
@@ -8003,6 +8080,16 @@ function handleToolbarClick(event) {
   const end = textarea.selectionEnd;
   const selectedText = textarea.value.substring(start, end);
 
+  // Quick note: save the selected text as a new card (question) in the
+  // quick_notes web deck instead of formatting the textarea.
+  if (button.dataset.action === "quick-note") {
+    document.querySelectorAll(".edit-toolbar .toolbar-dropdown").forEach(d => {
+      d.classList.remove("is-open");
+    });
+    saveQuickNote(selectedText, button);
+    return;
+  }
+
   let formatFn = null;
 
   if (button.dataset.action === "bold") {
@@ -8060,6 +8147,105 @@ function handleToolbarClick(event) {
   document.querySelectorAll(".edit-toolbar .toolbar-dropdown").forEach(d => {
     d.classList.remove("is-open");
   });
+}
+
+// Persisted id of the user's quick_notes deck. Deterministic per user so
+// repeated saves always append to the same deck.
+const QUICK_NOTES_DECK_TITLE = "quick_notes";
+
+// Ensure the quick_notes web deck exists for the current user, returning its id.
+async function ensureQuickNotesDeck(userId) {
+  const deckId = `quick-notes-${userId}`;
+
+  const { data: existing, error: lookupError } = await supabaseClient
+    .from("decks")
+    .select("id")
+    .eq("id", deckId)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return deckId;
+
+  const now = new Date().toISOString();
+  const { error: insertError } = await supabaseClient
+    .from("decks")
+    .upsert({
+      id: deckId,
+      title: QUICK_NOTES_DECK_TITLE,
+      category: defaultDeckCategory,
+      current_card_index: 0,
+      updated_at: now,
+      last_accessed_at: now
+    });
+  if (insertError) throw insertError;
+  return deckId;
+}
+
+// Save the selected text as a new card (text becomes the question, answer left
+// blank to fill in later) appended to the quick_notes web deck.
+async function saveQuickNote(rawText, button) {
+  const text = String(rawText || "").trim();
+  if (!text) {
+    setStatus("Select some text in the answer first to save a quick note.", "error");
+    return;
+  }
+
+  if (!supabaseClient) {
+    setStatus("Connect to Supabase and sign in to save quick notes.", "error");
+    return;
+  }
+
+  const user = await getCurrentUser();
+  if (!user) {
+    setStatus("Sign in to save quick notes to the cloud.", "error");
+    return;
+  }
+
+  if (button) button.disabled = true;
+  setStatus("Saving quick note…");
+
+  try {
+    const deckId = await ensureQuickNotesDeck(user.id);
+
+    const { count, error: countError } = await supabaseClient
+      .from("cards")
+      .select("id", { count: "exact", head: true })
+      .eq("deck_id", deckId);
+    if (countError) throw countError;
+
+    const now = new Date().toISOString();
+    const cardId = `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const { error: cardError } = await supabaseClient
+      .from("cards")
+      .insert({
+        id: cardId,
+        deck_id: deckId,
+        question: text,
+        answer: "",
+        position: count || 0,
+        status: null,
+        updated_at: now
+      });
+    if (cardError) throw cardError;
+
+    // Bump the deck so it surfaces as recently used in the Web Decks panel.
+    await supabaseClient
+      .from("decks")
+      .update({ updated_at: now, last_accessed_at: now })
+      .eq("id", deckId);
+
+    setStatus("Saved to quick_notes.");
+    showToast("Saved to quick_notes");
+    if (button) {
+      button.classList.add("quick-note-saved");
+      setTimeout(() => button.classList.remove("quick-note-saved"), 1200);
+    }
+  } catch (error) {
+    setStatus("Failed to save quick note.", "error");
+    showToast("Couldn't save quick note", "error");
+    console.error(error);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 // ── Hamburger menu (side drawer, all screen sizes) ───────────────

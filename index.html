@@ -481,12 +481,32 @@
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">5. Edit Cards</h3>
-            <p>Click the pencil icon <button type="button" class="edit-card-btn help-demo-btn" tabindex="-1">✏</button> on the question or answer face to edit. Click the save icon <button type="button" class="edit-card-btn help-demo-btn" tabindex="-1">💾</button> to save. Edits are always committed when you navigate away.</p>
+            <h3 class="help-section-title">5. Edit &amp; Format Cards</h3>
+            <p>Click the pencil icon <button type="button" class="edit-card-btn help-demo-btn" tabindex="-1">✏</button> on the question or answer face — or <strong>long-press the card</strong> — to edit. Click the save icon <button type="button" class="edit-card-btn help-demo-btn" tabindex="-1">💾</button> to save. Edits are always committed when you navigate away.</p>
+            <p>While editing, a <strong>formatting toolbar</strong> appears above the text. Select some text, then click a button to wrap it:</p>
+            <table class="help-table">
+              <tr><td><kbd>B</kbd> <kbd>I</kbd> <kbd>U</kbd> <kbd>S</kbd></td><td>Bold, Italic, Underline, Strikethrough</td></tr>
+              <tr><td><kbd>&lt;/&gt;</kbd></td><td>Inline code</td></tr>
+              <tr><td><kbd>Aa</kbd></td><td>Font family picker</td></tr>
+              <tr><td><kbd>🎨</kbd></td><td>Text colour (with “Clear colour”)</td></tr>
+              <tr><td><kbd>-</kbd></td><td>Toggle bullet list</td></tr>
+              <tr><td><kbd>Tx</kbd></td><td>Clear all formatting from the selection</td></tr>
+            </table>
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">6. Track Progress</h3>
+            <h3 class="help-section-title">6. Quick Notes 📌</h3>
+            <p>Found something worth keeping while reviewing an answer? Capture it without leaving your deck:</p>
+            <ul class="help-list">
+              <li>Open the <strong>answer</strong> in edit mode (pencil icon or long-press, then flip to the answer side)</li>
+              <li><strong>Select the text</strong> you want to keep</li>
+              <li>Click the <strong>📌</strong> button at the end of the formatting toolbar</li>
+            </ul>
+            <p>The selection is saved as a new card in a dedicated <code>quick_notes</code> cloud deck (created automatically the first time). The selected text becomes the card’s <strong>question</strong>, with a blank answer for you to fill in later. A <span class="help-toast-chip"><span class="help-toast-chip-icon">✓</span> Saved to quick_notes</span> toast confirms it worked. Open your <code>quick_notes</code> deck any time from <strong>Web Decks</strong>. <em>(Requires sign-in, since notes are stored in the cloud.)</em></p>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">7. Track Progress</h3>
             <p>The coloured bar at the top of the card area shows your session progress:</p>
             <div class="help-progress-demo" aria-hidden="true">
               <div class="help-progress-known" style="width:30%"></div>
@@ -502,26 +522,29 @@
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">7. All Cards Panel</h3>
+            <h3 class="help-section-title">8. All Cards Panel</h3>
             <p>Click <button type="button" class="tool-button help-demo-btn" tabindex="-1">All</button> to see every card in a scrollable Cornell-note view. You can edit, delete, or reorder cards from here.</p>
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">8. Sync &amp; Export</h3>
+            <h3 class="help-section-title">9. Sync, Cloud &amp; Web Decks</h3>
             <div class="help-btn-row">
-              <button type="button" class="tool-button help-demo-btn" tabindex="-1">Sync</button>
+              <button type="button" class="tool-button help-demo-btn" tabindex="-1">⟳ Sync to Cloud</button>
+              <button type="button" class="tool-button help-demo-btn" tabindex="-1">☶ Web Decks</button>
               <button type="button" class="tool-button help-demo-btn" tabindex="-1">Export ▾</button>
             </div>
             <ul class="help-list">
-              <li><strong>Sync</strong> — save the current deck to the cloud (requires sign-in via the Sync button)</li>
+              <li><strong>Sync to Cloud</strong> — save the current deck to your account (requires sign-in)</li>
+              <li><strong>Web Decks</strong> — browse your saved decks. The list is <strong>loaded automatically</strong> each time you open the panel; hit <strong>Refresh List</strong> any time to re-fetch. From here you can load, rename, re-categorise, export, or delete decks (singly or in bulk)</li>
               <li><strong>Export → Markdown</strong> — download the full deck as a <code>.md</code> file</li>
               <li><strong>Export → Cornell PDF</strong> — export Known or Review cards as printable notes</li>
               <li><strong>Export → JSON / SQL</strong> — machine-readable formats for data portability</li>
             </ul>
+            <p>Every cloud action gives you instant feedback: a toast slides in at the top of the screen confirming it worked — for example <span class="help-toast-chip"><span class="help-toast-chip-icon">✓</span> Synced to cloud</span> or <span class="help-toast-chip help-toast-chip-err"><span class="help-toast-chip-icon">✕</span> Cloud sync failed</span> — so you never have to wonder whether your sync, load, or delete went through. Click a toast to dismiss it early.</p>
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">9. Card Format</h3>
+            <h3 class="help-section-title">10. Card Format</h3>
             <p>When importing or pasting Markdown, use the <code>::</code> separator format:</p>
             <pre class="help-code">::
 What is the capital of France?
@@ -538,7 +561,7 @@ What year was the Eiffel Tower built?
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">10. Themes &amp; Style</h3>
+            <h3 class="help-section-title">11. Themes &amp; Style</h3>
             <p>Click <button type="button" class="tool-button help-demo-btn" tabindex="-1">Style</button> to choose from 10 built-in themes, adjust font size, card radius, and more. Desktop and mobile save separate style profiles.</p>
           </section>
 
