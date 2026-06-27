@@ -43,6 +43,7 @@ const styleMobileMedia = typeof window !== "undefined" && window.matchMedia ? wi
 
 const state = {
   deckId: null,
+  localDeckId: null,
   cards: [],
   masterCards: [],
   statusById: {},
@@ -453,6 +454,21 @@ async function getCurrentUser() {
   return data?.user ?? null;
 }
 
+// Reads the session straight from local storage — no network — so a user who
+// has signed in at least once can keep using the app while offline.
+async function getCachedSession() {
+  if (!supabaseClient) return null;
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    return data?.session ?? null;
+  } catch (error) {
+    console.warn("Could not read cached session", error);
+    return null;
+  }
+}
+
+let explicitLogout = false;
+
 async function handleLogin(email, password) {
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) throw error;
@@ -466,7 +482,15 @@ async function handleSignup(email, password) {
 }
 
 async function handleLogout() {
-  if (supabaseClient) await supabaseClient.auth.signOut();
+  explicitLogout = true;
+  if (supabaseClient) {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (error) {
+      // Offline sign-out still clears the local session below via the listener.
+      console.warn("Sign-out network call failed (continuing locally)", error);
+    }
+  }
 }
 
 function showSetupScreen() {
@@ -680,6 +704,13 @@ async function touchWebDeckAccess(deckId) {
 
 async function fetchWebDecks({ toast = false } = {}) {
   if (!supabaseClient) return;
+  if (!navigator.onLine) {
+    const tbody = el.webDecksListTable;
+    if (tbody) tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">You're offline. Open “My Decks” to study decks saved on this device.</td></tr>";
+    setStatus("Offline — web decks need a connection. Your device decks still work.", "error");
+    if (toast) showToast("Offline — can't reach web decks", "info");
+    return;
+  }
   const refreshBtn = document.getElementById("refreshWebDecksBtn");
   if (refreshBtn) setButtonLoading(refreshBtn, true, "Loading…");
   try {
@@ -1410,6 +1441,11 @@ async function deleteWebDeck(deckId) {
 
 async function loadWebDeck(deckId) {
   if (!deckId || !supabaseClient) return;
+  if (!navigator.onLine) {
+    setStatus("Offline — can't load web decks. Try “My Decks” for device copies.", "error");
+    showToast("Offline — can't load web deck", "info");
+    return;
+  }
 
   setStatus("Loading deck from web... (1/2) Fetching details");
   
@@ -1460,6 +1496,10 @@ async function loadWebDeck(deckId) {
     unlockPageScroll();
     closeImportPanel();
     showCard();
+    // Mirror the freshly-loaded web deck into the on-device library (deduped by
+    // cloud id) so it stays readable offline without an extra manual save.
+    state.localDeckId = null;
+    saveDeckToLibrary({ silent: true });
   } catch (error) {
     setStatus("Failed to load deck from web.", "error");
     showToast("Couldn't load deck", "error");
@@ -1624,7 +1664,13 @@ async function showSyncModal() {
     setStatus("No deck to sync.", "error");
     return;
   }
-  
+  if (!navigator.onLine) {
+    setStatus("Offline — can't sync to cloud. Use “Save to Device” to keep this deck locally.", "error");
+    showToast("Offline — saved to device instead", "info");
+    saveDeckToLibrary({ silent: true });
+    return;
+  }
+
   const deckTitle = state.deckTitle || state.sourceTitle || "Untitled Deck";
   const cardsCount = state.masterCards.length;
   const knownCount = state.results.known.length;
@@ -1869,6 +1915,12 @@ const el = {
   newDeckFromImportBtn: document.querySelector("#newDeckFromImportBtn"),
   importBtn: document.querySelector("#importBtn"),
   webDecksBtn: document.querySelector("#webDecksBtn"),
+  myDecksBtn: document.querySelector("#myDecksBtn"),
+  saveDeckBtn: document.querySelector("#saveDeckBtn"),
+  myDecksPanel: document.querySelector("#myDecksPanel"),
+  myDecksListTable: document.querySelector("#myDecksListTable"),
+  closeMyDecksBtn: document.querySelector("#closeMyDecksBtn"),
+  saveCurrentToMyDecksBtn: document.querySelector("#saveCurrentToMyDecksBtn"),
   closeImportBtn: document.querySelector("#closeImportBtn"),
   importPanel: document.querySelector("#importPanel"),
   printRoot: document.querySelector("#printRoot"),
@@ -2928,6 +2980,109 @@ function closeImportPanel() {
   closePasteEditor(true);
   el.importPanel.classList.remove("is-open");
   unlockPageScroll();
+}
+
+function openMyDecksPanel() {
+  lockPageScroll();
+  el.myDecksPanel.hidden = false;
+  renderMyDecksList();
+}
+
+function closeMyDecksPanel() {
+  el.myDecksPanel.hidden = true;
+  unlockPageScroll();
+}
+
+function formatLocalDeckSavedDate(iso) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function renderMyDecksList() {
+  const tbody = el.myDecksListTable;
+  if (!tbody) return;
+  const decks = listLocalDecks();
+  tbody.innerHTML = "";
+
+  if (!decks.length) {
+    tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">No decks saved on this device yet. Open a deck and tap “Save to Device”.</td></tr>";
+    return;
+  }
+
+  decks.forEach((deck) => {
+    const tr = document.createElement("tr");
+    if (deck.id === state.localDeckId) tr.classList.add("is-current-local-deck");
+
+    const tdTitle = document.createElement("td");
+    tdTitle.dataset.label = "Title";
+    tdTitle.textContent = deck.title || "Untitled deck";
+
+    const tdCategory = document.createElement("td");
+    tdCategory.dataset.label = "Category";
+    tdCategory.textContent = normalizeDeckCategory(deck.category);
+
+    const tdCount = document.createElement("td");
+    tdCount.dataset.label = "Cards";
+    tdCount.textContent = String(deck.cardCount ?? "—");
+
+    const tdSaved = document.createElement("td");
+    tdSaved.dataset.label = "Saved";
+    tdSaved.textContent = formatLocalDeckSavedDate(deck.updatedAt);
+
+    const tdActions = document.createElement("td");
+    tdActions.dataset.label = "Actions";
+    tdActions.className = "my-deck-actions";
+
+    const loadBtn = document.createElement("button");
+    loadBtn.type = "button";
+    loadBtn.className = "bulk-action-btn bulk-load";
+    loadBtn.textContent = "Load";
+    loadBtn.addEventListener("click", () => {
+      if (loadDeckFromLibrary(deck.id)) {
+        closeMyDecksPanel();
+        showToast(`Loaded "${deck.title || "deck"}" from device`);
+      }
+    });
+
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.className = "bulk-action-btn bulk-category";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", () => {
+      const next = window.prompt("Rename deck", deck.title || "");
+      if (next && next.trim()) {
+        renameDeckInLibrary(deck.id, next);
+        renderMyDecksList();
+        if (state.localDeckId === deck.id) updateMeta();
+      }
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "bulk-action-btn bulk-delete";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => {
+      showConfirmModal(`Delete "${deck.title || "this deck"}" from this device? This cannot be undone.`, () => {
+        deleteDeckFromLibrary(deck.id);
+        renderMyDecksList();
+        showToast("Deck deleted from device", "info");
+      }, { confirmLabel: "Delete", danger: true });
+    });
+
+    tdActions.append(loadBtn, renameBtn, deleteBtn);
+    tr.append(tdTitle, tdCategory, tdCount, tdSaved, tdActions);
+    tbody.appendChild(tr);
+  });
+}
+
+function saveCurrentDeckToDevice() {
+  const meta = saveDeckToLibrary();
+  if (!meta) return;
+  showToast(`Saved "${meta.title}" to device · ${meta.cardCount} cards`);
+  setStatus("Deck saved to this device.");
+  if (el.myDecksPanel && !el.myDecksPanel.hidden) renderMyDecksList();
 }
 
 function normalizeMarkdown(text) {
@@ -4405,6 +4560,7 @@ function setAllCardStatus(cardId, status) {
   syncResults();
   updateMeta();
   updateAllCardStatuses();
+  scheduleDeckAutosave();
 }
 
 function createBlankCard() {
@@ -5000,6 +5156,7 @@ function buildDeckSummaryHtml() {
 }
 
 async function showCard(direction = 0) {
+  scheduleDeckAutosave();
   const token = state.transitionToken;
   state.previewCard = null;
   state.flipped = false;
@@ -5298,6 +5455,7 @@ function moveCard(result) {
   el.card.style.transform = "";
   state.statusById[card.id] = result;
   syncResults();
+  scheduleDeckAutosave();
 
   if (state.previewCard) {
     commitEditIfActive();
@@ -5403,9 +5561,11 @@ function deckSnapshot() {
 
 function clearBrowserPersistence() {
   try {
-    localStorage.removeItem(deckStorageKey);
     localStorage.removeItem(themeStorageKey);
     localStorage.removeItem("flashcards_style_cache");
+    // deckStorageKey is intentionally kept — the working deck is restored on
+    // boot so a reload (online or offline) never loses it. The local deck
+    // library (LOCAL_DECKS_INDEX_KEY / LOCAL_DECK_PREFIX) is likewise kept.
     // styleStorageKey is intentionally kept — styles persist locally across sessions
   } catch (error) {
     console.warn("Could not clear browser persistence", error);
@@ -5458,6 +5618,169 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
   syncResults();
   closeAllCardsPanel();
   showCard();
+}
+
+// ---------------------------------------------------------------------------
+// Offline persistence — all plain localStorage, so it works with no network.
+//   • deckStorageKey            : the single "working" deck, auto-restored on boot
+//   • LOCAL_DECKS_INDEX_KEY     : array of saved-deck metadata (the "My Decks" list)
+//   • LOCAL_DECK_PREFIX + <id>  : the full snapshot for one saved deck
+// ---------------------------------------------------------------------------
+const LOCAL_DECKS_INDEX_KEY = "flashcards_local_decks_index_v1";
+const LOCAL_DECK_PREFIX = "flashcards_local_deck_v1:";
+
+let deckAutosaveTimer = null;
+
+function persistWorkingDeck() {
+  try {
+    if (!state.masterCards.length) {
+      localStorage.removeItem(deckStorageKey);
+      return;
+    }
+    const snapshot = deckSnapshot();
+    snapshot.localDeckId = state.localDeckId || null;
+    localStorage.setItem(deckStorageKey, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn("Could not save working deck", error);
+  }
+}
+
+// Debounced so the rapid-fire mutations during study don't thrash localStorage.
+function scheduleDeckAutosave() {
+  if (deckAutosaveTimer) clearTimeout(deckAutosaveTimer);
+  deckAutosaveTimer = setTimeout(() => {
+    deckAutosaveTimer = null;
+    persistWorkingDeck();
+  }, 400);
+}
+
+function restoreWorkingDeck() {
+  try {
+    const raw = localStorage.getItem(deckStorageKey);
+    if (!raw) return false;
+    const payload = JSON.parse(raw);
+    if (!payload || !Array.isArray(payload.cards) || !payload.cards.length) return false;
+    loadDeckSnapshot(payload, payload.sourceTitle || payload.deckTitle || "");
+    state.localDeckId = payload.localDeckId || null;
+    return true;
+  } catch (error) {
+    console.warn("Could not restore working deck", error);
+    return false;
+  }
+}
+
+function readLocalDeckIndex() {
+  try {
+    const list = JSON.parse(localStorage.getItem(LOCAL_DECKS_INDEX_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalDeckIndex(list) {
+  localStorage.setItem(LOCAL_DECKS_INDEX_KEY, JSON.stringify(list));
+}
+
+function generateLocalDeckId() {
+  return `ld_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Newest first.
+function listLocalDecks() {
+  return readLocalDeckIndex()
+    .slice()
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+}
+
+// Save the current deck into the local library. Re-saving the same deck (matched
+// by local id, or by cloud deckId for decks pulled from the web) updates in place
+// rather than creating a duplicate. Returns the stored metadata, or null on failure.
+function saveDeckToLibrary({ id = null, silent = false } = {}) {
+  if (!state.masterCards.length) {
+    if (!silent) setStatus("Add some cards before saving a deck.", "error");
+    return null;
+  }
+  const snapshot = deckSnapshot();
+  let localId = id || state.localDeckId;
+  if (!localId && snapshot.deckId) {
+    const existing = readLocalDeckIndex().find((entry) => entry.deckId === snapshot.deckId);
+    if (existing) localId = existing.id;
+  }
+  localId = localId || generateLocalDeckId();
+  snapshot.localDeckId = localId;
+
+  try {
+    localStorage.setItem(LOCAL_DECK_PREFIX + localId, JSON.stringify(snapshot));
+  } catch (error) {
+    console.warn("Could not save deck to library", error);
+    if (!silent) setStatus("Could not save deck — device storage may be full.", "error");
+    return null;
+  }
+
+  const meta = {
+    id: localId,
+    title: snapshot.deckTitle || "Untitled deck",
+    category: snapshot.deckCategory || defaultDeckCategory,
+    cardCount: snapshot.cards.length,
+    updatedAt: new Date().toISOString(),
+    deckId: snapshot.deckId || null,
+  };
+  writeLocalDeckIndex([meta, ...readLocalDeckIndex().filter((entry) => entry.id !== localId)]);
+  state.localDeckId = localId;
+  persistWorkingDeck();
+  return meta;
+}
+
+function loadDeckFromLibrary(id) {
+  try {
+    const raw = localStorage.getItem(LOCAL_DECK_PREFIX + id);
+    if (!raw) {
+      setStatus("That saved deck could not be found.", "error");
+      return false;
+    }
+    const payload = JSON.parse(raw);
+    loadDeckSnapshot(payload, payload.sourceTitle || payload.deckTitle || "");
+    state.localDeckId = id;
+    persistWorkingDeck();
+    return true;
+  } catch (error) {
+    console.warn("Could not load saved deck", error);
+    setStatus("That saved deck is corrupted and could not be loaded.", "error");
+    return false;
+  }
+}
+
+function deleteDeckFromLibrary(id) {
+  localStorage.removeItem(LOCAL_DECK_PREFIX + id);
+  writeLocalDeckIndex(readLocalDeckIndex().filter((entry) => entry.id !== id));
+  if (state.localDeckId === id) state.localDeckId = null;
+}
+
+function renameDeckInLibrary(id, title) {
+  const trimmed = String(title || "").trim();
+  if (!trimmed) return;
+  const index = readLocalDeckIndex();
+  const entry = index.find((e) => e.id === id);
+  if (entry) {
+    entry.title = trimmed;
+    entry.updatedAt = new Date().toISOString();
+    writeLocalDeckIndex(index);
+  }
+  try {
+    const raw = localStorage.getItem(LOCAL_DECK_PREFIX + id);
+    if (raw) {
+      const payload = JSON.parse(raw);
+      payload.deckTitle = trimmed;
+      localStorage.setItem(LOCAL_DECK_PREFIX + id, JSON.stringify(payload));
+    }
+  } catch (error) {
+    console.warn("Could not rename saved deck snapshot", error);
+  }
+  if (state.localDeckId === id) {
+    state.deckTitle = trimmed;
+    persistWorkingDeck();
+  }
 }
 
 function cardsForScope(scope) {
@@ -7052,6 +7375,16 @@ el.webDecksBtn.addEventListener("click", () => {
   closeDeckMenu();
   openWebDecksPanel();
 });
+el.myDecksBtn?.addEventListener("click", () => {
+  closeDeckMenu();
+  openMyDecksPanel();
+});
+el.saveDeckBtn?.addEventListener("click", () => {
+  closeDeckMenu();
+  saveCurrentDeckToDevice();
+});
+el.closeMyDecksBtn?.addEventListener("click", closeMyDecksPanel);
+el.saveCurrentToMyDecksBtn?.addEventListener("click", saveCurrentDeckToDevice);
 el.closeImportBtn.addEventListener("click", closeImportPanel);
 el.closeImportSelectorBtn.addEventListener("click", closeImportSelectorPanel);
 el.importSelectorCancelBtn.addEventListener("click", closeImportSelectorPanel);
@@ -7181,6 +7514,12 @@ el.importPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false
 el.webDecksPanel.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
 el.webDecksPanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
 el.webDecksPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+
+if (el.myDecksPanel) {
+  el.myDecksPanel.addEventListener("touchstart", handleStylePanelTouchStart, { passive: true });
+  el.myDecksPanel.addEventListener("touchmove", handleStylePanelTouchMove, { passive: false });
+  el.myDecksPanel.addEventListener("wheel", handleStylePanelWheel, { passive: false });
+}
 
 el.diagramModalBody.addEventListener("wheel", handleDiagramWheel, { passive: false });
 el.diagramModalBody.addEventListener("pointerdown", handleDiagramPointerDown);
@@ -7425,7 +7764,8 @@ function initAppForUser() {
   renderThemeMenu();
   setTheme("dark-amoled");
   setStatus("");
-  showCard();
+  // Bring back the last working deck (saved locally) so a reload never loses it.
+  if (!restoreWorkingDeck()) showCard();
   setStyleStatus("Local style");
   installManifestLink();
   registerServiceWorker();
@@ -7446,6 +7786,11 @@ function setupAuthListener() {
         initAppForUser();
       }
     } else if (event === "SIGNED_OUT") {
+      // Only drop to the login screen for a real sign-out. A failed token
+      // refresh while offline also emits SIGNED_OUT — ignore it so the user
+      // isn't locked out of their offline decks.
+      if (!explicitLogout && !navigator.onLine) return;
+      explicitLogout = false;
       appInitialized = false;
       showLoginScreen();
     }
@@ -7463,8 +7808,10 @@ async function bootApp() {
 
   setupAuthListener();
 
-  const user = await getCurrentUser();
-  if (user) {
+  // Use the cached session (local, no network) so offline / flaky-network loads
+  // still let a signed-in user reach their decks instead of the login wall.
+  const session = await getCachedSession();
+  if (session?.user) {
     showAuthenticatedUI();
     if (!appInitialized) {
       appInitialized = true;
@@ -7476,6 +7823,36 @@ async function bootApp() {
 }
 
 bootApp();
+
+// Flush any in-progress edit and the working deck before the tab is hidden or
+// closed, so a reload (or returning to the app later, offline) loses nothing.
+function flushWorkingDeck() {
+  try {
+    commitEditIfActive();
+  } catch (error) {
+    console.warn("Could not commit active edit before save", error);
+  }
+  persistWorkingDeck();
+}
+window.addEventListener("pagehide", flushWorkingDeck);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") flushWorkingDeck();
+});
+
+// Surface connectivity so it's obvious cloud actions are paused while offline.
+function updateOnlineIndicator() {
+  const indicator = document.getElementById("offlineIndicator");
+  if (indicator) indicator.hidden = navigator.onLine;
+}
+window.addEventListener("online", () => {
+  updateOnlineIndicator();
+  showToast("Back online", "success");
+});
+window.addEventListener("offline", () => {
+  updateOnlineIndicator();
+  showToast("You're offline — local decks still work", "info");
+});
+updateOnlineIndicator();
 
 function commitEditIfActive() {
   const sides = [
@@ -7554,6 +7931,7 @@ function toggleEditMode(side) {
       if (isQuestion) scheduleLiveQuestionFit();
     });
 
+    scheduleDeckAutosave();
     setStatus(state.deckId ? "Card updated locally. Sync to update the web deck." : "Card updated.");
   }
 }

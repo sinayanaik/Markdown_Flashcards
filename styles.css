@@ -7219,3 +7219,43 @@ kbd {
   }
 }
 
+/* ---- My Decks (local/offline library) ---- */
+.my-deck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.web-decks-table tr.is-current-local-deck {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* ---- Offline indicator ---- */
+.offline-indicator {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--review, #d9534f) 22%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--review, #d9534f) 55%, var(--line));
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.offline-indicator::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--review, #d9534f);
+}
+

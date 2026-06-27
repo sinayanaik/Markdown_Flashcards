@@ -285,13 +285,16 @@ By default importing replaces the current deck. To add cards to an existing deck
 | **New Deck** | Clears the current deck and starts a blank one |
 | **Import** | Opens the Import panel to load cards from a file, URL, or paste |
 | **Web Decks** | Opens the Web Decks panel to browse and load decks stored in Supabase |
+| **My Decks** | Opens the on-device deck library — load, rename, or delete decks saved locally (works offline) |
 
 ### Main toolbar buttons
 
 | Button | Action |
 |---|---|
+| **Save to Device** | Saves the current deck to this device's local library (works offline) |
 | **Sync to Cloud** | Syncs the currently loaded local deck to your Supabase database (shows a confirmation toast) |
 | **Web Decks** | Opens the Web Decks panel (auto-loads the deck list) |
+| **My Decks** | Opens the on-device deck library (works offline) |
 | **Export** | Opens the export menu (see [Exporting](#exporting)) |
 | **All** | Opens the All Cards panel — browse and edit every card at once |
 | **Aa** | Opens the Style Settings panel to customise fonts, sizes, and theme |
@@ -500,7 +503,17 @@ When served over HTTPS (GitHub Pages, Netlify, etc.), the app registers a servic
 - **Desktop** — browser shows an "Install app" button in the address bar
 - **Mobile** — use "Add to Home Screen" in the browser menu
 
-Once installed and cached, card navigation and local deck features work fully offline. Supabase sync, Web Decks, and login require an active internet connection.
+### Working offline
+
+After you've opened the app online at least once (so the app shell and libraries are cached), it stays usable with no connection:
+
+- **Stays signed in** — your session is read from local storage, so you reach your decks instead of the login wall. (You must have signed in online at least once; a fresh sign-in/sign-up still needs the network.)
+- **Working deck is never lost** — the current deck is auto-saved to the device and restored on reload, online or off.
+- **My Decks (on-device library)** — **Save to Device** stores the current deck locally; open **My Decks** to load, rename, or delete saved decks. All of this works fully offline.
+- **Web Decks are mirrored** — any Web Deck you open while online is automatically copied into **My Decks**, so you can study it later offline.
+- An **Offline** badge appears (bottom-left) whenever you lose connection.
+
+Cloud-only actions — **Sync to Cloud**, browsing **Web Decks**, and a first-time login — still require an internet connection. Attempting **Sync to Cloud** while offline saves the deck to your device instead.
 
 ---
 

@@ -15,9 +15,10 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260623-12">
+    <link rel="stylesheet" href="styles.css?v=20260627-1">
   </head>
   <body>
+    <span class="offline-indicator" id="offlineIndicator" hidden>Offline</span>
     <main class="app-shell">
       <div class="mobile-backdrop" id="mobileBackdrop" hidden></div>
       <header class="appbar">
@@ -32,9 +33,11 @@
           <button class="tool-button" id="newDeckBtn" type="button">&#43; New Deck</button>
           <button class="tool-button" id="importBtn" type="button">&#8679; Import from File</button>
           <button class="tool-button" id="webDecksBtn" type="button">&#9782; Web Decks</button>
+          <button class="tool-button" id="myDecksBtn" type="button" title="Decks saved on this device (works offline)">&#128190; My Decks</button>
 
           <span class="drawer-section-label">Study</span>
           <button class="tool-button" id="allCardsBtn" type="button">&#8801; Browse All Cards</button>
+          <button class="tool-button" id="saveDeckBtn" type="button" title="Save the current deck to this device (works offline)">&#11015; Save to Device</button>
           <button class="tool-button" id="syncBtn" type="button" title="Sync current deck to Web">&#8635; Sync to Cloud</button>
           <div class="menu-wrap">
             <button class="tool-button" id="exportBtn" type="button">&#8659; Export Cards&#8230;</button>
@@ -404,6 +407,39 @@
       </div>
     </section>
 
+    <section class="web-decks-panel" id="myDecksPanel" hidden aria-label="My Decks">
+      <div class="web-decks-shell">
+        <div class="web-decks-head">
+          <div>
+            <h1>My Decks</h1>
+            <p>Decks saved on this device. These load and save fully offline.</p>
+          </div>
+          <button class="icon-button" id="closeMyDecksBtn" type="button" aria-label="Close my decks panel">&#215;</button>
+        </div>
+        <div class="web-decks-tools">
+          <div class="web-decks-tools-left">
+            <button class="web-decks-refresh" id="saveCurrentToMyDecksBtn" type="button">&#11015; Save Current Deck</button>
+          </div>
+        </div>
+        <div class="web-decks-table-wrap">
+          <table class="web-decks-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Cards</th>
+                <th>Saved</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="myDecksListTable">
+              <tr><td colspan="5" class="web-decks-empty">No decks saved on this device yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section class="sync-modal" id="syncModal" hidden aria-label="Sync Details">
       <div class="sync-modal-content">
         <h2>Sync Confirmation</h2>
@@ -544,7 +580,24 @@
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">10. Card Format</h3>
+            <h3 class="help-section-title">10. Offline &amp; My Decks 💾</h3>
+            <div class="help-btn-row">
+              <button type="button" class="tool-button help-demo-btn" tabindex="-1">⏬ Save to Device</button>
+              <button type="button" class="tool-button help-demo-btn" tabindex="-1">💾 My Decks</button>
+            </div>
+            <p>Once you’ve opened the app online once, it keeps working with no connection:</p>
+            <ul class="help-list">
+              <li><strong>You stay signed in</strong> offline (after signing in online at least once), so you go straight to your decks.</li>
+              <li><strong>Your current deck is auto-saved</strong> and restored on reload — you never lose work.</li>
+              <li><strong>Save to Device</strong> stores the current deck in an on-device library. Open <strong>My Decks</strong> to load, rename, or delete saved decks — all offline.</li>
+              <li>Any <strong>Web Deck you open online is mirrored</strong> into My Decks automatically, so it’s there to study offline later.</li>
+              <li>An <strong>Offline</strong> badge appears bottom-left when you lose connection.</li>
+            </ul>
+            <p>Cloud actions — <strong>Sync to Cloud</strong>, <strong>Web Decks</strong>, and a first-time login — need internet. Syncing while offline saves to your device instead.</p>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">11. Card Format</h3>
             <p>When importing or pasting Markdown, use the <code>::</code> separator format:</p>
             <pre class="help-code">::
 What is the capital of France?
@@ -561,7 +614,7 @@ What year was the Eiffel Tower built?
           </section>
 
           <section class="help-section">
-            <h3 class="help-section-title">11. Themes &amp; Style</h3>
+            <h3 class="help-section-title">12. Themes &amp; Style</h3>
             <p>Click <button type="button" class="tool-button help-demo-btn" tabindex="-1">Style</button> to choose from 10 built-in themes, adjust font size, card radius, and more. Desktop and mobile save separate style profiles.</p>
           </section>
 
@@ -683,6 +736,6 @@ What year was the Eiffel Tower built?
     <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
-    <script src="app.js?v=20260623-12"></script>
+    <script src="app.js?v=20260627-1"></script>
   </body>
 </html>
