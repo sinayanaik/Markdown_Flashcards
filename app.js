@@ -6561,6 +6561,9 @@ function startLongPress() {
   cancelLongPress();
   state.longPressFired = false;
   if (state.previewCard || !state.cards[state.current]) return;
+  // On touch/pen, a stationary long-press is the OS gesture for selecting text.
+  // Don't hijack it to toggle edit mode — the pencil (✎) buttons do that instead.
+  if (state.dragPointerType && state.dragPointerType !== "mouse") return;
   const side = state.flipped ? "answer" : "question";
   const view = side === "question" ? el.questionView : el.answerView;
   if (view.hidden) return; // already editing this face
@@ -7590,6 +7593,8 @@ function attachExitLongPress(textarea, side) {
   };
   textarea.addEventListener("pointerdown", (e) => {
     clear();
+    // Let touch/pen long-press select text in the editor; only mouse long-press exits.
+    if (e.pointerType && e.pointerType !== "mouse") return;
     sx = e.clientX;
     sy = e.clientY;
     startHoldProgress();

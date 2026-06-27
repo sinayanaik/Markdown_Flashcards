@@ -339,7 +339,9 @@ These appear when you reach the last card:
 Enter edit mode on the question or answer face in either of two ways:
 
 - Click the **pencil** (✎) icon on that face, or
-- **Long-press** the card
+- **Long-press** the card with a mouse (desktop only)
+
+> **On touch devices**, long-press is reserved for selecting text, so use the **pencil** (✎) icon to enter or leave edit mode.
 
 While editing, a **formatting toolbar** appears above the text. Select a span of text, then click a button to wrap it in Markdown/HTML:
 
@@ -362,7 +364,7 @@ Click the **save** (💾) icon to commit. Edits are also committed automatically
 
 Quick Notes let you capture a snippet of an answer into a separate deck without interrupting your study flow.
 
-1. Open an **answer** in edit mode (pencil icon or long-press, then flip to the answer side)
+1. Open an **answer** in edit mode (pencil icon — or mouse long-press on desktop — then flip to the answer side)
 2. **Select** the text you want to keep
 3. Click the **📌** button at the end of the formatting toolbar
 
