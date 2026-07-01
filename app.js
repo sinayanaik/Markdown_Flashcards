@@ -3768,6 +3768,22 @@ function protectMath(markdown) {
   return output;
 }
 
+// Convert {{cloze}} spans into hidden fill-in-the-blank markup. Rendered as a
+// redaction bar that reveals its text when tapped (see the .cloze click handler).
+// Runs before protectMath so any math inside a cloze ($x$) still gets processed.
+function applyClozeMarkup(text) {
+  return String(text).replace(
+    /\{\{([\s\S]+?)\}\}/g,
+    (_match, inner) =>
+      `<span class="cloze" tabindex="0" role="button" aria-label="Hidden text, tap to reveal">${inner}</span>`
+  );
+}
+
+// Apply the inline transforms (cloze, then math) that run on non-fenced text.
+function protectInline(segment) {
+  return protectMath(applyClozeMarkup(segment));
+}
+
 function preprocessSpecialBlocks(markdown) {
   const source = normalizeMarkdown(markdown || "");
   const fencePattern = /```[ \t]*([^\n]*)\n([\s\S]*?)```/g;
@@ -3776,7 +3792,7 @@ function preprocessSpecialBlocks(markdown) {
   let match;
 
   while ((match = fencePattern.exec(source))) {
-    output += protectMath(source.slice(lastIndex, match.index));
+    output += protectInline(source.slice(lastIndex, match.index));
     if (/\bmermaid\b/i.test(match[1])) {
       output += `<div class="mermaid" data-diagram="${encodeAttribute(match[2].trim())}"></div>`;
     } else if (/\bnomnoml\b/i.test(match[1])) {
@@ -3787,7 +3803,7 @@ function preprocessSpecialBlocks(markdown) {
     lastIndex = fencePattern.lastIndex;
   }
 
-  output += protectMath(source.slice(lastIndex));
+  output += protectInline(source.slice(lastIndex));
   return output;
 }
 
@@ -3810,7 +3826,7 @@ function markdownToSafeHtml(markdown) {
   const html = marked.parse(prepared);
   return DOMPurify.sanitize(html, {
     ADD_TAGS: ["foreignObject", "font", "u", "del", "kbd"],
-    ADD_ATTR: ["target", "rel", "class", "data-tex", "data-diagram", "style", "color", "face"]
+    ADD_ATTR: ["target", "rel", "class", "data-tex", "data-diagram", "style", "color", "face", "tabindex", "role", "aria-label"]
   });
 }
 
@@ -6855,7 +6871,7 @@ function closestElement(target, selector) {
 }
 
 function isCardActionTarget(target) {
-  return Boolean(closestElement(target, "a, button, input, textarea"));
+  return Boolean(closestElement(target, "a, button, input, textarea, .cloze"));
 }
 
 function isHorizontallyScrollable(node) {
@@ -7618,7 +7634,7 @@ el.allCardsList.addEventListener("click", (event) => {
   }
 
   const item = event.target.closest(".all-card");
-  if (item && event.target.closest("a, button, textarea") === null) {
+  if (item && event.target.closest("a, button, textarea, .cloze") === null) {
     flipAllCard(item);
   }
 });
@@ -7635,7 +7651,7 @@ el.allCardsList.addEventListener("dragleave", (event) => {
 el.allCardsList.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   const item = event.target.closest(".all-card");
-  if (!item || event.target.closest("button")) return;
+  if (!item || event.target.closest("button, .cloze")) return;
   event.preventDefault();
   flipAllCard(item);
 });
@@ -7754,6 +7770,8 @@ document.addEventListener("keydown", (event) => {
     unlockPageScroll();
   }
   if (!el.allCardsPanel.hidden) return;
+  // A focused cloze handles its own Space/Enter (reveal) — don't also flip.
+  if (event.target.closest?.(".cloze")) return;
   if (event.key === " " || event.key === "Enter") {
     event.preventDefault();
     flipCard();
@@ -8523,7 +8541,8 @@ function createToolbarHtml(options = {}) {
     <button type="button" data-action="underline" title="Underline"><u>U</u></button>
     <button type="button" data-action="strikethrough" title="Strikethrough"><span style="text-decoration: line-through;">S</span></button>
     <button type="button" data-action="code" title="Code Block"><code>&lt;/&gt;</code></button>
-    
+    <button type="button" data-action="cloze" title="Cloze — hide selection as a fill-in-the-blank (tap the card to reveal)">[&hellip;]</button>
+
     <div class="toolbar-dropdown">
       <button type="button" class="toolbar-dropdown-toggle" title="Font Family">Aa</button>
       <div class="toolbar-dropdown-content font-menu">
@@ -8595,6 +8614,21 @@ document.addEventListener("click", (e) => {
   if (button) {
     handleToolbarClick(e);
   }
+});
+
+// Toggle a cloze (fill-in-the-blank) between hidden and revealed when tapped.
+document.addEventListener("click", (e) => {
+  const cloze = e.target.closest(".cloze");
+  if (cloze) cloze.classList.toggle("is-revealed");
+});
+
+// Keyboard activation for clozes (they carry role="button").
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const cloze = e.target.closest?.(".cloze");
+  if (!cloze) return;
+  e.preventDefault();
+  cloze.classList.toggle("is-revealed");
 });
 
 // Syntax highlighting backdrop creator for textareas
@@ -8677,6 +8711,13 @@ function toggleKbd(text) {
     return text.substring(5, text.length - 6);
   }
   return "<kbd>" + text + "</kbd>";
+}
+
+function toggleCloze(text) {
+  if (text.startsWith("{{") && text.endsWith("}}")) {
+    return text.substring(2, text.length - 2);
+  }
+  return "{{" + text + "}}";
 }
 
 function clearStyling(text) {
@@ -8827,6 +8868,8 @@ function handleToolbarClick(event) {
     formatFn = text => toggleStrikethrough(text);
   } else if (button.dataset.action === "code") {
     formatFn = text => toggleCode(text);
+  } else if (button.dataset.action === "cloze") {
+    formatFn = text => toggleCloze(text);
   } else if (button.dataset.action === "kbd") {
     formatFn = text => toggleKbd(text);
   } else if (button.dataset.action === "bullet") {

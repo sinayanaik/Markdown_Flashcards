@@ -1804,6 +1804,37 @@ button:disabled {
   -webkit-user-select: text;
 }
 
+/* Cloze deletion: hidden fill-in-the-blank that reveals on tap. */
+.cloze {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0 0.35em;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.cloze:not(.is-revealed) {
+  color: transparent;
+  background: color-mix(in srgb, var(--accent) 32%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Hide nested content (images, math, bold, etc.) while the cloze is concealed. */
+.cloze:not(.is-revealed) * {
+  visibility: hidden;
+}
+.cloze:not(.is-revealed):hover {
+  background: color-mix(in srgb, var(--accent) 45%, var(--panel));
+}
+.cloze.is-revealed {
+  color: var(--accent-strong);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.cloze:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
 .card-question .rendered {
   display: grid;
   width: 100%;
@@ -6039,35 +6070,37 @@ textarea {
   .face-header > div:not(.face-label-row):not(.edit-toolbar) {
     order: 2;
   }
-  /* Lay the toolbar out as a fixed 6-column grid on mobile. flex-wrap fills the
-     first row greedily and can strand a single button on a lonely second row;
-     a fixed grid always splits evenly (e.g. 11 buttons → 6 + 5). */
+  /* Lay the toolbar out as centered rows on mobile. A fixed 1/6 flex-basis keeps
+     6 items per row, and justify-content:center centers any partial last row
+     (e.g. 11 items → a full row of 6 + a centered row of 5) instead of stranding
+     them on the left — leaving a tidy gap for a future button. */
   .face-header .edit-toolbar,
   .all-card-editor-header .edit-toolbar {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 4px;
+    --edit-toolbar-gap: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: var(--edit-toolbar-gap);
     width: 100%;
     box-sizing: border-box;
     margin-top: 6px;
-    justify-items: stretch;
-    align-items: center;
   }
   .face-header .edit-toolbar { order: 3; }
   .all-card-editor-header { flex-wrap: wrap; gap: 8px; }
-  /* Buttons and dropdowns fill their grid cell for even, tappable targets */
+  /* Buttons and dropdowns take a fixed 1/6 width for even, tappable targets */
   .face-header .edit-toolbar > button,
   .face-header .edit-toolbar > .toolbar-dropdown,
   .all-card-editor-header .edit-toolbar > button,
   .all-card-editor-header .edit-toolbar > .toolbar-dropdown {
-    width: 100%;
+    flex: 0 0 calc((100% - 5 * var(--edit-toolbar-gap)) / 6);
     min-width: 0 !important;
     justify-content: center;
   }
   .edit-toolbar .toolbar-dropdown-toggle {
     width: 100%;
   }
-  /* The quick-note divider would consume a grid cell — hide it on mobile */
+  /* The quick-note divider would consume a row slot — hide it on mobile */
   .edit-toolbar-divider {
     display: none;
   }
@@ -6082,7 +6115,7 @@ textarea {
   }
   .face-header .edit-toolbar,
   .all-card-editor-header .edit-toolbar {
-    gap: 3px;
+    --edit-toolbar-gap: 3px;
     padding: 3px 4px;
   }
 }

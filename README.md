@@ -34,7 +34,7 @@ A static web app that turns Markdown into swipeable flashcards, with Supabase-ba
 - **Multiple import sources** — paste Markdown, upload `.md` / `.txt` / `.json` / `.zip`, fetch from a raw URL, or use Jina Reader for public web pages
 - **Swipe + keyboard navigation** — swipe left/right on mobile, arrow keys on desktop
 - **Known / Review categorization** — cards can be marked Known or Review and replayed in filtered sessions
-- **Inline card editing** — edit question or answer text directly in the study view, with a rich **formatting toolbar** (bold, italic, underline, strikethrough, code, fonts, colours, bullet lists)
+- **Inline card editing** — edit question or answer text directly in the study view, with a rich **formatting toolbar** (bold, italic, underline, strikethrough, code, cloze fill-in-the-blanks, fonts, colours, bullet lists)
 - **Image paste & upload** — paste, drag-and-drop, or pick any image while editing; it's uploaded to a free [ImgBB](https://api.imgbb.com/) host and inserted as Markdown. Public Google Drive share links are auto-embedded so they render directly.
 - **Quick Notes** — select any text while editing an answer and save it straight to a dedicated `quick_notes` cloud deck with one click
 - **Toast confirmations** — every cloud action (sync, load, delete, rename, export, quick note) pops a toast so you always know it worked
@@ -355,6 +355,7 @@ While editing, a **formatting toolbar** appears above the text. Select a span of
 | **B** / **I** / **U** | Bold, Italic, Underline |
 | **S** | Strikethrough |
 | **&lt;/&gt;** | Inline code |
+| **[…]** | Cloze — hide the selection as a fill-in-the-blank (`{{text}}`); tap it on the card to reveal |
 | **Aa** | Font family picker |
 | **🎨** | Text colour (includes "Clear colour") |
 | **-** | Toggle bullet list |
