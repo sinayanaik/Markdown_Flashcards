@@ -6026,35 +6026,35 @@ textarea {
   .face-header > div:not(.face-label-row):not(.edit-toolbar) {
     order: 2;
   }
-  .face-header .edit-toolbar {
+  /* Lay the toolbar out as a fixed 6-column grid on mobile. flex-wrap fills the
+     first row greedily and can strand a single button on a lonely second row;
+     a fixed grid always splits evenly (e.g. 11 buttons → 6 + 5). */
+  .face-header .edit-toolbar,
+  .all-card-editor-header .edit-toolbar {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
     width: 100%;
-    flex-shrink: 0;
-    flex-wrap: wrap;
-    row-gap: 4px;
-    justify-content: center;
-    order: 3;
     box-sizing: border-box;
     margin-top: 6px;
+    justify-items: stretch;
+    align-items: center;
   }
-  .all-card-editor-header {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .all-card-editor-header .edit-toolbar {
-    width: 100%;
-    flex-shrink: 0;
-    flex-wrap: wrap;
-    row-gap: 4px;
-    justify-content: center;
-    margin-top: 6px;
-  }
-  /* Uniform tap targets so a wrapped row reads as an even grid, not orphaned buttons */
+  .face-header .edit-toolbar { order: 3; }
+  .all-card-editor-header { flex-wrap: wrap; gap: 8px; }
+  /* Buttons and dropdowns fill their grid cell for even, tappable targets */
   .face-header .edit-toolbar > button,
-  .all-card-editor-header .edit-toolbar > button {
-    min-width: 30px;
+  .face-header .edit-toolbar > .toolbar-dropdown,
+  .all-card-editor-header .edit-toolbar > button,
+  .all-card-editor-header .edit-toolbar > .toolbar-dropdown {
+    width: 100%;
+    min-width: 0 !important;
     justify-content: center;
   }
-  /* Keep the quick-note divider from starting an awkward new line on its own */
+  .edit-toolbar .toolbar-dropdown-toggle {
+    width: 100%;
+  }
+  /* The quick-note divider would consume a grid cell — hide it on mobile */
   .edit-toolbar-divider {
     display: none;
   }
@@ -6062,19 +6062,15 @@ textarea {
 
 @media (max-width: 480px) {
   .edit-toolbar button {
-    min-width: 26px;
-    height: 22px !important;
-    min-height: 22px !important;
+    height: 24px !important;
+    min-height: 24px !important;
     font-size: 0.78rem !important;
     padding: 0 4px !important;
   }
-  .edit-toolbar {
+  .face-header .edit-toolbar,
+  .all-card-editor-header .edit-toolbar {
     gap: 3px;
     padding: 3px 4px;
-  }
-  .face-header .edit-toolbar > button,
-  .all-card-editor-header .edit-toolbar > button {
-    min-width: 28px;
   }
 }
 
