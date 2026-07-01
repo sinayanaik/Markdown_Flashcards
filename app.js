@@ -7977,11 +7977,18 @@ el.editAnswerBtn.addEventListener('click', (e) => {
 el.questionEdit.addEventListener('click', (e) => e.stopPropagation());
 el.answerEdit.addEventListener('click', (e) => e.stopPropagation());
 
+// True while the toolbar image file picker is open. Opening the native file dialog
+// blurs the textarea; without this guard the blur handler would exit edit mode before
+// the picked image is inserted, so the insertion would land in a reset textarea.
+let imagePickerActive = false;
+
 // Auto-save when focus leaves the textarea (blur), unless focus moved to the edit button (which handles its own toggle)
 el.questionEdit.addEventListener('blur', (e) => {
+  if (imagePickerActive) return;
   if (!el.questionEdit.hidden && e.relatedTarget !== el.editQuestionBtn) toggleEditMode('question');
 });
 el.answerEdit.addEventListener('blur', (e) => {
+  if (imagePickerActive) return;
   if (!el.answerEdit.hidden && e.relatedTarget !== el.editAnswerBtn) toggleEditMode('answer');
 });
 
@@ -8100,8 +8107,14 @@ if (helpModal) {
 
 // ----- Image upload (ImgBB) -----------------------------------------------
 // Insert `text` at the textarea's caret and fire an input event so card state saves.
-function insertAtCursor(textarea, text) {
+// `atPos` overrides the live caret — needed for the toolbar image button, where the
+// file picker blurs the textarea and resets its selection before insertion.
+function insertAtCursor(textarea, text, atPos) {
   textarea.focus();
+  if (typeof atPos === "number") {
+    const p = Math.max(0, Math.min(atPos, textarea.value.length));
+    textarea.selectionStart = textarea.selectionEnd = p;
+  }
   const start = textarea.selectionStart;
   const end = textarea.selectionEnd;
   const val = textarea.value;
@@ -8231,15 +8244,18 @@ function showImgbbKeyModal(onSaved) {
 }
 
 // Prompt the user for an ImgBB key, save it, then retry the upload for `file`.
-function promptForImgbbKeyThenRetry(textarea, file) {
-  showImgbbKeyModal(() => insertImageUpload(textarea, file));
+// `atPos` is threaded through so the retry still lands at the original caret.
+function promptForImgbbKeyThenRetry(textarea, file, atPos) {
+  showImgbbKeyModal(() => insertImageUpload(textarea, file, atPos));
 }
 
 // Insert an "uploading…" placeholder, upload the image, then swap in `![](url)`.
-async function insertImageUpload(textarea, file) {
+// `atPos` (optional) forces the placeholder to the caret captured before the file
+// picker opened; without it the current caret is used (paste/drop already have focus).
+async function insertImageUpload(textarea, file, atPos) {
   if (!textarea || !file || !file.type || !file.type.startsWith("image/")) return;
   const token = `![uploading…](#upl-${Date.now()}-${Math.random().toString(36).slice(2, 7)})`;
-  insertAtCursor(textarea, token);
+  insertAtCursor(textarea, token, atPos);
   showToast("Optimizing image…", "info");
   try {
     const optimized = await optimizeImage(file);
@@ -8249,7 +8265,7 @@ async function insertImageUpload(textarea, file) {
   } catch (err) {
     replaceInTextarea(textarea, token, "");
     if (err.message === "NO_KEY") {
-      promptForImgbbKeyThenRetry(textarea, file);
+      promptForImgbbKeyThenRetry(textarea, file, atPos);
     } else if (err.message === "OFFLINE") {
       showToast("Can't upload image while offline", "error");
     } else {
@@ -8304,8 +8320,10 @@ function firstImageFile(dataTransfer) {
 }
 
 // Hidden file input (created once, reused) for the toolbar "Insert image" button.
+// The caret position is captured before the picker opens (it blurs the textarea and
+// resets the selection) and applied to the first image; later images follow it.
 let imagePickerInput = null;
-function openImagePicker(textarea) {
+function openImagePicker(textarea, atPos) {
   if (!imagePickerInput) {
     imagePickerInput = document.createElement("input");
     imagePickerInput.type = "file";
@@ -8314,15 +8332,25 @@ function openImagePicker(textarea) {
     imagePickerInput.style.display = "none";
     document.body.appendChild(imagePickerInput);
     imagePickerInput.addEventListener("change", () => {
+      imagePickerActive = false;
       const target = imagePickerInput._targetTextarea;
-      const files = Array.from(imagePickerInput.files || []);
-      files.forEach((file) => {
-        if (file.type && file.type.startsWith("image/")) insertImageUpload(target, file);
+      const pos = imagePickerInput._targetPos;
+      const files = Array.from(imagePickerInput.files || [])
+        .filter((file) => file.type && file.type.startsWith("image/"));
+      files.forEach((file, i) => {
+        // First image lands at the captured caret; the rest follow (the caret has
+        // advanced past each inserted placeholder), so use the live caret for them.
+        insertImageUpload(target, file, i === 0 ? pos : undefined);
       });
       imagePickerInput.value = "";
     });
   }
   imagePickerInput._targetTextarea = textarea;
+  imagePickerInput._targetPos = atPos;
+  // Keep edit mode alive across the file-dialog blur; the change handler (or a
+  // cancelled dialog's window refocus) clears it again.
+  imagePickerActive = true;
+  window.addEventListener("focus", () => { imagePickerActive = false; }, { once: true });
   imagePickerInput.click();
 }
 
@@ -8759,9 +8787,9 @@ function handleToolbarClick(event) {
   }
 
   // Insert image: open a file picker, then upload each chosen image to ImgBB and
-  // insert markdown at the caret of this toolbar's textarea.
+  // insert markdown at the caret this toolbar's textarea had before the picker opened.
   if (button.dataset.action === "insert-image") {
-    openImagePicker(textarea);
+    openImagePicker(textarea, start);
     return;
   }
 
