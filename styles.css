@@ -6029,6 +6029,8 @@ textarea {
   .face-header .edit-toolbar {
     width: 100%;
     flex-shrink: 0;
+    flex-wrap: wrap;
+    row-gap: 4px;
     justify-content: space-around;
     order: 3;
     box-sizing: border-box;
@@ -6041,6 +6043,8 @@ textarea {
   .all-card-editor-header .edit-toolbar {
     width: 100%;
     flex-shrink: 0;
+    flex-wrap: wrap;
+    row-gap: 4px;
     justify-content: space-around;
     margin-top: 6px;
   }
@@ -6960,6 +6964,14 @@ textarea {
   font-size: 0.92rem;
   font-weight: 900;
   color: var(--accent);
+  letter-spacing: 0.01em;
+}
+
+.help-subsection-title {
+  margin: 16px 0 8px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--text);
   letter-spacing: 0.01em;
 }
 

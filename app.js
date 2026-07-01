@@ -438,6 +438,21 @@ function clearSupabaseConfig() {
   localStorage.removeItem(SUPABASE_CONFIG_STORAGE_KEY);
 }
 
+// ImgBB API key for image paste/drop/upload. Stored in localStorage like the Supabase
+// config — no hardcoded credentials. The key only permits uploads to the user's ImgBB
+// account (get a free one at https://api.imgbb.com/).
+const IMGBB_KEY_STORAGE_KEY = "flashcards_imgbb_key";
+
+function loadImgbbKey() {
+  return (localStorage.getItem(IMGBB_KEY_STORAGE_KEY) || "").trim();
+}
+
+function saveImgbbKey(key) {
+  const trimmed = (key || "").trim();
+  if (trimmed) localStorage.setItem(IMGBB_KEY_STORAGE_KEY, trimmed);
+  else localStorage.removeItem(IMGBB_KEY_STORAGE_KEY);
+}
+
 let supabaseClient = null;
 
 function initSupabaseClient() {
@@ -498,6 +513,8 @@ function showSetupScreen() {
   document.getElementById("loginOverlay").hidden = true;
   document.querySelector(".app-shell").hidden = true;
   document.getElementById("logoutBtn").hidden = true;
+  const imgbbField = document.getElementById("setupImgbbKey");
+  if (imgbbField) imgbbField.value = loadImgbbKey();
 }
 
 function showLoginScreen() {
@@ -3752,6 +3769,20 @@ function preprocessSpecialBlocks(markdown) {
   return output;
 }
 
+// Rewrite Google Drive "share/viewer" links to a directly-embeddable image URL.
+// A link like https://drive.google.com/file/d/FILE_ID/view is a viewer page, not an
+// image, so it renders as a broken <img>. The /thumbnail?id=…&sz=w1000 route serves the
+// actual image bytes for public files (the old uc?export=view route now hits a virus-scan
+// interstitial). Returns the original url when it isn't a recognizable Drive link.
+function normalizeImageUrl(url) {
+  if (!url) return url;
+  const m = String(url).match(
+    /drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^&]*&)*id=|thumbnail\?(?:[^&]*&)*id=)([\w-]{20,})/
+  );
+  if (!m) return url;
+  return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`;
+}
+
 function markdownToSafeHtml(markdown) {
   const prepared = preprocessSpecialBlocks(markdown || "");
   const html = marked.parse(prepared);
@@ -3929,7 +3960,11 @@ async function enhanceRenderedMarkdown(container) {
     });
   }
 
-  container.querySelectorAll("img").forEach(addDiagramZoomControl);
+  container.querySelectorAll("img").forEach((img) => {
+    const rewritten = normalizeImageUrl(img.getAttribute("src"));
+    if (rewritten !== img.getAttribute("src")) img.setAttribute("src", rewritten);
+    addDiagramZoomControl(img);
+  });
 
   fitMarkdownTables(container);
 }
@@ -5563,9 +5598,10 @@ function clearBrowserPersistence() {
   try {
     localStorage.removeItem(themeStorageKey);
     localStorage.removeItem("flashcards_style_cache");
-    // deckStorageKey is intentionally kept — the working deck is restored on
-    // boot so a reload (online or offline) never loses it. The local deck
-    // library (LOCAL_DECKS_INDEX_KEY / LOCAL_DECK_PREFIX) is likewise kept.
+    // deckStorageKey is cleared on every boot — a refresh should start on the
+    // clean home screen, not reopen the last deck. Only credentials, the saved
+    // deck library (LOCAL_DECKS_INDEX_KEY / LOCAL_DECK_PREFIX), and styles persist.
+    localStorage.removeItem(deckStorageKey);
     // styleStorageKey is intentionally kept — styles persist locally across sessions
   } catch (error) {
     console.warn("Could not clear browser persistence", error);
@@ -5622,7 +5658,10 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
 
 // ---------------------------------------------------------------------------
 // Offline persistence — all plain localStorage, so it works with no network.
-//   • deckStorageKey            : the single "working" deck, auto-restored on boot
+//   • deckStorageKey            : the single "working" deck, saved during a session
+//                                 but NOT auto-restored on boot (cleared on launch,
+//                                 see clearBrowserPersistence) so a refresh starts
+//                                 on the clean home screen
 //   • LOCAL_DECKS_INDEX_KEY     : array of saved-deck metadata (the "My Decks" list)
 //   • LOCAL_DECK_PREFIX + <id>  : the full snapshot for one saved deck
 // ---------------------------------------------------------------------------
@@ -5652,21 +5691,6 @@ function scheduleDeckAutosave() {
     deckAutosaveTimer = null;
     persistWorkingDeck();
   }, 400);
-}
-
-function restoreWorkingDeck() {
-  try {
-    const raw = localStorage.getItem(deckStorageKey);
-    if (!raw) return false;
-    const payload = JSON.parse(raw);
-    if (!payload || !Array.isArray(payload.cards) || !payload.cards.length) return false;
-    loadDeckSnapshot(payload, payload.sourceTitle || payload.deckTitle || "");
-    state.localDeckId = payload.localDeckId || null;
-    return true;
-  } catch (error) {
-    console.warn("Could not restore working deck", error);
-    return false;
-  }
 }
 
 function readLocalDeckIndex() {
@@ -7293,6 +7317,8 @@ document.getElementById("setupForm")?.addEventListener("submit", (e) => {
   }
 
   saveSupabaseConfig(url, key);
+  const imgbbKey = document.getElementById("setupImgbbKey")?.value || "";
+  saveImgbbKey(imgbbKey);
   initSupabaseClient();
   setupAuthListener();
   showLoginScreen();
@@ -7764,8 +7790,9 @@ function initAppForUser() {
   renderThemeMenu();
   setTheme("dark-amoled");
   setStatus("");
-  // Bring back the last working deck (saved locally) so a reload never loses it.
-  if (!restoreWorkingDeck()) showCard();
+  // Start on a clean home screen each load — the last-open deck is no longer
+  // auto-restored (only credentials, the saved "My Decks" library, and styles persist).
+  showCard();
   setStyleStatus("Local style");
   installManifestLink();
   registerServiceWorker();
@@ -7824,8 +7851,9 @@ async function bootApp() {
 
 bootApp();
 
-// Flush any in-progress edit and the working deck before the tab is hidden or
-// closed, so a reload (or returning to the app later, offline) loses nothing.
+// Commit any in-progress edit into the session before the tab is hidden or closed.
+// (The working deck is snapshotted too, but it's intentionally not restored on the
+// next load — see clearBrowserPersistence — so a refresh starts on the home screen.)
 function flushWorkingDeck() {
   try {
     commitEditIfActive();
@@ -8070,15 +8098,251 @@ if (helpModal) {
   });
 }
 
+// ----- Image upload (ImgBB) -----------------------------------------------
+// Insert `text` at the textarea's caret and fire an input event so card state saves.
+function insertAtCursor(textarea, text) {
+  textarea.focus();
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  textarea.value = val.substring(0, start) + text + val.substring(end);
+  textarea.selectionStart = textarea.selectionEnd = start + text.length;
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// Replace the first occurrence of `find` with `replace` in the textarea (used to swap the
+// "uploading…" placeholder for the final markdown once the upload resolves).
+function replaceInTextarea(textarea, find, replace) {
+  const idx = textarea.value.indexOf(find);
+  if (idx === -1) return;
+  textarea.value = textarea.value.slice(0, idx) + replace + textarea.value.slice(idx + find.length);
+  const caret = idx + replace.length;
+  textarea.selectionStart = textarea.selectionEnd = caret;
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// Downscale + re-encode an image before upload to cut file size (screenshots are
+// often huge PNGs). Animated GIFs and SVGs are passed through untouched — canvas
+// would flatten/rasterize them. Falls back to the original file on any error or if
+// the "optimized" result isn't actually smaller.
+const IMAGE_MAX_DIMENSION = 1600; // longest edge, in px
+const IMAGE_QUALITY = 0.82;
+const IMAGE_MIME_EXT = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "png" };
+
+function optimizeImage(file) {
+  return new Promise((resolve) => {
+    const type = (file && file.type) || "";
+    if (!type.startsWith("image/") || type === "image/gif" || type === "image/svg+xml") {
+      resolve(file);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) { resolve(file); return; }
+      const scale = Math.min(1, IMAGE_MAX_DIMENSION / Math.max(w, h));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const toBlob = (mime) => new Promise((res) => canvas.toBlob(res, mime, IMAGE_QUALITY));
+      // WebP keeps transparency and compresses better; fall back to JPEG if it's unsupported.
+      toBlob("image/webp")
+        .then((blob) => blob || toBlob("image/jpeg"))
+        .then((blob) => {
+          if (!blob || blob.size >= file.size) { resolve(file); return; }
+          const ext = IMAGE_MIME_EXT[blob.type] || "img";
+          const baseName = (file.name || "image").replace(/\.[^.]+$/, "");
+          resolve(new File([blob], `${baseName}.${ext}`, { type: blob.type }));
+        })
+        .catch(() => resolve(file));
+    };
+    img.src = url;
+  });
+}
+
+// Upload an image File/Blob to ImgBB, returning the permanent direct URL (i.ibb.co/…).
+async function uploadImageToImgbb(file) {
+  const key = loadImgbbKey();
+  if (!key) throw new Error("NO_KEY");
+  if (!navigator.onLine) throw new Error("OFFLINE");
+  const form = new FormData();
+  form.append("image", file);
+  const res = await fetch(`https://api.imgbb.com/1/upload?key=${encodeURIComponent(key)}`, {
+    method: "POST",
+    body: form
+  });
+  const json = await res.json().catch(() => null);
+  if (!json?.success || !json?.data?.url) {
+    throw new Error(json?.error?.message || "Upload failed");
+  }
+  return json.data.url;
+}
+
+// Show the in-app ImgBB key modal (a real overlay — unlike window.prompt it survives
+// switching windows to copy the key). On save it stores the key and runs the pending
+// callback. Listeners are wired once; the callback is kept in module scope so calling
+// this again (e.g. a second image before a key is set) just replaces the callback
+// instead of stacking duplicate handlers.
+let imgbbModalWired = false;
+let imgbbPendingOnSaved = null;
+
+function showImgbbKeyModal(onSaved) {
+  const overlay = document.getElementById("imgbbOverlay");
+  const form = document.getElementById("imgbbForm");
+  const input = document.getElementById("imgbbKeyInput");
+  const errEl = document.getElementById("imgbbError");
+  const cancelBtn = document.getElementById("imgbbCancelBtn");
+  if (!overlay || !form || !input) return;
+
+  imgbbPendingOnSaved = typeof onSaved === "function" ? onSaved : null;
+  errEl.textContent = "";
+  input.value = loadImgbbKey();
+  overlay.hidden = false;
+  input.focus();
+
+  if (imgbbModalWired) return;
+  imgbbModalWired = true;
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const key = input.value.trim();
+    if (key.length < 20) {
+      errEl.textContent = "That key looks too short — paste the full ImgBB API key.";
+      return;
+    }
+    saveImgbbKey(key);
+    overlay.hidden = true;
+    const cb = imgbbPendingOnSaved;
+    imgbbPendingOnSaved = null;
+    if (cb) cb();
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    overlay.hidden = true;
+    imgbbPendingOnSaved = null;
+    showToast("Image upload cancelled — no ImgBB key", "info");
+  });
+}
+
+// Prompt the user for an ImgBB key, save it, then retry the upload for `file`.
+function promptForImgbbKeyThenRetry(textarea, file) {
+  showImgbbKeyModal(() => insertImageUpload(textarea, file));
+}
+
+// Insert an "uploading…" placeholder, upload the image, then swap in `![](url)`.
+async function insertImageUpload(textarea, file) {
+  if (!textarea || !file || !file.type || !file.type.startsWith("image/")) return;
+  const token = `![uploading…](#upl-${Date.now()}-${Math.random().toString(36).slice(2, 7)})`;
+  insertAtCursor(textarea, token);
+  showToast("Optimizing image…", "info");
+  try {
+    const optimized = await optimizeImage(file);
+    const url = await uploadImageToImgbb(optimized);
+    replaceInTextarea(textarea, token, `![](${url})`);
+    showToast("Image uploaded", "success");
+  } catch (err) {
+    replaceInTextarea(textarea, token, "");
+    if (err.message === "NO_KEY") {
+      promptForImgbbKeyThenRetry(textarea, file);
+    } else if (err.message === "OFFLINE") {
+      showToast("Can't upload image while offline", "error");
+    } else {
+      console.error("ImgBB upload failed", err);
+      showToast("Image upload failed", "error");
+    }
+  }
+}
+
+// Detect an image in a DataTransfer during `dragover`, where getAsFile() is still
+// null (file data is protected until drop). Reads item kind/type (exposed during
+// dragover) with a "Files" types fallback for browsers that don't populate items yet.
+function dragContainsImage(dataTransfer) {
+  if (!dataTransfer) return false;
+  const items = dataTransfer.items;
+  if (items && items.length) {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === "file" && it.type && it.type.startsWith("image/")) return true;
+    }
+  }
+  const types = dataTransfer.types;
+  if (types) {
+    for (let i = 0; i < types.length; i++) {
+      if (types[i] === "Files") return true;
+    }
+  }
+  return false;
+}
+
+// Pull the first image File from a clipboard/drag DataTransfer, if any.
+function firstImageFile(dataTransfer) {
+  if (!dataTransfer) return null;
+  const files = dataTransfer.files;
+  if (files && files.length) {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (f && f.type && f.type.startsWith("image/")) return f;
+    }
+  }
+  const items = dataTransfer.items;
+  if (items && items.length) {
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (it.kind === "file" && it.type && it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) return f;
+      }
+    }
+  }
+  return null;
+}
+
+// Hidden file input (created once, reused) for the toolbar "Insert image" button.
+let imagePickerInput = null;
+function openImagePicker(textarea) {
+  if (!imagePickerInput) {
+    imagePickerInput = document.createElement("input");
+    imagePickerInput.type = "file";
+    imagePickerInput.accept = "image/*";
+    imagePickerInput.multiple = true;
+    imagePickerInput.style.display = "none";
+    document.body.appendChild(imagePickerInput);
+    imagePickerInput.addEventListener("change", () => {
+      const target = imagePickerInput._targetTextarea;
+      const files = Array.from(imagePickerInput.files || []);
+      files.forEach((file) => {
+        if (file.type && file.type.startsWith("image/")) insertImageUpload(target, file);
+      });
+      imagePickerInput.value = "";
+    });
+  }
+  imagePickerInput._targetTextarea = textarea;
+  imagePickerInput.click();
+}
+
 // Convert rich text/HTML to Markdown on paste in all textareas
 document.addEventListener("paste", (event) => {
   const target = event.target;
   if (target.tagName !== "TEXTAREA") return;
 
-  if (typeof TurndownService === "undefined") return;
-
   const clipboardData = event.clipboardData || window.clipboardData;
   if (!clipboardData) return;
+
+  // Image on the clipboard (screenshot, copied image) → upload to ImgBB and insert markdown.
+  const imageFile = firstImageFile(clipboardData);
+  if (imageFile) {
+    event.preventDefault();
+    insertImageUpload(target, imageFile);
+    return;
+  }
+
+  if (typeof TurndownService === "undefined") return;
 
   const types = clipboardData.types || [];
   if (!types.includes("text/html")) return;
@@ -8175,6 +8439,26 @@ document.addEventListener("paste", (event) => {
   target.dispatchEvent(new Event("input", { bubbles: true }));
 });
 
+// Drag & drop an image file onto a card editor textarea → upload to ImgBB and insert markdown.
+// dragover must preventDefault on textareas so the drop event fires.
+document.addEventListener("dragover", (event) => {
+  if (event.target.tagName === "TEXTAREA" && dragContainsImage(event.dataTransfer)) {
+    event.preventDefault();
+  }
+});
+
+document.addEventListener("drop", (event) => {
+  if (event.target.tagName !== "TEXTAREA") return;
+  // Only intercept file drops. Dragging text/URLs into the textarea keeps its
+  // normal behavior (they get inserted as text).
+  if (!dragContainsImage(event.dataTransfer)) return;
+  // Prevent the browser from navigating away to open the dropped file.
+  event.preventDefault();
+  const imageFile = firstImageFile(event.dataTransfer);
+  if (imageFile) insertImageUpload(event.target, imageFile);
+  else showToast("Only image files can be dropped here", "info");
+});
+
 // Dynamic HTML template for the inline edit toolbar.
 // Pass { quickNote: true } to append the "save selection to quick_notes" button.
 function createToolbarHtml(options = {}) {
@@ -8232,6 +8516,7 @@ function createToolbarHtml(options = {}) {
     </div>
 
     <button type="button" data-action="bullet" title="Toggle Bullet List">-</button>
+    <button type="button" data-action="insert-image" title="Insert image (upload to ImgBB)">🖼️</button>
     <button type="button" data-action="clear-all" title="Clear Formatting">Tx</button>${quickNoteBtn}
   `;
 }
@@ -8470,6 +8755,13 @@ function handleToolbarClick(event) {
       d.classList.remove("is-open");
     });
     saveQuickNote(selectedText, button);
+    return;
+  }
+
+  // Insert image: open a file picker, then upload each chosen image to ImgBB and
+  // insert markdown at the caret of this toolbar's textarea.
+  if (button.dataset.action === "insert-image") {
+    openImagePicker(textarea);
     return;
   }
 

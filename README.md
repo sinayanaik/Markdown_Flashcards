@@ -15,6 +15,7 @@ A static web app that turns Markdown into swipeable flashcards, with Supabase-ba
 - [Toolbar Reference](#toolbar-reference)
 - [Studying](#studying)
 - [Editing & Formatting Cards](#editing--formatting-cards)
+- [Images](#images)
 - [Quick Notes](#quick-notes)
 - [All Cards Panel](#all-cards-panel)
 - [Exporting](#exporting)
@@ -34,6 +35,7 @@ A static web app that turns Markdown into swipeable flashcards, with Supabase-ba
 - **Swipe + keyboard navigation** — swipe left/right on mobile, arrow keys on desktop
 - **Known / Review categorization** — cards can be marked Known or Review and replayed in filtered sessions
 - **Inline card editing** — edit question or answer text directly in the study view, with a rich **formatting toolbar** (bold, italic, underline, strikethrough, code, fonts, colours, bullet lists)
+- **Image paste & upload** — paste, drag-and-drop, or pick any image while editing; it's uploaded to a free [ImgBB](https://api.imgbb.com/) host and inserted as Markdown. Public Google Drive share links are auto-embedded so they render directly.
 - **Quick Notes** — select any text while editing an answer and save it straight to a dedicated `quick_notes` cloud deck with one click
 - **Toast confirmations** — every cloud action (sync, load, delete, rename, export, quick note) pops a toast so you always know it worked
 - **All Cards panel** — browse, search, and edit every card in a deck at once
@@ -356,10 +358,42 @@ While editing, a **formatting toolbar** appears above the text. Select a span of
 | **Aa** | Font family picker |
 | **🎨** | Text colour (includes "Clear colour") |
 | **-** | Toggle bullet list |
+| **🖼️** | Insert an image — opens a file picker and uploads to ImgBB (see [Images](#images)) |
 | **Tx** | Clear all formatting from the selection |
 | **📌** | Save the selection as a Quick Note (answer toolbar only — see below) |
 
 Click the **save** (💾) icon to commit. Edits are also committed automatically whenever you navigate away from the card.
+
+---
+
+## Images
+
+You can add images to any card without hand-writing URLs. While editing, insert an image three ways:
+
+- **Paste** — copy any image (a screenshot, or an image from a webpage) and press `Ctrl`/`Cmd` + `V` in the editor
+- **Drag & drop** — drag an image file from your file manager onto the editor (desktop)
+- **Toolbar 🖼️** — tap the image button to open a file picker; on phones and tablets this offers your **camera or photo library**
+
+Before uploading, the image is **optimized in your browser** — downscaled to a max of 1600px on its longest edge and re-encoded to WebP (quality ~0.82) — which typically shrinks screenshots dramatically. Animated GIFs and SVGs are uploaded untouched, and if the "optimized" version isn't actually smaller the original is kept. The result is uploaded to [ImgBB](https://api.imgbb.com/) — a free, permanent image host — and a Markdown `![](https://i.ibb.co/…)` link is inserted at the cursor.
+
+### ImgBB API key
+
+Image upload needs a free ImgBB API key:
+
+1. Create a free account at [api.imgbb.com](https://api.imgbb.com/) and copy your API key.
+2. Enter it in the **ImgBB API key** field on the Supabase setup screen (reachable via **"Change Supabase project"** on the login screen). It's stored in `localStorage`, like the Supabase credentials — never in the source.
+
+If you try to insert an image before setting a key, the app prompts you for it once and remembers it. Uploads require a network connection.
+
+### Google Drive images
+
+Public Google Drive share links are embedded automatically — just paste the link as an image:
+
+```markdown
+![](https://drive.google.com/file/d/FILE_ID/view?usp=drivesdk)
+```
+
+The app rewrites it to a directly-embeddable form (`https://drive.google.com/thumbnail?id=FILE_ID&sz=w1000`) at render time, so the file shows instead of a broken image. The file must be shared as **"Anyone with the link"**.
 
 ---
 
