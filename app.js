@@ -719,6 +719,11 @@ async function touchWebDeckAccess(deckId) {
 
 
 
+function webDecksSkeletonRows(count = 4) {
+  const row = "<tr class=\"web-decks-skeleton-row\">" + Array.from({ length: 5 }, () => "<td><div class=\"skeleton-bar\"></div></td>").join("") + "</tr>";
+  return row.repeat(count);
+}
+
 async function fetchWebDecks({ toast = false } = {}) {
   if (!supabaseClient) return;
   if (!navigator.onLine) {
@@ -730,6 +735,9 @@ async function fetchWebDecks({ toast = false } = {}) {
   }
   const refreshBtn = document.getElementById("refreshWebDecksBtn");
   if (refreshBtn) setButtonLoading(refreshBtn, true, "Loading…");
+  if (el.webDecksListTable && !el.webDecksListTable.children.length) {
+    el.webDecksListTable.innerHTML = webDecksSkeletonRows();
+  }
   try {
     setStatus("Fetching web decks...");
     const { data, error } = await supabaseClient
@@ -1464,24 +1472,18 @@ async function loadWebDeck(deckId) {
     return;
   }
 
-  setStatus("Loading deck from web... (1/2) Fetching details");
-  
-  try {
-    const { data: deckData, error: deckError } = await supabaseClient
-      .from("decks")
-      .select("*")
-      .eq("id", deckId)
-      .single();
+  setStatus("Loading deck from web...");
 
+  try {
+    const [deckResult, cardsResult] = await Promise.all([
+      supabaseClient.from("decks").select("*").eq("id", deckId).single(),
+      supabaseClient.from("cards").select("*").eq("deck_id", deckId).order("position", { ascending: true })
+    ]);
+
+    const { data: deckData, error: deckError } = deckResult;
     if (deckError) throw deckError;
 
-    setStatus("Loading deck from web... (2/2) Fetching cards");
-    const { data: cardsData, error: cardsError } = await supabaseClient
-      .from("cards")
-      .select("*")
-      .eq("deck_id", deckId)
-      .order("position", { ascending: true });
-
+    const { data: cardsData, error: cardsError } = cardsResult;
     if (cardsError) throw cardsError;
 
     const statusById = {};
@@ -1505,7 +1507,7 @@ async function loadWebDeck(deckId) {
     state.importTitleHint = deckData.title || "";
     
     syncResults();
-    await touchWebDeckAccess(deckData.id);
+    touchWebDeckAccess(deckData.id).catch((error) => console.error("Failed to touch deck access", error));
     closeAllCardsPanel();
     setStatus(`Loaded ${cards.length} cards from web successfully.`);
     showToast(`Loaded "${state.deckTitle || "deck"}" · ${cards.length} cards`);
@@ -1809,6 +1811,8 @@ async function syncDeckToWeb() {
 
     if (deckError) throw deckError;
 
+    let webCardsById = new Map();
+
     if (shouldOverwriteExisting) {
       setStatus("Syncing... (2/3) Replacing existing web cards");
       const { error: deleteError } = await supabaseClient
@@ -1818,16 +1822,17 @@ async function syncDeckToWeb() {
 
       if (deleteError) throw deleteError;
     } else if (!isNewDeck) {
-      setStatus("Syncing... (2/3) Cleaning up deleted cards");
+      setStatus("Syncing... (2/3) Checking for changes");
       const { data: webCards, error: fetchError } = await supabaseClient
         .from("cards")
-        .select("id")
+        .select("id, question, answer, position, status")
         .eq("deck_id", state.deckId);
-      
+
       if (!fetchError && webCards) {
-        const localIds = new Set(state.masterCards.map(c => c.id));
-        const idsToDelete = webCards.filter(wc => !localIds.has(wc.id)).map(wc => wc.id);
-        
+        webCardsById = new Map(webCards.map((wc) => [String(wc.id), wc]));
+        const localIds = new Set(state.masterCards.map(c => String(c.id)));
+        const idsToDelete = webCards.filter(wc => !localIds.has(String(wc.id))).map(wc => wc.id);
+
         if (idsToDelete.length > 0) {
           const { error: deleteError } = await supabaseClient
             .from("cards")
@@ -1839,26 +1844,43 @@ async function syncDeckToWeb() {
       }
     }
 
-    setStatus(`Syncing... (3/3) Saving ${state.masterCards.length} cards`);
-    const cardsData = state.masterCards.map((card, index) => ({
-      id: card.id,
-      deck_id: state.deckId,
-      question: card.question,
-      answer: card.answer,
-      position: index,
-      status: normalizeCardStatus(state.statusById[card.id]),
-      updated_at: now
-    }));
+    const cardsData = state.masterCards
+      .map((card, index) => {
+        const status = normalizeCardStatus(state.statusById[card.id]);
+        const webCard = webCardsById.get(String(card.id));
+        const unchanged = webCard
+          && !syncTextChanged(card.question, webCard.question)
+          && !syncTextChanged(card.answer, webCard.answer)
+          && Number(webCard.position) === index
+          && normalizeCardStatus(webCard.status) === status;
 
-    // Chunk upserts if there are many cards
+        if (unchanged) return null;
+
+        return {
+          id: card.id,
+          deck_id: state.deckId,
+          question: card.question,
+          answer: card.answer,
+          position: index,
+          status,
+          updated_at: now
+        };
+      })
+      .filter(Boolean);
+
+    setStatus(`Syncing... (3/3) Saving ${cardsData.length} of ${state.masterCards.length} cards`);
+
+    // Chunk upserts and send them in parallel
     const chunkSize = 50;
+    const chunkUploads = [];
     for (let i = 0; i < cardsData.length; i += chunkSize) {
-      const chunk = cardsData.slice(i, i + chunkSize);
-      const { error: cardsError } = await supabaseClient
-        .from("cards")
-        .upsert(chunk);
-      if (cardsError) throw cardsError;
+      chunkUploads.push(
+        supabaseClient.from("cards").upsert(cardsData.slice(i, i + chunkSize))
+      );
     }
+    const chunkResults = await Promise.all(chunkUploads);
+    const chunkError = chunkResults.find((result) => result.error)?.error;
+    if (chunkError) throw chunkError;
 
     setStatus("Deck synced to web successfully.");
     showToast(`Synced "${deckTitle}" to cloud · ${state.masterCards.length} cards`);
