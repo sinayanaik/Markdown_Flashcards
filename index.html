@@ -4,18 +4,18 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0d1110">
-    <meta name="application-name" content="Flashcards">
+    <meta name="application-name" content="Recall">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Flashcards">
+    <meta name="apple-mobile-web-app-title" content="Recall">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Flashcards</title>
+    <title>Recall</title>
     <link rel="icon" type="image/png" href="fevicon.png">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260627-1">
+    <link rel="stylesheet" href="styles.css?v=20260702-1">
   </head>
   <body>
     <span class="offline-indicator" id="offlineIndicator" hidden>Offline</span>
@@ -25,7 +25,7 @@
         <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open menu" aria-expanded="false">&#9776;</button>
         <div class="toolbar" id="mainToolbar">
           <div class="toolbar-drawer-head">
-            <span class="toolbar-drawer-title">Flashcards</span>
+            <span class="toolbar-drawer-title">Recall</span>
             <button class="toolbar-close-btn" id="toolbarCloseBtn" type="button" aria-label="Close menu">&#215;</button>
           </div>
 
@@ -37,6 +37,7 @@
 
           <span class="drawer-section-label">Study</span>
           <button class="tool-button" id="allCardsBtn" type="button">&#8801; Browse All Cards</button>
+          <button class="tool-button" id="notesBtn" type="button" title="Freeform study notes for this deck">&#128221; Study Notes</button>
           <button class="tool-button" id="saveDeckBtn" type="button" title="Save the current deck to this device (works offline)">&#11015; Save to Device</button>
           <button class="tool-button" id="syncBtn" type="button" title="Sync current deck to Web">&#8635; Sync to Cloud</button>
           <div class="menu-wrap">
@@ -91,6 +92,11 @@
         </aside>
 
         <section class="quiz-panel" aria-label="Flashcard quiz">
+          <div class="view-mode-toggle" id="viewModeToggle" hidden aria-label="Deck view">
+            <button class="is-active" type="button" data-view-mode="cards">&#9634; Cards</button>
+            <button type="button" data-view-mode="notes">&#128221; Notes</button>
+          </div>
+
           <div class="progress-track" aria-hidden="true">
             <span class="progress-known" id="progressKnown"></span>
             <span class="progress-review" id="progressReview"></span>
@@ -155,6 +161,19 @@
               </div>
               <div id="deckSummary" class="deck-summary-overlay" hidden></div>
             </article>
+          </div>
+
+          <div class="notes-stage" id="notesStage" hidden>
+            <div class="notes-head">
+              <div class="face-label-row">
+                <span class="face-label">Study Notes</span>
+              </div>
+              <div class="edit-toolbar" id="notesEditToolbar" hidden></div>
+              <button class="edit-card-btn edit-toggle-pill" id="editNotesBtn" type="button" title="Edit notes" aria-label="Edit notes"><span class="pill-seg pill-seg-edit">&#9998;</span><span class="pill-seg pill-seg-view">&#128065;</span></button>
+            </div>
+            <div class="rendered notes-rendered" id="notesView"></div>
+            <textarea class="edit-textarea notes-edit" id="notesEdit" hidden spellcheck="false" placeholder="Study first, card later. Write or paste your notes here — markdown, math, diagrams and images all work. In the preview, highlight any fact to make it a card's answer, then frame its question."></textarea>
+            <button class="notes-make-card-btn" id="makeCardFromSelectionBtn" type="button" hidden>&#43; Make card</button>
           </div>
 
           <div class="controls" aria-label="Card actions">
@@ -451,10 +470,10 @@
       </div>
     </section>
 
-    <section class="help-modal" id="helpModal" hidden aria-label="How to use Flashcards">
+    <section class="help-modal" id="helpModal" hidden aria-label="How to use Recall">
       <div class="help-modal-content">
         <div class="help-modal-head">
-          <h2 class="help-modal-title">How to use Flashcards</h2>
+          <h2 class="help-modal-title">How to use Recall</h2>
           <button class="icon-button" id="helpModalCloseBtn" type="button" aria-label="Close help">&#215;</button>
         </div>
         <div class="help-modal-body">
@@ -469,6 +488,16 @@
               <li><strong>Import</strong> — paste Markdown, upload a <code>.md</code> file, or fetch from a URL</li>
               <li><strong>New Deck</strong> — start a blank deck and add cards manually</li>
               <li><strong>Web Decks</strong> — load a deck you previously synced (requires sign-in)</li>
+            </ul>
+          </section>
+
+          <section class="help-section">
+            <h3 class="help-section-title">Study Notes 📝 — learn first, card later</h3>
+            <p>Every deck has a freeform <strong>Notes</strong> document beside its cards. Use the <strong>Cards ⇄ Notes</strong> toggle at the top of the study area (or <strong>Study Notes</strong> in the toolbar).</p>
+            <ul class="help-list">
+              <li><strong>Write notes first</strong> — full Markdown: headings, math, diagrams, code, pasted images</li>
+              <li><strong>Highlight → + Make card</strong> — select any fact (text, images, math) in the rendered notes; the floating button shows how much is captured. Tap it to preview the selection as the card's <em>answer</em> and frame the <em>question</em> that should bring it to mind (Ctrl+Enter to add)</li>
+              <li>Notes save, sync, and export together with the deck — or skip notes entirely and make cards directly, as before</li>
             </ul>
           </section>
 
@@ -658,6 +687,24 @@ What year was the Eiffel Tower built?
       </div>
     </section>
 
+    <section class="confirm-modal" id="frameCardModal" hidden aria-label="Make a flashcard from notes">
+      <div class="confirm-modal-content frame-card-content">
+        <h3 class="prompt-modal-title">Make a flashcard</h3>
+        <div class="frame-card-field">
+          <span class="frame-card-label">Answer — captured from your notes</span>
+          <div class="rendered frame-card-answer" id="frameCardAnswerPreview"></div>
+        </div>
+        <div class="frame-card-field">
+          <span class="frame-card-label">Question — what should bring it to mind?</span>
+          <textarea id="frameCardQuestionInput" class="prompt-modal-input frame-card-question" rows="3" autocomplete="off" placeholder="e.g. What happens in the thylakoid membranes?"></textarea>
+        </div>
+        <div class="sync-modal-actions">
+          <button id="frameCardCancelBtn" type="button" class="sync-modal-btn">Cancel</button>
+          <button id="frameCardAddBtn" type="button" class="sync-modal-btn is-primary">Add card</button>
+        </div>
+      </div>
+    </section>
+
     <section class="import-selector-panel" id="importSelectorPanel" hidden aria-label="Select decks to import">
       <div class="import-selector-shell">
         <div class="import-selector-head">
@@ -693,7 +740,7 @@ What year was the Eiffel Tower built?
 
     <div id="setupOverlay" class="login-overlay" hidden>
       <div class="login-card">
-        <h1 class="login-title">Flashcards</h1>
+        <h1 class="login-title">Recall</h1>
         <p class="setup-subtitle">Connect your Supabase project</p>
         <form id="setupForm" novalidate>
           <div class="login-field">
@@ -735,7 +782,7 @@ What year was the Eiffel Tower built?
 
     <div id="loginOverlay" class="login-overlay" hidden>
       <div class="login-card">
-        <h1 class="login-title">Flashcards</h1>
+        <h1 class="login-title">Recall</h1>
         <form id="loginForm" data-mode="login" novalidate>
           <div class="login-field">
             <label for="loginEmail">Email</label>
@@ -769,6 +816,6 @@ What year was the Eiffel Tower built?
     <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
-    <script src="app.js?v=20260627-1"></script>
+    <script src="app.js?v=20260702-1"></script>
   </body>
 </html>

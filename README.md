@@ -1,6 +1,8 @@
-# Markdown Flashcards
+# Recall
 
-A static web app that turns Markdown into swipeable flashcards, with Supabase-backed cloud storage and multi-user authentication. No build step, no framework — just open it in a browser.
+A static web app for learning something for the first time: write freeform **Study Notes** per deck, highlight any fact in them to make it a flashcard answer (you frame the question), then study the deck as swipeable Markdown flashcards — with Supabase-backed cloud storage and multi-user authentication. No build step, no framework — just open it in a browser.
+
+*(Formerly "Markdown Flashcards" — existing decks, exports, and local data keep working unchanged.)*
 
 ---
 
@@ -36,6 +38,7 @@ A static web app that turns Markdown into swipeable flashcards, with Supabase-ba
 - **Known / Review categorization** — cards can be marked Known or Review and replayed in filtered sessions
 - **Inline card editing** — edit question or answer text directly in the study view, with a rich **formatting toolbar** (bold, italic, underline, strikethrough, code, cloze fill-in-the-blanks, fonts, colours, bullet lists)
 - **Image paste & upload** — paste, drag-and-drop, or pick any image while editing; it's uploaded to a free [ImgBB](https://api.imgbb.com/) host and inserted as Markdown. Public Google Drive share links are auto-embedded so they render directly.
+- **Study Notes per deck** — every deck carries a freeform Markdown notes document (Cards ⇄ Notes toggle in the study view). Study first, then highlight any fact in the rendered notes and tap **+ Make card**: the selection becomes the card's *answer* and you're prompted to frame the *question* that should recall it. Notes sync to the cloud with the deck and travel inside Markdown/JSON exports. *(Existing Supabase projects: run `supabase_deck_notes.sql` once in the SQL Editor.)*
 - **Quick Notes** — select any text while editing an answer and save it straight to a dedicated `quick_notes` cloud deck with one click
 - **Toast confirmations** — every cloud action (sync, load, delete, rename, export, quick note) pops a toast so you always know it worked
 - **All Cards panel** — browse, search, and edit every card in a deck at once
@@ -95,6 +98,7 @@ CREATE TABLE public.decks (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'Uncategorized',
+  notes TEXT NOT NULL DEFAULT '',
   current_card_index INT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),

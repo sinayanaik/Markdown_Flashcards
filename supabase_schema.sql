@@ -1,5 +1,5 @@
 -- ============================================================
--- Markdown Flashcards — Supabase Schema (with Auth)
+-- Recall (formerly Markdown Flashcards) — Supabase Schema (with Auth)
 -- ============================================================
 -- Requires Supabase Auth to be enabled on your project.
 -- Each user sees only their own decks, cards, and style settings.
@@ -10,6 +10,7 @@ CREATE TABLE decks (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'Uncategorized',
+  notes TEXT NOT NULL DEFAULT '',
   current_card_index INT DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

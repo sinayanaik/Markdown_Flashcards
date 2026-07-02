@@ -50,6 +50,8 @@ const state = {
   previewCard: null,
   deckTitle: "",
   deckCategory: "Uncategorized",
+  notes: "",
+  viewMode: "cards",
   sourceTitle: "",
   importTitleHint: "",
   results: {
@@ -1149,6 +1151,7 @@ function normalizeWebDeckPayload(deckData, cardsData = []) {
     id: String(deckData.id || ""),
     title: String(deckData.title || "Untitled"),
     category: normalizeDeckCategory(deckData.category),
+    notes: String(deckData.notes || ""),
     current_card_index: Number(deckData.current_card_index) || 0,
     created_at: deckData.created_at || null,
     updated_at: deckData.updated_at || null,
@@ -1171,11 +1174,12 @@ function normalizeWebDeckPayload(deckData, cardsData = []) {
 
 function deckPayloadSnapshot(payload) {
   return {
-    app: "markdown-flashcards",
+    app: "recall", // informational only — imports never read this field, so old "markdown-flashcards" exports still load
     version: 1,
     exportedAt: new Date().toISOString(),
     deckTitle: payload.deck.title,
     deckCategory: payload.deck.category,
+    notes: payload.deck.notes || "",
     sourceTitle: payload.deck.title,
     importTitleHint: payload.deck.title,
     deckId: payload.deck.id,
@@ -1244,6 +1248,7 @@ async function fetchAllWebDeckPayloads() {
 }
 
 function webDeckPayloadMarkdown(payload) {
+  const notesBlock = notesExportBlock(payload.deck.notes);
   return [
     `# ${payload.deck.title}`,
     "",
@@ -1251,8 +1256,10 @@ function webDeckPayloadMarkdown(payload) {
     `Deck ID: ${payload.deck.id}`,
     `Exported: ${new Date().toISOString()}`,
     "",
-    formatCardList("Cards", payload.cards)
-  ].join("\n");
+    formatCardList("Cards", payload.cards),
+    notesBlock ? "" : null,
+    notesBlock || null
+  ].filter((line) => line !== null).join("\n");
 }
 
 function sqlValue(value) {
@@ -1265,7 +1272,7 @@ function sqlTimestamp(value, fallback = new Date().toISOString()) {
   return sqlValue(parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : fallback);
 }
 
-function buildDeckSql(payloads, title = "Markdown Flashcards SQL Export") {
+function buildDeckSql(payloads, title = "Recall SQL Export") {
   const lines = [
     `-- ${title}`,
     `-- Exported: ${new Date().toISOString()}`,
@@ -1277,10 +1284,10 @@ function buildDeckSql(payloads, title = "Markdown Flashcards SQL Export") {
     lines.push("");
     lines.push(`-- Deck: ${deck.title}`);
     lines.push(
-      "INSERT INTO decks (id, title, category, current_card_index, created_at, updated_at, last_accessed_at) VALUES " +
-      `(${sqlValue(deck.id)}, ${sqlValue(deck.title)}, ${sqlValue(deck.category)}, ${Number(deck.current_card_index) || 0}, ${sqlTimestamp(deck.created_at)}, ${sqlTimestamp(deck.updated_at)}, ${sqlTimestamp(deck.last_accessed_at)}) ` +
+      "INSERT INTO decks (id, title, category, notes, current_card_index, created_at, updated_at, last_accessed_at) VALUES " +
+      `(${sqlValue(deck.id)}, ${sqlValue(deck.title)}, ${sqlValue(deck.category)}, ${sqlValue(deck.notes || "")}, ${Number(deck.current_card_index) || 0}, ${sqlTimestamp(deck.created_at)}, ${sqlTimestamp(deck.updated_at)}, ${sqlTimestamp(deck.last_accessed_at)}) ` +
       "ON CONFLICT (id) DO UPDATE SET " +
-      "title = EXCLUDED.title, category = EXCLUDED.category, current_card_index = EXCLUDED.current_card_index, updated_at = EXCLUDED.updated_at, last_accessed_at = EXCLUDED.last_accessed_at;"
+      "title = EXCLUDED.title, category = EXCLUDED.category, notes = EXCLUDED.notes, current_card_index = EXCLUDED.current_card_index, updated_at = EXCLUDED.updated_at, last_accessed_at = EXCLUDED.last_accessed_at;"
     );
     lines.push(`DELETE FROM cards WHERE deck_id = ${sqlValue(deck.id)};`);
 
@@ -1321,6 +1328,7 @@ function currentDeckPayload(scope = "all") {
       id: deckId,
       title: deckTitle,
       category: normalizeDeckCategory(state.deckCategory),
+      notes: state.notes || "",
       current_card_index: Number.isFinite(state.current) ? state.current : 0,
       created_at: null,
       updated_at: new Date().toISOString(),
@@ -1351,7 +1359,7 @@ async function exportWebDeck(deckId, format) {
   try {
     setStatus("Exporting web deck...");
     const payload = await fetchWebDeckPayload(deckId);
-    const baseName = slugifyFileName(payload.deck.title || "flashcards");
+    const baseName = slugifyFileName(payload.deck.title || "recall");
 
     if (format === "pdf") {
       await exportCardsPdf(payload.deck.title, payload.cards, {
@@ -1425,7 +1433,7 @@ async function exportAllWebDecks(format) {
     } else {
       downloadTextFile(
         `${JSON.stringify({
-          app: "markdown-flashcards",
+          app: "recall",
           version: 1,
           exportedAt: new Date().toISOString(),
           decks: payloads.map(deckPayloadSnapshot)
@@ -1503,9 +1511,12 @@ async function loadWebDeck(deckId) {
     state.current = 0; // always start from the first card on fresh load
     state.deckTitle = deckData.title || "";
     state.deckCategory = normalizeDeckCategory(deckData.category);
+    // Pre-migration databases have no notes column; select("*") just omits it.
+    state.notes = String(deckData.notes || "");
     state.sourceTitle = deckData.title || "";
     state.importTitleHint = deckData.title || "";
-    
+    setViewMode("cards");
+
     syncResults();
     touchWebDeckAccess(deckData.id).catch((error) => console.error("Failed to touch deck access", error));
     closeAllCardsPanel();
@@ -1678,8 +1689,8 @@ async function showSyncModal() {
   const modal = el.syncModal;
   const content = el.syncDetailsContent;
   const confirmBtn = document.getElementById("confirmSyncBtn");
-  
-  if (!state.masterCards.length) {
+
+  if (!state.masterCards.length && !state.notes.trim()) {
     setStatus("No deck to sync.", "error");
     return;
   }
@@ -1741,8 +1752,11 @@ async function showSyncModal() {
       if (error) throw error;
 
       const { added, deleted, edited, moved, statusChanges } = calculateSyncDiff(state.masterCards, webCards || [], state.statusById);
+      // Notes live on the deck row, not on cards, so they are compared
+      // separately from the card diff.
+      const notesChanged = syncTextChanged(state.notes, syncTarget.existingDeck?.notes || "");
 
-      if (added === 0 && deleted === 0 && edited === 0 && moved === 0 && statusChanges === 0) {
+      if (added === 0 && deleted === 0 && edited === 0 && moved === 0 && statusChanges === 0 && !notesChanged) {
         diffHtml = `<p style="color: var(--text-secondary);">No changes detected. The web deck is up to date.</p>`;
       } else {
         diffHtml = `<p style="color: var(--text-secondary); margin-bottom: 0.5rem;"><strong>${syncTarget.overwriteExisting ? "Local import will overwrite web deck:" : "Changes to sync:"}</strong></p>
@@ -1752,6 +1766,7 @@ async function showSyncModal() {
         if (edited > 0) diffHtml += `<li>${edited} card${edited > 1 ? 's' : ''} modified</li>`;
         if (moved > 0) diffHtml += `<li>${moved} card position${moved > 1 ? 's' : ''} updated</li>`;
         if (statusChanges > 0) diffHtml += `<li>${statusChanges} status update${statusChanges > 1 ? 's' : ''}</li>`;
+        if (notesChanged) diffHtml += `<li>Study notes updated</li>`;
         diffHtml += `</ul>`;
       }
     } catch (err) {
@@ -1776,8 +1791,8 @@ async function showSyncModal() {
 async function syncDeckToWeb() {
   if (!supabaseClient) return;
   el.syncModal.hidden = true;
-  
-  if (!state.masterCards.length) {
+
+  if (!state.masterCards.length && !state.notes.trim()) {
     setStatus("No deck to sync.", "error");
     return;
   }
@@ -1800,14 +1815,27 @@ async function syncDeckToWeb() {
       id: state.deckId,
       title: deckTitle,
       category: state.deckCategory,
+      notes: state.notes || "",
       current_card_index: Number.isFinite(state.current) ? state.current : 0,
       updated_at: now,
       last_accessed_at: now
     };
 
-    const { error: deckError } = await supabaseClient
+    let { error: deckError } = await supabaseClient
       .from("decks")
       .upsert(deckData);
+
+    if (deckError && String(deckError.message || "").includes("notes")) {
+      // Database hasn't run supabase_deck_notes.sql yet — sync everything
+      // else so the user doesn't lose card changes, but warn about notes.
+      const { notes, ...deckDataWithoutNotes } = deckData;
+      ({ error: deckError } = await supabaseClient
+        .from("decks")
+        .upsert(deckDataWithoutNotes));
+      if (!deckError && state.notes.trim()) {
+        showToast("Notes not synced — run supabase_deck_notes.sql in Supabase", "error");
+      }
+    }
 
     if (deckError) throw deckError;
 
@@ -1889,7 +1917,9 @@ async function syncDeckToWeb() {
     setStatus(
       errorMessage.includes("category") || errorMessage.includes("last_accessed_at")
         ? "Failed to sync deck metadata. Run supabase_deck_categories.sql in Supabase first."
-        : "Failed to sync deck to web.",
+        : errorMessage.includes("notes")
+          ? "Failed to sync deck metadata. Run supabase_deck_notes.sql in Supabase first."
+          : "Failed to sync deck to web.",
       "error"
     );
     showToast("Cloud sync failed", "error");
@@ -2051,6 +2081,19 @@ const el = {
   closeImportSelectorBtn: document.querySelector("#closeImportSelectorBtn"),
   questionEditToolbar: document.querySelector("#questionEditToolbar"),
   answerEditToolbar: document.querySelector("#answerEditToolbar"),
+  viewModeToggle: document.querySelector("#viewModeToggle"),
+  notesBtn: document.querySelector("#notesBtn"),
+  notesStage: document.querySelector("#notesStage"),
+  notesView: document.querySelector("#notesView"),
+  notesEdit: document.querySelector("#notesEdit"),
+  notesEditToolbar: document.querySelector("#notesEditToolbar"),
+  editNotesBtn: document.querySelector("#editNotesBtn"),
+  makeCardFromSelectionBtn: document.querySelector("#makeCardFromSelectionBtn"),
+  frameCardModal: document.querySelector("#frameCardModal"),
+  frameCardAnswerPreview: document.querySelector("#frameCardAnswerPreview"),
+  frameCardQuestionInput: document.querySelector("#frameCardQuestionInput"),
+  frameCardAddBtn: document.querySelector("#frameCardAddBtn"),
+  frameCardCancelBtn: document.querySelector("#frameCardCancelBtn"),
   syncModal: document.querySelector("#syncModal"),
   syncDetailsContent: document.querySelector("#syncDetailsContent"),
   webDecksPanel: document.querySelector("#webDecksPanel"),
@@ -3064,7 +3107,8 @@ function renderMyDecksList() {
 
     const tdCount = document.createElement("td");
     tdCount.dataset.label = "Cards";
-    tdCount.textContent = String(deck.cardCount ?? "—");
+    tdCount.textContent = String(deck.cardCount ?? "—") + (deck.hasNotes ? " 📝" : "");
+    if (deck.hasNotes) tdCount.title = "This deck has study notes";
 
     const tdSaved = document.createElement("td");
     tdSaved.dataset.label = "Saved";
@@ -3133,6 +3177,30 @@ function stripReaderMetadata(markdown) {
   const marker = "\nMarkdown Content:\n";
   const markerIndex = source.indexOf(marker);
   return markerIndex === -1 ? source : source.slice(markerIndex + marker.length).trim();
+}
+
+// Deck study notes travel inside markdown exports between HTML-comment
+// sentinels so the card parsers never mistake freeform notes (which may
+// legitimately contain `::` lines, `---` rules, or headings) for cards.
+const NOTES_BLOCK_RE = /\n?<!--\s*recall:notes\s*-->\n?([\s\S]*?)\n?<!--\s*\/recall:notes\s*-->\n?/g;
+
+function extractNotesFromMarkdown(markdown) {
+  const found = [];
+  const rest = normalizeMarkdown(String(markdown || "")).replace(NOTES_BLOCK_RE, (match, body) => {
+    const cleaned = body.replace(/^\s*##\s+Notes\s*\n/, "").trim();
+    if (cleaned) found.push(cleaned);
+    return "\n";
+  });
+  return { markdown: rest, notes: found.join("\n\n---\n\n") };
+}
+
+function notesExportBlock(notes) {
+  const body = String(notes || "")
+    // A literal end sentinel inside the notes would truncate the block on import.
+    .replace(/<!--\s*\/recall:notes\s*-->/g, "<!- - /recall:notes - ->")
+    .trim();
+  if (!body) return "";
+  return `<!-- recall:notes -->\n## Notes\n\n${body}\n<!-- /recall:notes -->`;
 }
 
 function removeEmptyHeadingGroups(markdown) {
@@ -3506,7 +3574,10 @@ function countQuestionHeadings(markdown) {
 }
 
 function parseCards(markdown) {
-  const source = removeEmptyHeadingGroups(stripReaderMetadata(markdown));
+  // Deck notes blocks are never card material — strip them defensively so
+  // notes content can't leak into any of the parsers below.
+  const withoutNotes = extractNotesFromMarkdown(markdown).markdown;
+  const source = removeEmptyHeadingGroups(stripReaderMetadata(withoutNotes));
   const delimitedCards = parseDelimitedCards(source);
   const hasDelimitedCardSyntax = delimitedCardBoundaryPattern.test(source);
   const structuredLegacyCards = [
@@ -4601,7 +4672,7 @@ async function exportSelectedWebDecks(deckIds, format) {
     } else {
       downloadTextFile(
         `${JSON.stringify({
-          app: "markdown-flashcards",
+          app: "recall",
           version: 1,
           exportedAt: new Date().toISOString(),
           decks: payloads.map(deckPayloadSnapshot)
@@ -5069,19 +5140,22 @@ function updateActiveCardStatusBadges() {
 function updateMeta() {
   const total = state.cards.length;
   const finished = Math.min(state.current, total);
+  // A deck "exists" for UI purposes once it has cards OR study notes, so
+  // notes-first decks show their title and can be saved/synced/exported.
+  const hasDeck = state.masterCards.length > 0 || Boolean(state.notes.trim());
   syncResults();
   updateActiveCardStatusBadges();
   el.deckTitle.textContent = state.deckTitle;
   el.deckTitle.title = state.deckTitle;
-  el.deckTitleWrap.hidden = state.masterCards.length === 0;
-  if (el.deckMeta2Row) el.deckMeta2Row.hidden = state.masterCards.length === 0;
-  el.editDeckTitleBtn.disabled = state.masterCards.length === 0;
+  el.deckTitleWrap.hidden = !hasDeck;
+  if (el.deckMeta2Row) el.deckMeta2Row.hidden = !hasDeck;
+  el.editDeckTitleBtn.disabled = !hasDeck;
   if (el.deckCategory) {
     el.deckCategory.textContent = normalizeDeckCategory(state.deckCategory);
     el.deckCategory.title = `Category: ${normalizeDeckCategory(state.deckCategory)}`;
   }
   if (el.editDeckCategoryBtn) {
-    el.editDeckCategoryBtn.disabled = state.masterCards.length === 0;
+    el.editDeckCategoryBtn.disabled = !hasDeck;
   }
   el.positionText.textContent = state.previewCard ? "Preview" : total ? `${Math.min(state.current + 1, total)}/${total}` : "0/0";
   el.scoreText.textContent = `Known ${state.known} / Review ${state.review}`;
@@ -5106,12 +5180,254 @@ function updateMeta() {
   el.shuffleBtn.disabled = total < 2;
   el.resetBtn.disabled = total === 0;
   el.allCardsBtn.disabled = state.masterCards.length === 0;
-  el.exportBtn.disabled = state.masterCards.length === 0 && state.results.known.length === 0 && state.results.review.length === 0;
+  el.exportBtn.disabled = !hasDeck && state.results.known.length === 0 && state.results.review.length === 0;
   el.replayKnownBtn.disabled = state.results.known.length === 0;
   el.replayReviewBtn.disabled = state.results.review.length === 0;
   el.replayUncategorizedBtn.disabled = uncategorizedCards().length === 0;
   el.replayAllBtn.disabled = state.masterCards.length === 0;
+  if (el.viewModeToggle) el.viewModeToggle.hidden = !hasDeck;
+  if (el.notesBtn) el.notesBtn.disabled = !hasDeck;
+  if (!hasDeck && state.viewMode === "notes") setViewMode("cards");
 }
+
+// ── Deck study notes view ──────────────────────────────────────────
+// Notes and Cards are two complementary views of the same deck: study/write
+// notes first, then distill them into flashcards (or skip notes entirely).
+const quizPanel = document.querySelector(".quiz-panel");
+
+function isNotesEditing() {
+  return Boolean(el.notesEdit && !el.notesEdit.hidden);
+}
+
+// UI-only exit from notes edit mode. Deliberately does NOT copy the textarea
+// into state.notes — the textarea's input listener keeps state in sync while
+// typing, and deck-load paths call this after state.notes was already replaced.
+function resetNotesEditingUI() {
+  if (!isNotesEditing()) return;
+  el.notesEdit.hidden = true;
+  el.notesView.hidden = false;
+  el.notesEditToolbar.hidden = true;
+  el.editNotesBtn.classList.remove("is-editing");
+  el.editNotesBtn.title = "Edit notes";
+}
+
+function commitNotesEditIfActive() {
+  if (!isNotesEditing()) return;
+  state.notes = el.notesEdit.value;
+  resetNotesEditingUI();
+  renderMarkdown(el.notesView, state.notes, true);
+  scheduleDeckAutosave();
+  updateMeta();
+}
+
+function enterNotesEditing() {
+  if (!el.notesEdit || isNotesEditing()) return;
+  el.notesEdit.value = state.notes;
+  el.notesView.hidden = true;
+  el.notesEdit.hidden = false;
+  el.notesEditToolbar.hidden = false;
+  el.editNotesBtn.classList.add("is-editing");
+  el.editNotesBtn.title = "Back to preview";
+  hideNotesSelectionButton();
+  el.notesEdit.dispatchEvent(new Event("input", { bubbles: true }));
+  el.notesEdit.focus();
+}
+
+function setViewMode(mode) {
+  const next = mode === "notes" ? "notes" : "cards";
+  if (!el.notesStage || !el.viewModeToggle) {
+    state.viewMode = next;
+    return;
+  }
+  if (next === "cards") resetNotesEditingUI();
+  const changed = state.viewMode !== next;
+  state.viewMode = next;
+  const notesActive = next === "notes";
+  quizPanel?.classList.toggle("notes-mode", notesActive);
+  el.notesStage.hidden = !notesActive;
+  el.viewModeToggle.querySelectorAll("[data-view-mode]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.viewMode === next);
+  });
+  hideNotesSelectionButton();
+  if (notesActive) {
+    renderMarkdown(el.notesView, state.notes, true);
+    if (!state.notes.trim()) enterNotesEditing();
+  } else if (changed) {
+    showCard();
+  }
+}
+
+el.editNotesBtn?.addEventListener("click", () => {
+  if (isNotesEditing()) commitNotesEditIfActive();
+  else enterNotesEditing();
+});
+
+el.notesEdit?.addEventListener("input", () => {
+  state.notes = el.notesEdit.value;
+  scheduleDeckAutosave();
+});
+
+el.viewModeToggle?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-view-mode]");
+  if (button) setViewMode(button.dataset.viewMode);
+});
+
+el.notesBtn?.addEventListener("click", () => setViewMode("notes"));
+
+// ── Select text in rendered notes → make a flashcard in this deck ──
+// Highlighting text/images in the notes preview floats a "+ Make card ·
+// N words" pill next to the selection; tapping it opens the frame-card modal
+// where the captured selection (serialized back to markdown, so images and
+// math survive) is previewed as the ANSWER and the user frames the question.
+// Works offline — the new card syncs with the normal flow.
+let notesSelectionTimer = null;
+
+function hideNotesSelectionButton() {
+  if (!el.makeCardFromSelectionBtn) return;
+  el.makeCardFromSelectionBtn.hidden = true;
+  el.makeCardFromSelectionBtn.dataset.selectionText = "";
+}
+
+// The live selection's range, but only when it's a real selection inside the
+// rendered notes view.
+function notesSelectionRange() {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
+  if (!el.notesView || el.notesView.hidden) return null;
+  if (!el.notesView.contains(selection.anchorNode) || !el.notesView.contains(selection.focusNode)) return null;
+  return selection.getRangeAt(0);
+}
+
+// Clone the selected fragment with rendered-markdown UI chrome removed
+// (image/diagram Zoom pills, code-block copy buttons, language badges).
+function cleanedSelectionFragment(range) {
+  const container = document.createElement("div");
+  container.appendChild(range.cloneContents());
+  container.querySelectorAll("button, .code-lang-badge").forEach((node) => node.remove());
+  return container;
+}
+
+// Serialize the notes selection back to MARKDOWN, so images, math, bold text
+// etc. survive into the card. selection.toString() would only give plain
+// text — for a selected image it literally yields the "Zoom" button label of
+// its .diagram-shell wrapper.
+function notesSelectionMarkdown(range) {
+  const fragment = cleanedSelectionFragment(range);
+  const markdown = htmlToMarkdown(fragment.innerHTML).trim();
+  return markdown || fragment.textContent.trim();
+}
+
+function positionNotesSelectionButton() {
+  const button = el.makeCardFromSelectionBtn;
+  if (!button) return;
+  const range = state.viewMode === "notes" ? notesSelectionRange() : null;
+  const fragment = range ? cleanedSelectionFragment(range) : null;
+  const text = fragment ? fragment.textContent.trim() : "";
+  const imageCount = fragment ? fragment.querySelectorAll("img").length : 0;
+  if (!text && !imageCount) {
+    hideNotesSelectionButton();
+    return;
+  }
+  const rect = range.getBoundingClientRect();
+  // Capture the selection as markdown now: tapping the button may dissolve
+  // the selection before the click handler runs.
+  button.dataset.selectionText = notesSelectionMarkdown(range);
+  // Show how much is being captured, so the selection size is obvious.
+  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+  const parts = [];
+  if (words) parts.push(`${words} word${words === 1 ? "" : "s"}`);
+  if (imageCount) parts.push(imageCount === 1 ? "1 image" : `${imageCount} images`);
+  button.textContent = `+ Make card · ${parts.join(" + ")}`;
+  button.hidden = false;
+  const btnRect = button.getBoundingClientRect();
+  const margin = 8;
+  let top = rect.bottom + margin;
+  if (top + btnRect.height > window.innerHeight - margin) {
+    top = Math.max(margin, rect.top - btnRect.height - margin);
+  }
+  const left = Math.min(
+    Math.max(margin, rect.left + rect.width / 2 - btnRect.width / 2),
+    window.innerWidth - btnRect.width - margin
+  );
+  button.style.top = `${top}px`;
+  button.style.left = `${left}px`;
+}
+
+function addCardFromNotes(question, answer) {
+  const card = {
+    // Random suffix: bare Date.now() collides when cards are created from
+    // several selections in quick succession.
+    id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    question,
+    answer
+  };
+  const refreshActive = activeDeckMatchesMasterOrder();
+  state.masterCards.push(card);
+  if (refreshActive) state.cards.push(card);
+  syncResults();
+  updateMeta();
+  scheduleDeckAutosave();
+  showToast(`Card added · ${state.masterCards.length} total`);
+  setStatus(state.deckId ? "Card added from notes locally. Sync to update the web deck." : "Card added from notes.");
+}
+
+function createCardFromNotesSelection(markdown) {
+  // The highlighted fact is what you want to recall — it becomes the ANSWER;
+  // the user frames the question that should bring it to mind. The modal
+  // shows exactly what was captured (rendered, images included) so there's
+  // no doubt about the selection, and gives a proper textarea to write in.
+  const answer = String(markdown || "").trim();
+  if (!answer || !el.frameCardModal) return;
+
+  el.frameCardModal.hidden = false;
+  lockPageScroll();
+  renderMarkdown(el.frameCardAnswerPreview, answer, true);
+  el.frameCardQuestionInput.value = "";
+  requestAnimationFrame(() => el.frameCardQuestionInput.focus());
+
+  const cleanup = (confirmed) => {
+    el.frameCardModal.hidden = true;
+    unlockPageScroll();
+    el.frameCardAddBtn.onclick = null;
+    el.frameCardCancelBtn.onclick = null;
+    el.frameCardQuestionInput.onkeydown = null;
+    if (!confirmed) return;
+    const question = el.frameCardQuestionInput.value.trim();
+    if (!question) {
+      // Blank-question cards are dropped by loadDeckSnapshot on the next
+      // load, so keeping one would silently lose it anyway.
+      setStatus("Card not added — a question is required.", "error");
+      return;
+    }
+    addCardFromNotes(question, answer);
+  };
+  el.frameCardAddBtn.onclick = () => cleanup(true);
+  el.frameCardCancelBtn.onclick = () => cleanup(false);
+  el.frameCardQuestionInput.onkeydown = (e) => {
+    // Plain Enter inserts a newline (questions can be multi-line);
+    // Ctrl/Cmd+Enter confirms, Escape cancels.
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); cleanup(true); }
+    if (e.key === "Escape") { e.preventDefault(); cleanup(false); }
+  };
+}
+
+document.addEventListener("selectionchange", () => {
+  if (state.viewMode !== "notes") return;
+  if (notesSelectionTimer) clearTimeout(notesSelectionTimer);
+  notesSelectionTimer = setTimeout(positionNotesSelectionButton, 160);
+});
+
+el.makeCardFromSelectionBtn?.addEventListener("pointerdown", (event) => {
+  // preventDefault keeps the selection from dissolving mid-tap.
+  event.preventDefault();
+  event.stopPropagation();
+  const text = el.makeCardFromSelectionBtn.dataset.selectionText || "";
+  hideNotesSelectionButton();
+  window.getSelection()?.removeAllRanges();
+  createCardFromNotesSelection(text);
+});
+
+el.notesView?.addEventListener("scroll", hideNotesSelectionButton, { passive: true });
 
 function transitionClassFor(direction, phase) {
   if (!direction) return "";
@@ -5303,8 +5619,21 @@ function detectDecksInMarkdown(markdown) {
   const deckSections = [];
   let currentDeck = null;
 
+  let inNotesBlock = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // Never treat lines inside a deck-notes block as deck boundaries or
+    // metadata — notes are freeform and may contain `# headings` of their own.
+    if (/^<!--\s*recall:notes\s*-->\s*$/.test(line.trim())) inNotesBlock = true;
+    if (inNotesBlock) {
+      if (currentDeck) {
+        currentDeck.lines.push(line);
+      } else {
+        currentDeck = { title: "", category: "General", lines: [line] };
+      }
+      if (/^<!--\s*\/recall:notes\s*-->\s*$/.test(line.trim())) inNotesBlock = false;
+      continue;
+    }
     const match = line.match(/^#\s+(.+)$/);
     if (match) {
       if (currentDeck) {
@@ -5343,14 +5672,16 @@ function detectDecksInMarkdown(markdown) {
 
   const parsedDecks = [];
   deckSections.forEach((d) => {
-    const content = d.lines.join("\n").trim();
-    if (!content) return;
+    const rawContent = d.lines.join("\n").trim();
+    if (!rawContent) return;
+    const { markdown: content, notes } = extractNotesFromMarkdown(rawContent);
     const cards = parseCards(content);
-    if (cards.length > 0) {
+    if (cards.length > 0 || notes.trim()) {
       parsedDecks.push({
         title: d.title || "",
         category: d.category || "General",
         cards: cards,
+        notes: notes,
         content: content
       });
     }
@@ -5438,6 +5769,11 @@ async function loadSelectedImportDecks() {
     state.deckCategory = defaultDeckCategory;
   }
   state.sourceTitle = state.deckTitle;
+  state.notes = selectedDecks
+    .map((deck) => String(deck.notes || "").trim())
+    .filter(Boolean)
+    .join("\n\n---\n\n");
+  setViewMode("cards");
 
   closeAllCardsPanel();
   closeImportPanel();
@@ -5450,14 +5786,15 @@ async function loadSelectedImportDecks() {
 }
 
 function buildCards(titleHint = state.importTitleHint || "", append = false) {
-  const source = stripReaderMetadata(el.sourceInput.value);
+  const rawSource = stripReaderMetadata(el.sourceInput.value);
   if (!append) {
-    const detectedDecks = detectDecksInMarkdown(source);
+    const detectedDecks = detectDecksInMarkdown(rawSource);
     if (detectedDecks.length > 1) {
       showImportDecksSelector(detectedDecks, titleHint);
       return 0;
     }
   }
+  const { markdown: source, notes: extractedNotes } = extractNotesFromMarkdown(rawSource);
   const cards = parseCards(source);
   const headingCount = countQuestionHeadings(source);
   const importTitle = titleFromImportHint(titleHint);
@@ -5465,12 +5802,15 @@ function buildCards(titleHint = state.importTitleHint || "", append = false) {
     state.cards = state.cards.concat(cards);
     state.masterCards = state.masterCards.concat(cards);
   } else {
+    const hasContent = cards.length > 0 || Boolean(extractedNotes.trim());
     state.masterCards = cards.slice();
     state.deckId = null;
     resetStudyDeck(state.masterCards);
-    state.deckTitle = cards.length ? importTitle || inferDeckTitle(source, titleHint) : "";
+    state.deckTitle = hasContent ? importTitle || inferDeckTitle(source, titleHint) : "";
     state.deckCategory = defaultDeckCategory;
-    state.sourceTitle = cards.length ? importTitle || state.deckTitle : "";
+    state.sourceTitle = hasContent ? importTitle || state.deckTitle : "";
+    state.notes = extractedNotes;
+    setViewMode("cards");
   }
   state.importTitleHint = titleHint;
   closeAllCardsPanel();
@@ -5590,7 +5930,7 @@ function formatCardList(title, cards) {
   return `## ${title}\n\n${body}`;
 }
 
-function slugifyFileName(value, fallback = "flashcards") {
+function slugifyFileName(value, fallback = "recall") {
   const source = String(value || "").trim() || fallback;
   const cleaned = source
     .replace(/\.(md|markdown|mdown|mkdn|txt|json|zip)$/i, "")
@@ -5601,7 +5941,7 @@ function slugifyFileName(value, fallback = "flashcards") {
 }
 
 function exportBaseName(scope = "all") {
-  const base = slugifyFileName(state.deckTitle || state.sourceTitle || "flashcards");
+  const base = slugifyFileName(state.deckTitle || state.sourceTitle || "recall");
   if (scope === "known") return `${base} - known`;
   if (scope === "review") return `${base} - review`;
   if (scope === "uncategorized") return `${base} - uncategorized`;
@@ -5614,11 +5954,12 @@ function normalizeCardStatus(status) {
 
 function deckSnapshot() {
   return {
-    app: "markdown-flashcards",
+    app: "recall",
     version: 1,
     exportedAt: new Date().toISOString(),
     deckTitle: state.deckTitle || "",
     deckCategory: normalizeDeckCategory(state.deckCategory),
+    notes: state.notes || "",
     sourceTitle: state.sourceTitle || state.deckTitle || "",
     importTitleHint: state.importTitleHint || "",
     deckId: state.deckId,
@@ -5670,7 +6011,8 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
     })
     .filter(Boolean);
 
-  if (!cards.length) {
+  const payloadNotes = String(payload.notes || "");
+  if (!cards.length && !payloadNotes.trim()) {
     throw new Error("No cards in flashcard JSON");
   }
 
@@ -5688,6 +6030,8 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
     state.deckId = payload.deckId || null;
     state.sourceTitle = String(payload.sourceTitle || "").trim() || sourceFileTitle(titleHint) || state.deckTitle;
     state.importTitleHint = String(payload.importTitleHint || "").trim() || titleHint;
+    state.notes = payloadNotes;
+    setViewMode("cards");
   }
   syncResults();
   closeAllCardsPanel();
@@ -5710,7 +6054,7 @@ let deckAutosaveTimer = null;
 
 function persistWorkingDeck() {
   try {
-    if (!state.masterCards.length) {
+    if (!state.masterCards.length && !state.notes.trim()) {
       localStorage.removeItem(deckStorageKey);
       return;
     }
@@ -5759,8 +6103,8 @@ function listLocalDecks() {
 // by local id, or by cloud deckId for decks pulled from the web) updates in place
 // rather than creating a duplicate. Returns the stored metadata, or null on failure.
 function saveDeckToLibrary({ id = null, silent = false } = {}) {
-  if (!state.masterCards.length) {
-    if (!silent) setStatus("Add some cards before saving a deck.", "error");
+  if (!state.masterCards.length && !state.notes.trim()) {
+    if (!silent) setStatus("Add some cards or notes before saving a deck.", "error");
     return null;
   }
   const snapshot = deckSnapshot();
@@ -5785,6 +6129,7 @@ function saveDeckToLibrary({ id = null, silent = false } = {}) {
     title: snapshot.deckTitle || "Untitled deck",
     category: snapshot.deckCategory || defaultDeckCategory,
     cardCount: snapshot.cards.length,
+    hasNotes: Boolean(String(snapshot.notes || "").trim()),
     updatedAt: new Date().toISOString(),
     deckId: snapshot.deckId || null,
   };
@@ -5869,7 +6214,9 @@ function exportMarkdown(scope = "all") {
     scope === "all" ? "" : null,
     scope === "all" ? formatCardList("Review", state.results.review) : null,
     scope === "all" ? "" : null,
-    scope === "all" ? formatCardList("Uncategorized", uncategorized) : null
+    scope === "all" ? formatCardList("Uncategorized", uncategorized) : null,
+    scope === "all" && state.notes.trim() ? "" : null,
+    scope === "all" && state.notes.trim() ? notesExportBlock(state.notes) : null
   ].filter((line) => line !== null).join("\n");
 
   const blob = new Blob([output], { type: "text/markdown;charset=utf-8" });
@@ -5885,7 +6232,7 @@ function exportMarkdown(scope = "all") {
 }
 
 function exportJson() {
-  if (!state.masterCards.length) {
+  if (!state.masterCards.length && !state.notes.trim()) {
     setStatus("No cards to export.", "error");
     return;
   }
@@ -6172,7 +6519,7 @@ function cornellCardHtml(card, index, { answerVisible = false, print = false, st
 
 function buildCornellPrintDocument(title, cards, scope, options = {}) {
   const total = printableCardCount(cards);
-  const sourceTitle = options.sourceTitle || state.deckTitle || state.sourceTitle || "Flashcards";
+  const sourceTitle = options.sourceTitle || state.deckTitle || state.sourceTitle || "Recall";
   const statusById = options.statusById || state.statusById;
   let cardIndex = 0;
   return `
@@ -6364,7 +6711,7 @@ function standalonePrintDocumentHtml() {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <base href="${escapeHtml(document.baseURI)}">
-        <title>${escapeHtml(document.title || "Flashcards PDF")}</title>
+        <title>${escapeHtml(document.title || "Recall PDF")}</title>
         ${standalonePrintStyles()}
       </head>
       <body>
@@ -6428,7 +6775,7 @@ function openStandalonePrintDocument() {
 async function exportCardsPdf(sourceTitle, cards, options = {}) {
   const title = options.title || "All Cards";
   const statusById = options.statusById || {};
-  const fileBaseName = slugifyFileName(options.fileBaseName || sourceTitle || "flashcards");
+  const fileBaseName = slugifyFileName(options.fileBaseName || sourceTitle || "recall");
   const cardCount = printableCardCount(cards);
 
   if (!cardCount) {
@@ -6611,10 +6958,12 @@ async function fetchUrl() {
       state.deckId = null;
       state.deckTitle = "";
       state.deckCategory = defaultDeckCategory;
+      state.notes = "";
       state.sourceTitle = "";
       state.importTitleHint = url;
       state.current = 0;
       resetResults();
+      setViewMode("cards");
       setStatus("This public Notion URL only exposes collapsed question headings, not answers. Use Export -> Markdown & CSV, then upload the zip or paste the exported Markdown.", "error");
       showCard();
       return;
@@ -7314,10 +7663,12 @@ function createNewDeck() {
     state.deckId = null;
     state.deckTitle = "New Deck";
     state.deckCategory = defaultDeckCategory;
+    state.notes = "";
     state.sourceTitle = "New Deck";
     state.importTitleHint = "New Deck";
     state.masterCards = [createBlankCard()];
     resetStudyDeck(state.masterCards);
+    setViewMode("cards");
     closeImportPanel();
     closeAllCardsPanel();
     showCard();
@@ -7770,6 +8121,8 @@ document.addEventListener("keydown", (event) => {
     unlockPageScroll();
   }
   if (!el.allCardsPanel.hidden) return;
+  // Card shortcuts are meaningless while the Notes view covers the card stage.
+  if (state.viewMode === "notes") return;
   // A focused cloze handles its own Space/Enter (reveal) — don't also flip.
   if (event.target.closest?.(".cloze")) return;
   if (event.key === " " || event.key === "Enter") {
@@ -8394,36 +8747,11 @@ function openImagePicker(textarea, atPos) {
   imagePickerInput.click();
 }
 
-// Convert rich text/HTML to Markdown on paste in all textareas
-document.addEventListener("paste", (event) => {
-  const target = event.target;
-  if (target.tagName !== "TEXTAREA") return;
+// Shared HTML→Markdown converter (paste handler + notes selection capture).
+// Returns "" when Turndown is unavailable or conversion fails.
+function htmlToMarkdown(html) {
+  if (typeof TurndownService === "undefined") return "";
 
-  const clipboardData = event.clipboardData || window.clipboardData;
-  if (!clipboardData) return;
-
-  // Image on the clipboard (screenshot, copied image) → upload to ImgBB and insert markdown.
-  const imageFile = firstImageFile(clipboardData);
-  if (imageFile) {
-    event.preventDefault();
-    insertImageUpload(target, imageFile);
-    return;
-  }
-
-  if (typeof TurndownService === "undefined") return;
-
-  const types = clipboardData.types || [];
-  if (!types.includes("text/html")) return;
-
-  const html = clipboardData.getData("text/html");
-  if (!html) return;
-
-  const plainText = clipboardData.getData("text/plain");
-
-  // Prevent default paste behavior
-  event.preventDefault();
-
-  // Initialize TurndownService with preferences matching markdown cards
   const turndownService = new TurndownService({
     headingStyle: "atx",
     codeBlockStyle: "fenced",
@@ -8457,10 +8785,10 @@ document.addEventListener("paste", (event) => {
     filter: function (node) {
       return (
         (node.classList && (
-          node.classList.contains("MathJax") || 
-          node.classList.contains("MathJax_Preview") || 
+          node.classList.contains("MathJax") ||
+          node.classList.contains("MathJax_Preview") ||
           node.classList.contains("MathJax_Display")
-        )) || 
+        )) ||
         node.nodeName === "MJX-CONTAINER"
       );
     },
@@ -8485,13 +8813,44 @@ document.addEventListener("paste", (event) => {
     }
   });
 
-  let markdown = "";
   try {
-    markdown = turndownService.turndown(html);
+    return turndownService.turndown(html);
   } catch (err) {
-    console.error("Turndown conversion failed, falling back to plain text", err);
-    markdown = plainText;
+    console.error("Turndown conversion failed", err);
+    return "";
   }
+}
+
+// Convert rich text/HTML to Markdown on paste in all textareas
+document.addEventListener("paste", (event) => {
+  const target = event.target;
+  if (target.tagName !== "TEXTAREA") return;
+
+  const clipboardData = event.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
+
+  // Image on the clipboard (screenshot, copied image) → upload to ImgBB and insert markdown.
+  const imageFile = firstImageFile(clipboardData);
+  if (imageFile) {
+    event.preventDefault();
+    insertImageUpload(target, imageFile);
+    return;
+  }
+
+  if (typeof TurndownService === "undefined") return;
+
+  const types = clipboardData.types || [];
+  if (!types.includes("text/html")) return;
+
+  const html = clipboardData.getData("text/html");
+  if (!html) return;
+
+  const plainText = clipboardData.getData("text/plain");
+
+  // Prevent default paste behavior
+  event.preventDefault();
+
+  let markdown = htmlToMarkdown(html);
 
   // Fallback to plain text if the markdown conversion was empty
   if (!markdown.trim() && plainText.trim()) {
@@ -8598,8 +8957,12 @@ function initToolbars() {
   const aToolbar = el.answerEditToolbar;
   if (aToolbar) aToolbar.innerHTML = createToolbarHtml({ quickNote: true });
 
+  const nToolbar = el.notesEditToolbar;
+  if (nToolbar) nToolbar.innerHTML = createToolbarHtml();
+
   if (el.questionEdit) enableSyntaxHighlighting(el.questionEdit);
   if (el.answerEdit) enableSyntaxHighlighting(el.answerEdit);
+  if (el.notesEdit) enableSyntaxHighlighting(el.notesEdit);
 }
 
 if (document.readyState === "loading") {
@@ -8823,6 +9186,8 @@ function handleToolbarClick(event) {
     textarea = el.questionEdit;
   } else if (toolbar.id === "answerEditToolbar") {
     textarea = el.answerEdit;
+  } else if (toolbar.id === "notesEditToolbar") {
+    textarea = el.notesEdit;
   } else {
     // Inside dynamic "All cards" editor
     const container = toolbar.closest(".all-card-editor");
