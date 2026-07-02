@@ -8,6 +8,12 @@
   --app-mobile-height: 100dvh;
   --app-pad: clamp(6px, 1.4vw, 14px);
   --app-gap: 10px;
+  /* Since the Known/Review side columns were removed, the quiz panel is the
+     only thing on screen — leaving it capped well below the viewport width
+     just stranded it in dead space on both sides. Let it use nearly the
+     full window; the text measure itself is capped separately (see
+     --question-answer-measure) so lines don't get uncomfortably long. */
+  --quiz-panel-max-width: min(99vw, 1800px);
   --bg: #f4f2ec;
   --panel: #fffdf8;
   --panel-2: #f0eee7;
@@ -40,6 +46,10 @@
   --answer-font-family: var(--app-font-family);
   --content-font-size: 18px;
   --content-line-height: 1.58;
+  /* Comfortable reading measure for question/answer text — kept narrower
+     than the card itself on wide screens so long lines stay readable even
+     though the card's frame now spans most of the panel width. */
+  --question-answer-measure: 46em;
   --raw-markdown-font-size: 16px;
   --answer-font-size: 23px;
   --answer-line-height: 1.58;
@@ -458,6 +468,30 @@ button:disabled {
 .deck-meta-spacer {
   flex: 0;
 }
+
+/* Auto-save / cloud-sync status pill in the deck meta row. Content is set from
+   JS via setSyncIndicator(); hidden when there's no deck or nothing to report. */
+.sync-indicator {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.sync-indicator:empty {
+  display: none;
+}
+
+.sync-indicator[data-state="saved"] { color: var(--muted); }
+.sync-indicator[data-state="syncing"] { color: var(--accent); }
+.sync-indicator[data-state="synced"] { color: var(--known); }
+.sync-indicator[data-state="offline"] { color: var(--review); }
+.sync-indicator[data-state="error"] { color: #ff6a6a; }
 
 .deck-title-edit,
 .web-deck-rename {
@@ -1351,7 +1385,8 @@ button:disabled {
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(140px, var(--side-panel-width)) minmax(0, 1fr) minmax(140px, var(--side-panel-width));
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
   gap: var(--app-gap);
   overflow: hidden;
 }
@@ -1359,6 +1394,8 @@ button:disabled {
 .quiz-panel {
   display: grid;
   width: 100%;
+  max-width: var(--quiz-panel-max-width, 860px);
+  margin-inline: auto;
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -1419,6 +1456,7 @@ button:disabled {
 
 .card {
   position: relative;
+  display: grid;
   width: var(--card-width);
   height: 100%;
   max-height: var(--card-max-height);
@@ -1457,27 +1495,6 @@ button:disabled {
   box-shadow: 0 18px 60px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
-.result-panel {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  min-height: 0;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--toolbar-gap);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--side-panel-radius);
-  background: color-mix(in srgb, var(--panel) 78%, transparent);
-  box-shadow: var(--shadow);
-  padding: var(--side-panel-padding);
-}
-
-.mobile-stack-toggle {
-  display: none;
-}
-
 .mobile-menu-btn {
   display: flex;
   flex-shrink: 0;
@@ -1513,101 +1530,6 @@ button:disabled {
   display: block;
 }
 
-.result-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
-}
-
-.result-head div {
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  text-align: center;
-}
-
-.result-label {
-  color: var(--muted);
-  font-size: var(--stack-label-font-size);
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.review-panel .result-label {
-  color: var(--review);
-}
-
-.known-panel .result-label {
-  color: var(--known);
-}
-
-.result-head strong {
-  display: grid;
-  width: var(--stack-badge-width);
-  height: var(--stack-badge-height);
-  place-items: center;
-  justify-self: end;
-  border-radius: var(--stack-badge-radius);
-  font-size: 1rem;
-}
-
-.review-panel .result-head strong {
-  background: color-mix(in srgb, var(--review) 18%, var(--panel));
-  color: var(--review);
-}
-
-.known-panel .result-head strong {
-  background: color-mix(in srgb, var(--known) 18%, var(--panel));
-  color: var(--known);
-}
-
-.brick-list {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 0;
-  flex-direction: column-reverse;
-  gap: var(--brick-gap);
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-right: 2px;
-  scrollbar-gutter: stable;
-}
-
-.brick {
-  flex: 0 0 auto;
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--brick-radius);
-  background: var(--panel-2);
-  color: var(--text);
-  padding: var(--brick-padding);
-  font-size: var(--brick-font-size);
-  font-weight: 750;
-  line-height: var(--brick-line-height);
-  text-align: left;
-  box-shadow: var(--brick-shadow);
-  cursor: pointer;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.brick:hover {
-  border-color: var(--accent);
-}
-
-.review-panel .brick {
-  border-color: color-mix(in srgb, var(--review) 38%, var(--line));
-}
-
-.known-panel .brick {
-  border-color: color-mix(in srgb, var(--known) 38%, var(--line));
-}
-
 .card.is-flipped {
   transform: translateY(-2px);
 }
@@ -1621,7 +1543,9 @@ button:disabled {
 }
 
 .card.is-holding::before,
-.card.is-holding-complete::before {
+.card.is-holding-complete::before,
+.notes-stage.is-holding::before,
+.notes-stage.is-holding-complete::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -1640,7 +1564,8 @@ button:disabled {
     drop-shadow(0 0 12px var(--accent));
 }
 
-.card.is-holding::before {
+.card.is-holding::before,
+.notes-stage.is-holding::before {
   background: conic-gradient(
     from -90deg,
     var(--accent) var(--hold-angle),
@@ -1655,7 +1580,8 @@ button:disabled {
 }
 
 /* Completion flash: full bright ring */
-.card.is-holding-complete::before {
+.card.is-holding-complete::before,
+.notes-stage.is-holding-complete::before {
   background: var(--accent);
   filter:
     drop-shadow(0 0 9px var(--accent))
@@ -1748,8 +1674,11 @@ button:disabled {
 }
 
 .card-face {
-  position: absolute;
-  inset: 0;
+  /* Both faces stack in the same grid cell (rather than position:absolute)
+     so the card's height comes from its tallest face's content instead of
+     always stretching to fill the deck area — a 2-line question no longer
+     sits in a mostly-empty box the height of the viewport. */
+  grid-area: 1 / 1;
   display: flex;
   flex-direction: column;
   gap: var(--card-face-gap);
@@ -1838,6 +1767,8 @@ button:disabled {
 .card-question .rendered {
   display: grid;
   width: 100%;
+  max-width: var(--question-answer-measure);
+  margin-inline: auto;
   min-height: 0;
   flex: 1 1 var(--question-fill);
   font-family: var(--question-font-family);
@@ -1856,6 +1787,9 @@ button:disabled {
 }
 
 .card-answer .rendered {
+  width: 100%;
+  max-width: var(--question-answer-measure);
+  margin-inline: auto;
   font-family: var(--answer-font-family);
   font-size: var(--answer-font-size);
   line-height: var(--answer-line-height);
@@ -2627,6 +2561,60 @@ svg.nomnoml-light-svg [fill="none"] {
 .web-decks-table th:last-child,
 .web-decks-table td:last-child {
   text-align: right;
+}
+
+/* My Decks reuses .web-decks-table's chrome but has 5 plain columns — no
+   leading bulk-select checkbox like the Web Decks manager table. Without
+   this override it inherits that table's checkbox-column width (6%,
+   centered), squeezing the title into two wrapped lines and leaving
+   Category/Cards far too wide. All columns (including Actions, which
+   .web-decks-table th/td:last-child would otherwise right-align) read as
+   a centered grid rather than a left/right-ragged table. */
+.my-decks-table th,
+.my-decks-table td,
+.my-decks-table th:last-child,
+.my-decks-table td:last-child {
+  text-align: center;
+}
+
+.my-decks-table th:nth-child(1),
+.my-decks-table td:nth-child(1) {
+  width: 26%;
+}
+
+.my-decks-table th:nth-child(2),
+.my-decks-table td:nth-child(2) {
+  width: 13%;
+}
+
+.my-decks-table th:nth-child(3),
+.my-decks-table td:nth-child(3) {
+  width: 9%;
+}
+
+.my-decks-table th:nth-child(4),
+.my-decks-table td:nth-child(4) {
+  /* Saved now shows a time alongside the date, so it needs more room. */
+  width: 22%;
+}
+
+.my-decks-table th:nth-child(5),
+.my-decks-table td:nth-child(5) {
+  /* Actions holds 3 inline buttons (Load/Rename/Delete) — give it enough
+     room that they never wrap onto separate lines. */
+  width: 30%;
+}
+
+.my-decks-table .my-deck-actions {
+  justify-content: center;
+}
+
+/* The shared modal width (--modal-width, 60vw) is comfortable for prose
+   modals but cramped for a 5-column data table with inline action buttons
+   — widen just this panel so Saved's date+time and the Actions buttons
+   never collide. */
+#myDecksPanel .web-decks-shell {
+  width: min(85vw, 1160px);
 }
 
 .web-decks-empty {
@@ -4390,18 +4378,13 @@ textarea {
     width: 100%;
     height: 100%;
     min-height: 0;
-    /* Row 1 = minmax(100%,auto): quiz-panel gets AT LEAST full available height,
-       pushing toggle + panels into overflow (scroll to reach them). */
-    grid-template-rows: minmax(100%, auto) auto auto;
+    grid-template-rows: minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
     overflow-y: auto;
     overflow-x: hidden;
   }
 
-  /* Explicit grid placement so HTML source order doesn't dictate visual order */
   .quiz-panel   { grid-row: 1; grid-column: 1; }
-  .mobile-stack-toggle { grid-row: 2; grid-column: 1; }
-  .result-panel { grid-row: 3; grid-column: 1; }
 
   .quiz-panel {
     /* 3-row grid: progress bar | card (fills 1fr) | action controls
@@ -4417,67 +4400,6 @@ textarea {
     padding: var(--quiz-panel-padding);
     box-shadow: 0 16px 46px rgba(0, 0, 0, 0.28);
     overflow: hidden;
-  }
-
-  .result-panel {
-    width: 100%;
-    max-width: 100%;
-    height: auto;
-    max-height: none;
-    min-height: 0;
-    padding: 8px;
-  }
-
-  .mobile-stack-toggle {
-    display: grid;
-    width: 100%;
-    max-width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    border: 1px solid var(--line);
-    border-radius: var(--toolbar-button-radius);
-    background: color-mix(in srgb, var(--panel) 72%, transparent);
-    padding: 4px;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
-  }
-
-  .mobile-stack-toggle button {
-    display: inline-flex;
-    min-width: 0;
-    min-height: 32px;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border: 1px solid transparent;
-    border-radius: calc(var(--toolbar-button-radius) - 2px);
-    background: transparent;
-    color: var(--muted);
-    padding: 0 8px;
-    font-size: 0.74rem;
-    font-weight: 900;
-    text-transform: uppercase;
-  }
-
-  .mobile-stack-toggle button.is-active {
-    border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
-    background: color-mix(in srgb, var(--accent) 18%, transparent);
-    color: var(--accent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
-  }
-
-  .mobile-stack-toggle strong {
-    display: grid;
-    min-width: 24px;
-    height: 22px;
-    place-items: center;
-    border-radius: 999px;
-    background: color-mix(in srgb, currentColor 16%, transparent);
-    font-size: 0.78rem;
-  }
-
-  .study-layout[data-mobile-stack="known"] .review-panel,
-  .study-layout:not([data-mobile-stack="known"]) .known-panel {
-    display: none;
   }
 
   .card {
@@ -4683,11 +4605,6 @@ textarea {
   .face-label {
     padding: 4px 9px;
     font-size: 0.66rem;
-  }
-
-  .brick {
-    padding: 7px 8px;
-    font-size: var(--brick-font-size);
   }
 
   .all-cards-panel {
@@ -5056,17 +4973,6 @@ textarea {
     height: min(760px, calc(100vh - 86px));
     min-height: 520px;
     order: 1;
-  }
-
-  .result-panel {
-    height: 180px;
-    max-height: 180px;
-    min-height: 120px;
-    order: 2;
-  }
-
-  .known-panel {
-    order: 3;
   }
 
   .card {
@@ -6244,9 +6150,10 @@ textarea {
   border-radius: var(--input-radius);
   background: var(--panel);
   color: var(--text);
-  padding: 0 10px;
-  font-size: 0.76rem;
+  padding: 0 9px;
+  font-size: 0.74rem;
   font-weight: 800;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 
@@ -7290,12 +7197,101 @@ kbd {
 /* ---- My Decks (local/offline library) ---- */
 .my-deck-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 
 .web-decks-table tr.is-current-local-deck {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Cloud-only rows in the unified My Decks list read as slightly recessed until
+   pulled onto the device. */
+.web-decks-table tr.is-cloud-only-deck {
+  opacity: 0.82;
+}
+
+.my-deck-cloud-tag {
+  color: var(--accent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 1080px) {
+  /* The shared .web-decks-table mobile layout assumes a leading bulk-select
+     checkbox column (a 20px+1fr grid, with cols 3/4 hidden as "desktop-only"),
+     and only kicks in at max-width:720px anyway. My Decks has no checkbox
+     column, so between ~721-1080px it was falling through to the plain
+     desktop table — which, once the modal itself shrinks with the viewport,
+     doesn't have room for 5 columns and starts overlapping (e.g. "Category"
+     header touching "Cards", date wrapping into the Actions buttons).
+     Switch to a centered, stacked card at this width instead — self-
+     contained (doesn't rely on the 720px-only base rules below) since this
+     breakpoint is wider than that one. */
+  .my-decks-table,
+  .my-decks-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .my-decks-table thead {
+    display: none;
+  }
+
+  .my-decks-table tr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+    padding: 14px 12px;
+    text-align: center;
+  }
+
+  .my-decks-table tr + tr {
+    margin-top: 8px;
+  }
+
+  .my-decks-table td:nth-child(1) {
+    font-weight: 800;
+    font-size: 0.95rem;
+  }
+
+  .my-decks-table td:nth-child(2),
+  .my-decks-table td:nth-child(3),
+  .my-decks-table td:nth-child(4) {
+    display: inline-flex;
+    justify-content: center;
+    font-size: 0.76rem;
+    color: var(--muted);
+  }
+
+  .my-decks-table td:nth-child(2)::before,
+  .my-decks-table td:nth-child(3)::before,
+  .my-decks-table td:nth-child(4)::before {
+    display: inline;
+    content: attr(data-label) ": ";
+    flex-shrink: 0;
+    margin-right: 4px;
+    font-weight: 700;
+  }
+
+  .my-decks-table td:nth-child(5) {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .my-decks-table .my-deck-actions {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .my-decks-table .my-deck-actions .bulk-action-btn {
+    flex: 1 1 0;
+  }
 }
 
 /* ---- Offline indicator ---- */
@@ -7395,6 +7391,7 @@ kbd {
 }
 
 .quiz-panel.notes-mode .notes-stage:not([hidden]) {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;

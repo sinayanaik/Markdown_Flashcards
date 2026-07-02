@@ -1,4 +1,4 @@
-const CACHE_NAME = "recall-v20260702-1";
+const CACHE_NAME = "recall-v20260702-3";
 const APP_SHELL = [
   "./",
   "./styles.css?v=20260702-1",

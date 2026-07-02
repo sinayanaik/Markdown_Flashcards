@@ -302,7 +302,6 @@ const styleControlGroups = [
     fields: [
       { key: "appWidthPercent", label: "App width %", type: "range", min: 50, max: 100, step: 1, hint: "Width of the whole app as a percent of screen width." },
       { key: "appHeightPercent", label: "App height %", type: "range", min: 50, max: 100, step: 1, hint: "Height of the whole app as a percent of screen height." },
-      { key: "sidePanelWidthPercent", label: "Side panels width %", type: "range", min: 6, max: 35, step: 1, hint: "Each Known/Review column as a percent of total app width." },
       { key: "cardWidthPercent", label: "Card width %", type: "range", min: 40, max: 100, step: 1, hint: "Flashcard width as a percent of the middle study area." },
       { key: "cardMaxHeightPercent", label: "Card max height %", type: "range", min: 30, max: 100, step: 1, hint: "Maximum flashcard height as a percent of screen height." },
       { key: "modalWidthPercent", label: "Modal width %", type: "range", min: 30, max: 100, step: 1, hint: "Import/Web/Style panel width as a percent of screen width." },
@@ -318,7 +317,6 @@ const styleControlGroups = [
       { key: "cardPadding", label: "Card padding", type: "range", min: 0, max: 80, step: 1, unit: "px", hint: "Inside spacing on question and answer faces." },
       { key: "cardContentGap", label: "Card label gap", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Space between the Question/Answer label and content." },
       { key: "buttonGap", label: "Button gap", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Space between buttons." },
-      { key: "stackCardGap", label: "Stack card gap", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Space between mini cards in Known/Review stacks." },
       { key: "cardCornerRadius", label: "Card corner radius", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Roundness of the flashcard corners." },
       { key: "panelCornerRadius", label: "Panel corner radius", type: "range", min: 0, max: 48, step: 1, unit: "px", hint: "Roundness of study, side, import, and style panels." },
       { key: "buttonCornerRadius", label: "Button corner radius", type: "range", min: 0, max: 32, step: 1, unit: "px", hint: "Roundness of buttons." },
@@ -350,14 +348,12 @@ const styleControlGroups = [
     ]
   },
   {
-    title: "Buttons And Stacks",
+    title: "Buttons And Inputs",
     fields: [
-      { key: "toolbarButtonHeight", label: "Toolbar button height", type: "range", min: 24, max: 72, step: 1, unit: "px", hint: "Height of Import, Web Decks, Sync, Export, All, and icon buttons." },
+      { key: "toolbarButtonHeight", label: "Toolbar button height", type: "range", min: 24, max: 72, step: 1, unit: "px", hint: "Height of Import, Export, and icon buttons." },
       { key: "actionButtonHeight", label: "Action button height", type: "range", min: 28, max: 80, step: 1, unit: "px", hint: "Height of Review, Prev, Next, Known buttons." },
       { key: "buttonFontSize", label: "Button font size", type: "range", min: 10, max: 28, step: 1, unit: "px", hint: "Text size inside buttons." },
       { key: "replayButtonHeight", label: "Replay button height", type: "range", min: 20, max: 56, step: 1, unit: "px", hint: "Height of All cards / Review only replay buttons." },
-      { key: "stackCardFontSize", label: "Stack card font size", type: "range", min: 9, max: 24, step: 1, unit: "px", hint: "Text size inside mini Known/Review cards." },
-      { key: "stackCardLineHeight", label: "Stack card line spacing", type: "range", min: 0.9, max: 2.2, step: 0.01, hint: "Line spacing inside mini Known/Review cards." },
       { key: "inputHeight", label: "Input height", type: "range", min: 24, max: 72, step: 1, unit: "px", hint: "Height of URL and style textboxes." },
       { key: "modalPadding", label: "Modal padding", type: "range", min: 0, max: 64, step: 1, unit: "px", hint: "Inside spacing for import, web deck, and style panels." }
     ]
@@ -456,6 +452,9 @@ function saveImgbbKey(key) {
 }
 
 let supabaseClient = null;
+// Tracks whether a real user session is active, so background auto-sync only
+// fires for signed-in users (and never tries to push while logged out).
+let isSignedIn = false;
 
 function initSupabaseClient() {
   const config = loadSupabaseConfig();
@@ -1523,6 +1522,7 @@ async function loadWebDeck(deckId) {
     setStatus(`Loaded ${cards.length} cards from web successfully.`);
     showToast(`Loaded "${state.deckTitle || "deck"}" · ${cards.length} cards`);
     el.webDecksPanel.hidden = true;
+    if (el.myDecksPanel) el.myDecksPanel.hidden = true;
     unlockPageScroll();
     closeImportPanel();
     showCard();
@@ -1530,6 +1530,7 @@ async function loadWebDeck(deckId) {
     // cloud id) so it stays readable offline without an extra manual save.
     state.localDeckId = null;
     saveDeckToLibrary({ silent: true });
+    refreshSyncIndicatorBaseline();
   } catch (error) {
     setStatus("Failed to load deck from web.", "error");
     showToast("Couldn't load deck", "error");
@@ -1788,133 +1789,125 @@ async function showSyncModal() {
   if (confirmBtn) confirmBtn.disabled = false;
 }
 
-async function syncDeckToWeb() {
-  if (!supabaseClient) return;
+// Core cloud writer shared by the active-deck sync and the headless
+// library-reconcile sync. Upserts the deck row and diff-upserts its cards from
+// an explicit payload (never touches `state`). Throws on failure.
+// `cards`: [{ id, question, answer, status }] in display order.
+async function pushDeckRowsToCloud({ deckId, title, category, notes, currentIndex, cards, isNewDeck, overwrite, now, say = () => {}, silent = true }) {
+  const deckData = {
+    id: deckId,
+    title,
+    category,
+    notes: notes || "",
+    current_card_index: Number.isFinite(currentIndex) ? currentIndex : 0,
+    updated_at: now,
+    last_accessed_at: now
+  };
+
+  let { error: deckError } = await supabaseClient.from("decks").upsert(deckData);
+  if (deckError && String(deckError.message || "").includes("notes")) {
+    // Database hasn't run supabase_deck_notes.sql yet — sync everything else so
+    // the user doesn't lose card changes, but warn about notes.
+    const { notes: _omit, ...deckDataWithoutNotes } = deckData;
+    ({ error: deckError } = await supabaseClient.from("decks").upsert(deckDataWithoutNotes));
+    if (!deckError && String(notes || "").trim() && !silent) {
+      showToast("Notes not synced — run supabase_deck_notes.sql in Supabase", "error");
+    }
+  }
+  if (deckError) throw deckError;
+
+  let webCardsById = new Map();
+  if (overwrite) {
+    say("Syncing... (2/3) Replacing existing web cards");
+    const { error } = await supabaseClient.from("cards").delete().eq("deck_id", deckId);
+    if (error) throw error;
+  } else if (!isNewDeck) {
+    say("Syncing... (2/3) Checking for changes");
+    const { data: webCards, error } = await supabaseClient
+      .from("cards")
+      .select("id, question, answer, position, status")
+      .eq("deck_id", deckId);
+    if (!error && webCards) {
+      webCardsById = new Map(webCards.map((wc) => [String(wc.id), wc]));
+      const localIds = new Set(cards.map((c) => String(c.id)));
+      const idsToDelete = webCards.filter((wc) => !localIds.has(String(wc.id))).map((wc) => wc.id);
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabaseClient
+          .from("cards").delete().eq("deck_id", deckId).in("id", idsToDelete);
+        if (deleteError) throw deleteError;
+      }
+    }
+  }
+
+  const cardsData = cards
+    .map((card, index) => {
+      const status = normalizeCardStatus(card.status);
+      const webCard = webCardsById.get(String(card.id));
+      const unchanged = webCard
+        && !syncTextChanged(card.question, webCard.question)
+        && !syncTextChanged(card.answer, webCard.answer)
+        && Number(webCard.position) === index
+        && normalizeCardStatus(webCard.status) === status;
+      if (unchanged) return null;
+      return { id: card.id, deck_id: deckId, question: card.question, answer: card.answer, position: index, status, updated_at: now };
+    })
+    .filter(Boolean);
+
+  say(`Syncing... (3/3) Saving ${cardsData.length} of ${cards.length} cards`);
+  const chunkSize = 50;
+  const chunkUploads = [];
+  for (let i = 0; i < cardsData.length; i += chunkSize) {
+    chunkUploads.push(supabaseClient.from("cards").upsert(cardsData.slice(i, i + chunkSize)));
+  }
+  const chunkResults = await Promise.all(chunkUploads);
+  const chunkError = chunkResults.find((result) => result.error)?.error;
+  if (chunkError) throw chunkError;
+}
+
+// Pushes the currently-loaded deck. Returns the ISO timestamp written to the
+// cloud on success (so callers can align the local library copy), or false.
+async function syncDeckToWeb({ silent = false } = {}) {
+  if (!supabaseClient) return false;
   el.syncModal.hidden = true;
 
   if (!state.masterCards.length && !state.notes.trim()) {
-    setStatus("No deck to sync.", "error");
-    return;
+    if (!silent) setStatus("No deck to sync.", "error");
+    return false;
   }
 
+  const say = (msg, kind) => { if (!silent) setStatus(msg, kind); };
   const syncBtn = document.getElementById("syncBtn");
   if (syncBtn) setButtonLoading(syncBtn, true, "Syncing…");
 
   try {
     const deckTitle = state.deckTitle || state.sourceTitle || "Untitled Deck";
     const syncTarget = await resolveSyncTargetDeck(deckTitle);
-    const isNewDeck = !syncTarget.existingDeck;
-    const shouldOverwriteExisting = syncTarget.overwriteExisting;
     state.deckId = syncTarget.deckId;
     state.deckCategory = categoryForSync(syncTarget.existingDeck);
 
-    setStatus(`Syncing... (1/3) Saving deck info "${deckTitle}"`);
+    say(`Syncing... (1/3) Saving deck info "${deckTitle}"`);
     const now = new Date().toISOString();
 
-    const deckData = {
-      id: state.deckId,
+    await pushDeckRowsToCloud({
+      deckId: state.deckId,
       title: deckTitle,
       category: state.deckCategory,
-      notes: state.notes || "",
-      current_card_index: Number.isFinite(state.current) ? state.current : 0,
-      updated_at: now,
-      last_accessed_at: now
-    };
+      notes: state.notes,
+      currentIndex: state.current,
+      cards: state.masterCards.map((c) => ({
+        id: c.id, question: c.question, answer: c.answer, status: normalizeCardStatus(state.statusById[c.id])
+      })),
+      isNewDeck: !syncTarget.existingDeck,
+      overwrite: syncTarget.overwriteExisting,
+      now, say, silent
+    });
 
-    let { error: deckError } = await supabaseClient
-      .from("decks")
-      .upsert(deckData);
-
-    if (deckError && String(deckError.message || "").includes("notes")) {
-      // Database hasn't run supabase_deck_notes.sql yet — sync everything
-      // else so the user doesn't lose card changes, but warn about notes.
-      const { notes, ...deckDataWithoutNotes } = deckData;
-      ({ error: deckError } = await supabaseClient
-        .from("decks")
-        .upsert(deckDataWithoutNotes));
-      if (!deckError && state.notes.trim()) {
-        showToast("Notes not synced — run supabase_deck_notes.sql in Supabase", "error");
-      }
-    }
-
-    if (deckError) throw deckError;
-
-    let webCardsById = new Map();
-
-    if (shouldOverwriteExisting) {
-      setStatus("Syncing... (2/3) Replacing existing web cards");
-      const { error: deleteError } = await supabaseClient
-        .from("cards")
-        .delete()
-        .eq("deck_id", state.deckId);
-
-      if (deleteError) throw deleteError;
-    } else if (!isNewDeck) {
-      setStatus("Syncing... (2/3) Checking for changes");
-      const { data: webCards, error: fetchError } = await supabaseClient
-        .from("cards")
-        .select("id, question, answer, position, status")
-        .eq("deck_id", state.deckId);
-
-      if (!fetchError && webCards) {
-        webCardsById = new Map(webCards.map((wc) => [String(wc.id), wc]));
-        const localIds = new Set(state.masterCards.map(c => String(c.id)));
-        const idsToDelete = webCards.filter(wc => !localIds.has(String(wc.id))).map(wc => wc.id);
-
-        if (idsToDelete.length > 0) {
-          const { error: deleteError } = await supabaseClient
-            .from("cards")
-            .delete()
-            .eq("deck_id", state.deckId)
-            .in("id", idsToDelete);
-          if (deleteError) throw deleteError;
-        }
-      }
-    }
-
-    const cardsData = state.masterCards
-      .map((card, index) => {
-        const status = normalizeCardStatus(state.statusById[card.id]);
-        const webCard = webCardsById.get(String(card.id));
-        const unchanged = webCard
-          && !syncTextChanged(card.question, webCard.question)
-          && !syncTextChanged(card.answer, webCard.answer)
-          && Number(webCard.position) === index
-          && normalizeCardStatus(webCard.status) === status;
-
-        if (unchanged) return null;
-
-        return {
-          id: card.id,
-          deck_id: state.deckId,
-          question: card.question,
-          answer: card.answer,
-          position: index,
-          status,
-          updated_at: now
-        };
-      })
-      .filter(Boolean);
-
-    setStatus(`Syncing... (3/3) Saving ${cardsData.length} of ${state.masterCards.length} cards`);
-
-    // Chunk upserts and send them in parallel
-    const chunkSize = 50;
-    const chunkUploads = [];
-    for (let i = 0; i < cardsData.length; i += chunkSize) {
-      chunkUploads.push(
-        supabaseClient.from("cards").upsert(cardsData.slice(i, i + chunkSize))
-      );
-    }
-    const chunkResults = await Promise.all(chunkUploads);
-    const chunkError = chunkResults.find((result) => result.error)?.error;
-    if (chunkError) throw chunkError;
-
-    setStatus("Deck synced to web successfully.");
-    showToast(`Synced "${deckTitle}" to cloud · ${state.masterCards.length} cards`);
+    say("Deck synced to web successfully.");
+    if (!silent) showToast(`Synced "${deckTitle}" to cloud · ${state.masterCards.length} cards`);
+    return now;
   } catch (error) {
     const errorMessage = String(error?.message || "");
-    setStatus(
+    say(
       errorMessage.includes("category") || errorMessage.includes("last_accessed_at")
         ? "Failed to sync deck metadata. Run supabase_deck_categories.sql in Supabase first."
         : errorMessage.includes("notes")
@@ -1922,8 +1915,9 @@ async function syncDeckToWeb() {
           : "Failed to sync deck to web.",
       "error"
     );
-    showToast("Cloud sync failed", "error");
+    if (!silent) showToast("Cloud sync failed", "error");
     console.error(error);
+    return false;
   } finally {
     if (syncBtn) setButtonLoading(syncBtn, false);
   }
@@ -1983,13 +1977,13 @@ const el = {
   newDeckBtn: document.querySelector("#newDeckBtn"),
   newDeckFromImportBtn: document.querySelector("#newDeckFromImportBtn"),
   importBtn: document.querySelector("#importBtn"),
-  webDecksBtn: document.querySelector("#webDecksBtn"),
   myDecksBtn: document.querySelector("#myDecksBtn"),
-  saveDeckBtn: document.querySelector("#saveDeckBtn"),
+  syncNowBtn: document.querySelector("#syncNowBtn"),
   myDecksPanel: document.querySelector("#myDecksPanel"),
   myDecksListTable: document.querySelector("#myDecksListTable"),
   closeMyDecksBtn: document.querySelector("#closeMyDecksBtn"),
-  saveCurrentToMyDecksBtn: document.querySelector("#saveCurrentToMyDecksBtn"),
+  myDecksRefreshBtn: document.querySelector("#myDecksRefreshBtn"),
+  manageCloudBtn: document.querySelector("#manageCloudBtn"),
   closeImportBtn: document.querySelector("#closeImportBtn"),
   importPanel: document.querySelector("#importPanel"),
   printRoot: document.querySelector("#printRoot"),
@@ -2039,15 +2033,9 @@ const el = {
   answerEdit: document.querySelector("#answerEdit"),
   deleteCardBtn: document.querySelector("#deleteCardBtn"),
   addCardBtn: document.querySelector("#addCardBtn"),
-  knownStackCount: document.querySelector("#knownStackCount"),
-  reviewStackCount: document.querySelector("#reviewStackCount"),
-  mobileKnownCount: document.querySelector("#mobileKnownCount"),
-  mobileReviewCount: document.querySelector("#mobileReviewCount"),
-  mobileStackToggle: document.querySelector(".mobile-stack-toggle"),
-  knownBrickList: document.querySelector("#knownBrickList"),
-  reviewBrickList: document.querySelector("#reviewBrickList"),
   positionText: document.querySelector("#positionText"),
   scoreText: document.querySelector("#scoreText"),
+  syncIndicator: document.querySelector("#syncIndicator"),
   progressBar: document.querySelector("#progressBar"),
   progressKnown: document.querySelector("#progressKnown"),
   progressReview: document.querySelector("#progressReview"),
@@ -3079,85 +3067,186 @@ function formatLocalDeckSavedDate(iso) {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const datePart = date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const timePart = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${datePart}, ${timePart}`;
 }
 
-function renderMyDecksList() {
+function myDecksEmptyRow(message) {
+  return `<tr><td colspan="5" class="web-decks-empty">${escapeHtml(message)}</td></tr>`;
+}
+
+// One row for a deck stored in the on-device library.
+function buildLocalDeckRow(deck) {
+  const tr = document.createElement("tr");
+  if (deck.id === state.localDeckId) tr.classList.add("is-current-local-deck");
+
+  const tdTitle = document.createElement("td");
+  tdTitle.dataset.label = "Title";
+  tdTitle.textContent = deck.title || "Untitled deck";
+
+  const tdCategory = document.createElement("td");
+  tdCategory.dataset.label = "Category";
+  tdCategory.textContent = normalizeDeckCategory(deck.category);
+
+  const tdCount = document.createElement("td");
+  tdCount.dataset.label = "Cards";
+  tdCount.textContent = String(deck.cardCount ?? "—") + (deck.hasNotes ? " 📝" : "");
+  if (deck.hasNotes) tdCount.title = "This deck has study notes";
+
+  const tdSaved = document.createElement("td");
+  tdSaved.dataset.label = "Saved";
+  tdSaved.textContent = formatLocalDeckSavedDate(deck.updatedAt);
+
+  const tdActions = document.createElement("td");
+  tdActions.dataset.label = "Actions";
+  // The flex layout goes on an inner wrapper, not the <td> itself — a table
+  // cell with display:flex stops participating in the table's column-track
+  // sizing (it gets sized by its flex content instead), which was squeezing
+  // this column down to a sliver regardless of its CSS width.
+  const actionsWrap = document.createElement("div");
+  actionsWrap.className = "my-deck-actions";
+
+  const loadBtn = document.createElement("button");
+  loadBtn.type = "button";
+  loadBtn.className = "bulk-action-btn bulk-load";
+  loadBtn.textContent = "Load";
+  loadBtn.addEventListener("click", () => {
+    if (loadDeckFromLibrary(deck.id)) {
+      closeMyDecksPanel();
+      showToast(`Loaded "${deck.title || "deck"}"`);
+    }
+  });
+
+  const renameBtn = document.createElement("button");
+  renameBtn.type = "button";
+  renameBtn.className = "bulk-action-btn bulk-category";
+  renameBtn.textContent = "Rename";
+  renameBtn.addEventListener("click", () => {
+    const next = window.prompt("Rename deck", deck.title || "");
+    if (next && next.trim()) {
+      renameDeckInLibrary(deck.id, next);
+      renderMyDecksList();
+      if (state.localDeckId === deck.id) updateMeta();
+    }
+  });
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "bulk-action-btn bulk-delete";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.addEventListener("click", () => {
+    showConfirmModal(`Delete "${deck.title || "this deck"}" from this device? This cannot be undone.`, () => {
+      deleteDeckFromLibrary(deck.id);
+      renderMyDecksList();
+      showToast("Deck deleted from device", "info");
+    }, { confirmLabel: "Delete", danger: true });
+  });
+
+  actionsWrap.append(loadBtn, renameBtn, deleteBtn);
+  tdActions.append(actionsWrap);
+  tr.append(tdTitle, tdCategory, tdCount, tdSaved, tdActions);
+  return tr;
+}
+
+// One row for a deck that only exists in the cloud (not yet on this device).
+function buildCloudDeckRow(deck) {
+  const tr = document.createElement("tr");
+  tr.classList.add("is-cloud-only-deck");
+
+  const tdTitle = document.createElement("td");
+  tdTitle.dataset.label = "Title";
+  tdTitle.textContent = deck.title || "Untitled deck";
+
+  const tdCategory = document.createElement("td");
+  tdCategory.dataset.label = "Category";
+  tdCategory.textContent = normalizeDeckCategory(deck.category);
+
+  const tdCount = document.createElement("td");
+  tdCount.dataset.label = "Cards";
+  const cloudCount = Array.isArray(deck.cards) ? deck.cards[0]?.count : deck.cardCount;
+  tdCount.textContent = String(cloudCount ?? "—") + (String(deck.notes || "").trim() ? " 📝" : "");
+
+  const tdSaved = document.createElement("td");
+  tdSaved.dataset.label = "Saved";
+  tdSaved.className = "my-deck-cloud-tag";
+  tdSaved.textContent = "☁ Cloud";
+  tdSaved.title = "In the cloud — tap Load to pull it onto this device";
+
+  const tdActions = document.createElement("td");
+  tdActions.dataset.label = "Actions";
+  const actionsWrap = document.createElement("div");
+  actionsWrap.className = "my-deck-actions";
+
+  const loadBtn = document.createElement("button");
+  loadBtn.type = "button";
+  loadBtn.className = "bulk-action-btn bulk-load";
+  loadBtn.textContent = "Load";
+  loadBtn.addEventListener("click", () => {
+    closeMyDecksPanel();
+    loadWebDeck(deck.id);
+  });
+
+  actionsWrap.append(loadBtn);
+  tdActions.append(actionsWrap);
+  tr.append(tdTitle, tdCategory, tdCount, tdSaved, tdActions);
+  return tr;
+}
+
+async function fetchCloudDeckList() {
+  const { data, error } = await supabaseClient
+    .from("decks")
+    .select("*, cards(count)")
+    .order("last_accessed_at", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+// The unified library view: on-device decks first, then any cloud decks that
+// aren't on this device yet (for signed-in, online users).
+async function renderMyDecksList() {
   const tbody = el.myDecksListTable;
   if (!tbody) return;
-  const decks = listLocalDecks();
-  tbody.innerHTML = "";
 
-  if (!decks.length) {
-    tbody.innerHTML = "<tr><td colspan=\"5\" class=\"web-decks-empty\">No decks saved on this device yet. Open a deck and tap “Save to Device”.</td></tr>";
+  const localDecks = listLocalDecks();
+  const localCloudIds = new Set(localDecks.map((d) => String(d.deckId)).filter((id) => id && id !== "null"));
+  tbody.innerHTML = "";
+  localDecks.forEach((deck) => tbody.appendChild(buildLocalDeckRow(deck)));
+
+  const canCloud = Boolean(supabaseClient && isSignedIn);
+  if (el.manageCloudBtn) el.manageCloudBtn.hidden = !canCloud;
+
+  if (!(canCloud && navigator.onLine)) {
+    if (!localDecks.length) {
+      tbody.innerHTML = myDecksEmptyRow(
+        canCloud
+          ? "No decks on this device yet. Create or import a deck — it saves and syncs automatically."
+          : "No decks yet. Create or import a deck to get started."
+      );
+    }
     return;
   }
 
-  decks.forEach((deck) => {
-    const tr = document.createElement("tr");
-    if (deck.id === state.localDeckId) tr.classList.add("is-current-local-deck");
+  const loadingRow = document.createElement("tr");
+  loadingRow.innerHTML = `<td colspan="5" class="web-decks-empty">Checking the cloud for more decks…</td>`;
+  tbody.appendChild(loadingRow);
 
-    const tdTitle = document.createElement("td");
-    tdTitle.dataset.label = "Title";
-    tdTitle.textContent = deck.title || "Untitled deck";
-
-    const tdCategory = document.createElement("td");
-    tdCategory.dataset.label = "Category";
-    tdCategory.textContent = normalizeDeckCategory(deck.category);
-
-    const tdCount = document.createElement("td");
-    tdCount.dataset.label = "Cards";
-    tdCount.textContent = String(deck.cardCount ?? "—") + (deck.hasNotes ? " 📝" : "");
-    if (deck.hasNotes) tdCount.title = "This deck has study notes";
-
-    const tdSaved = document.createElement("td");
-    tdSaved.dataset.label = "Saved";
-    tdSaved.textContent = formatLocalDeckSavedDate(deck.updatedAt);
-
-    const tdActions = document.createElement("td");
-    tdActions.dataset.label = "Actions";
-    tdActions.className = "my-deck-actions";
-
-    const loadBtn = document.createElement("button");
-    loadBtn.type = "button";
-    loadBtn.className = "bulk-action-btn bulk-load";
-    loadBtn.textContent = "Load";
-    loadBtn.addEventListener("click", () => {
-      if (loadDeckFromLibrary(deck.id)) {
-        closeMyDecksPanel();
-        showToast(`Loaded "${deck.title || "deck"}" from device`);
-      }
-    });
-
-    const renameBtn = document.createElement("button");
-    renameBtn.type = "button";
-    renameBtn.className = "bulk-action-btn bulk-category";
-    renameBtn.textContent = "Rename";
-    renameBtn.addEventListener("click", () => {
-      const next = window.prompt("Rename deck", deck.title || "");
-      if (next && next.trim()) {
-        renameDeckInLibrary(deck.id, next);
-        renderMyDecksList();
-        if (state.localDeckId === deck.id) updateMeta();
-      }
-    });
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "bulk-action-btn bulk-delete";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", () => {
-      showConfirmModal(`Delete "${deck.title || "this deck"}" from this device? This cannot be undone.`, () => {
-        deleteDeckFromLibrary(deck.id);
-        renderMyDecksList();
-        showToast("Deck deleted from device", "info");
-      }, { confirmLabel: "Delete", danger: true });
-    });
-
-    tdActions.append(loadBtn, renameBtn, deleteBtn);
-    tr.append(tdTitle, tdCategory, tdCount, tdSaved, tdActions);
-    tbody.appendChild(tr);
-  });
+  try {
+    const cloudDecks = await fetchCloudDeckList();
+    loadingRow.remove();
+    const cloudOnly = cloudDecks.filter((deck) => !localCloudIds.has(String(deck.id)));
+    cloudOnly.forEach((deck) => tbody.appendChild(buildCloudDeckRow(deck)));
+    if (!localDecks.length && !cloudOnly.length) {
+      tbody.innerHTML = myDecksEmptyRow("No decks yet. Create or import a deck — it saves and syncs automatically.");
+    }
+  } catch (error) {
+    loadingRow.remove();
+    console.warn("Could not fetch cloud decks for My Decks", error);
+    if (!localDecks.length) {
+      tbody.innerHTML = myDecksEmptyRow("No decks on this device yet. (Couldn't reach the cloud right now.)");
+    }
+  }
 }
 
 function saveCurrentDeckToDevice() {
@@ -3646,49 +3735,6 @@ function resetStudyDeck(cards = state.masterCards) {
   resetResults();
 }
 
-function stripMarkdownPreview(text) {
-  return text
-    .replace(/```[\s\S]*?```/g, "[code]")
-    .replace(/`([^`\n]+)`/g, "$1")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/^>\s*/gm, "")
-    .replace(/^[-*+]\s+/gm, "• ")
-    .replace(/\|/g, " ")
-    .replace(/^-{3,}$/gm, "")
-    .replace(/\n+/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function renderBrickList(container, cards, group) {
-  container.innerHTML = "";
-  cards.forEach((card, index) => {
-    const item = document.createElement("button");
-    item.className = "brick";
-    item.type = "button";
-    item.title = "Preview this card";
-    item.dataset.group = group;
-    item.dataset.index = String(index);
-    item.textContent = `${index + 1}. ${stripMarkdownPreview(card.question)}`;
-    container.appendChild(item);
-  });
-}
-
-async function previewCard(card) {
-  if (!card) return;
-  state.previewCard = card;
-  state.flipped = false;
-  el.card.classList.remove("is-flipped", "swipe-left", "swipe-right", "is-dragging", "drag-review", "drag-known", "drag-prev", "drag-next");
-  el.card.style.transform = "";
-  await renderMarkdown(el.questionView, card.question, true);
-  await renderMarkdown(el.answerView, card.answer, true);
-  scheduleLiveQuestionFit();
-  setStatus("Previewing saved card. Use Replay to study that pile again.");
-  updateMeta();
-}
 
 function escapeHtml(value) {
   return value
@@ -5149,6 +5195,7 @@ function updateMeta() {
   el.deckTitle.title = state.deckTitle;
   el.deckTitleWrap.hidden = !hasDeck;
   if (el.deckMeta2Row) el.deckMeta2Row.hidden = !hasDeck;
+  if (!hasDeck) setSyncIndicator("idle");
   el.editDeckTitleBtn.disabled = !hasDeck;
   if (el.deckCategory) {
     el.deckCategory.textContent = normalizeDeckCategory(state.deckCategory);
@@ -5159,12 +5206,6 @@ function updateMeta() {
   }
   el.positionText.textContent = state.previewCard ? "Preview" : total ? `${Math.min(state.current + 1, total)}/${total}` : "0/0";
   el.scoreText.textContent = `Known ${state.known} / Review ${state.review}`;
-  el.knownStackCount.textContent = state.known;
-  el.reviewStackCount.textContent = state.review;
-  if (el.mobileKnownCount) el.mobileKnownCount.textContent = state.known;
-  if (el.mobileReviewCount) el.mobileReviewCount.textContent = state.review;
-  renderBrickList(el.knownBrickList, state.results.known, "known");
-  renderBrickList(el.reviewBrickList, state.results.review, "review");
   const knownPct = total ? (state.results.known.length / state.masterCards.length) * 100 : 0;
   const reviewPct = total ? (state.results.review.length / state.masterCards.length) * 100 : 0;
   const remainingPct = total ? Math.max(0, (finished / total) * 100 - knownPct - reviewPct) : 0;
@@ -6067,12 +6108,261 @@ function persistWorkingDeck() {
 }
 
 // Debounced so the rapid-fire mutations during study don't thrash localStorage.
+// Every change auto-persists into the "My Decks" library — so there is no
+// longer a manual "Save to Device" step. Cloud sync is intentionally NOT
+// triggered here: pushing to Supabase on every keystroke-ish edit was
+// chatty and unnecessary. The cloud only gets touched at app startup, when
+// connectivity returns, and via the explicit "Sync Now" button — all through
+// reconcileAllDecks().
 function scheduleDeckAutosave() {
   if (deckAutosaveTimer) clearTimeout(deckAutosaveTimer);
   deckAutosaveTimer = setTimeout(() => {
     deckAutosaveTimer = null;
     persistWorkingDeck();
+    saveDeckToLibrary({ silent: true });
+    setSyncIndicator("saved");
   }, 400);
+}
+
+// Reflects the auto-save / cloud-sync lifecycle in the deck-meta pill.
+function setSyncIndicator(stateName) {
+  const node = el.syncIndicator;
+  if (!node) return;
+  const hasDeck = state.masterCards.length || state.notes.trim();
+  if (!hasDeck) {
+    node.textContent = "";
+    node.dataset.state = "idle";
+    return;
+  }
+  const labels = {
+    signin: "Saved on device",
+    saved: "Saved on device",
+    saving: "Syncing…",
+    synced: "Synced",
+    offline: "Offline · saved on device",
+    error: "Sync failed · saved on device",
+  };
+  node.dataset.state = stateName === "signin" ? "saved" : stateName;
+  node.textContent = labels[stateName] || "";
+}
+
+// Sets the resting state of the pill (used after a deck loads, when there are no
+// pending edits) based on where the deck currently lives.
+function refreshSyncIndicatorBaseline() {
+  if (!(state.masterCards.length || state.notes.trim())) return setSyncIndicator("idle");
+  if (!supabaseClient || !isSignedIn) return setSyncIndicator("saved");
+  if (!navigator.onLine) return setSyncIndicator("offline");
+  return setSyncIndicator(state.deckId ? "synced" : "signin");
+}
+
+// ---------------------------------------------------------------------------
+// Two-way cloud mirror (last-write-wins per deck, by `updated_at` timestamp).
+// The device keeps a full local copy of every cloud deck so the PWA works
+// offline; when connectivity returns each deck is reconciled by comparing the
+// local library's `updatedAt` against the cloud's `updated_at`.
+// ---------------------------------------------------------------------------
+
+// Normalizes any ISO / timestamptz string to epoch ms so timestamps written by
+// the JS client and read back from Postgres compare correctly.
+function tsMs(value) {
+  const t = new Date(value || 0).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+// Pulls one cloud deck (metadata already in hand) plus its cards into the local
+// library, WITHOUT disturbing the active in-memory deck. Stamps the local copy
+// with the cloud's `updated_at` so they read as in sync afterwards.
+async function pullCloudDeckToLibrary(cloud) {
+  const { data: cards, error } = await supabaseClient
+    .from("cards")
+    .select("*")
+    .eq("deck_id", cloud.id)
+    .order("position", { ascending: true });
+  if (error) throw error;
+
+  const snapshot = {
+    app: "recall",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    deckTitle: cloud.title || "",
+    deckCategory: normalizeDeckCategory(cloud.category),
+    notes: String(cloud.notes || ""),
+    sourceTitle: cloud.title || "",
+    importTitleHint: cloud.title || "",
+    deckId: cloud.id,
+    current: Number.isFinite(cloud.current_card_index) ? cloud.current_card_index : 0,
+    cards: (cards || []).map((c, i) => ({
+      id: String(c.id || `${i}-${String(c.question || "").slice(0, 32)}`),
+      question: c.question,
+      answer: c.answer,
+      status: normalizeCardStatus(c.status)
+    }))
+  };
+
+  const existing = readLocalDeckIndex().find((m) => String(m.deckId) === String(cloud.id));
+  const localId = existing?.id || generateLocalDeckId();
+  snapshot.localDeckId = localId;
+  localStorage.setItem(LOCAL_DECK_PREFIX + localId, JSON.stringify(snapshot));
+
+  const meta = {
+    id: localId,
+    title: snapshot.deckTitle || "Untitled deck",
+    category: snapshot.deckCategory,
+    cardCount: snapshot.cards.length,
+    hasNotes: Boolean(snapshot.notes.trim()),
+    updatedAt: cloud.updated_at || new Date().toISOString(),
+    deckId: String(cloud.id),
+  };
+  writeLocalDeckIndex([meta, ...readLocalDeckIndex().filter((m) => m.id !== localId)]);
+  return { localId, meta };
+}
+
+// Pushes one library deck (by its local metadata) to the cloud, WITHOUT
+// disturbing the active in-memory deck. Mints a stable cloud id if the deck has
+// never been synced, then records it locally and aligns the timestamp.
+async function pushLibraryDeckToCloud(localMeta, { cloudExists = false } = {}) {
+  const raw = localStorage.getItem(LOCAL_DECK_PREFIX + localMeta.id);
+  if (!raw) throw new Error("Local deck snapshot missing");
+  const snapshot = JSON.parse(raw);
+
+  let deckId = snapshot.deckId || localMeta.deckId || null;
+  let isNewDeck = !cloudExists;
+  if (!deckId) {
+    const base = slugifyFileName(snapshot.deckTitle || "deck") || "deck";
+    deckId = `${base}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+    isNewDeck = true;
+  }
+
+  const now = new Date().toISOString();
+  await pushDeckRowsToCloud({
+    deckId,
+    title: snapshot.deckTitle || "Untitled Deck",
+    category: normalizeDeckCategory(snapshot.deckCategory),
+    notes: snapshot.notes || "",
+    currentIndex: snapshot.current,
+    cards: (snapshot.cards || []).map((c) => ({
+      id: c.id, question: c.question, answer: c.answer, status: normalizeCardStatus(c.status)
+    })),
+    isNewDeck,
+    overwrite: false,
+    now,
+    silent: true
+  });
+
+  snapshot.deckId = deckId;
+  localStorage.setItem(LOCAL_DECK_PREFIX + localMeta.id, JSON.stringify(snapshot));
+  const index = readLocalDeckIndex();
+  const entry = index.find((m) => m.id === localMeta.id);
+  if (entry) {
+    entry.deckId = deckId;
+    entry.updatedAt = now;
+    writeLocalDeckIndex(index);
+  }
+  // If we just pushed the active deck (first sync), adopt its new cloud id.
+  if (state.localDeckId === localMeta.id && !state.deckId) state.deckId = deckId;
+  return now;
+}
+
+let reconcileInFlight = false;
+
+// The full bidirectional sync. Pulls every cloud deck that's missing locally or
+// newer in the cloud; pushes every local deck that's new or newer locally.
+async function reconcileAllDecks({ explicit = false } = {}) {
+  if (!supabaseClient || !isSignedIn) {
+    if (explicit) showToast("Sign in to sync with the cloud", "info");
+    return;
+  }
+  if (!navigator.onLine) {
+    if (explicit) showToast("Offline — your decks are safe on this device", "info");
+    setSyncIndicator("offline");
+    return;
+  }
+  if (reconcileInFlight) return;
+  reconcileInFlight = true;
+
+  if (el.syncNowBtn) setButtonLoading(el.syncNowBtn, true, "Syncing…");
+  setSyncIndicator("saving");
+  if (explicit) setStatus("Syncing all decks…");
+
+  // A brand-new deck that's only in memory (never auto-saved) still belongs in
+  // the mirror — add it so it gets pushed. Decks already in the library keep
+  // their accurate timestamps and are left untouched here.
+  if ((state.masterCards.length || state.notes.trim()) && !state.localDeckId) {
+    saveDeckToLibrary({ silent: true });
+  }
+
+  const activeDeckId = state.deckId;
+  let activePulledLocalId = null;
+  let pulled = 0, pushed = 0, failed = 0;
+
+  try {
+    const cloudDecks = await fetchCloudDeckList();
+    const cloudById = new Map(cloudDecks.map((d) => [String(d.id), d]));
+
+    // 1) Cloud → local: pull anything missing locally or newer in the cloud.
+    for (const cloud of cloudDecks) {
+      const localMeta = readLocalDeckIndex().find((m) => String(m.deckId) === String(cloud.id));
+      const cloudNewer = !localMeta || tsMs(cloud.updated_at) > tsMs(localMeta.updatedAt);
+      if (!cloudNewer) continue;
+      try {
+        const res = await pullCloudDeckToLibrary(cloud);
+        pulled++;
+        if (activeDeckId && String(cloud.id) === String(activeDeckId)) activePulledLocalId = res.localId;
+      } catch (e) {
+        failed++;
+        console.warn("Reconcile pull failed", cloud.id, e);
+      }
+    }
+
+    // 2) Local → cloud: push anything not in the cloud or newer locally.
+    //    Re-read the index because the pull pass may have rewritten it.
+    for (const localMeta of readLocalDeckIndex()) {
+      const cloud = localMeta.deckId ? cloudById.get(String(localMeta.deckId)) : null;
+      const localNewer = !cloud || tsMs(localMeta.updatedAt) > tsMs(cloud.updated_at);
+      if (!localNewer) continue;
+      try {
+        await pushLibraryDeckToCloud(localMeta, { cloudExists: Boolean(cloud) });
+        pushed++;
+      } catch (e) {
+        failed++;
+        console.warn("Reconcile push failed", localMeta.id, e);
+      }
+    }
+
+    // If the on-screen deck was refreshed from the cloud, reload it so the user
+    // sees the newer content. (Local edits bump the timestamp, so this only
+    // happens when the cloud copy genuinely won the last-write-wins.)
+    if (activePulledLocalId) {
+      loadDeckFromLibrary(activePulledLocalId);
+    } else {
+      refreshSyncIndicatorBaseline();
+    }
+    if (el.myDecksPanel && !el.myDecksPanel.hidden) renderMyDecksList();
+
+    const parts = [];
+    if (pulled) parts.push(`${pulled} deck${pulled === 1 ? "" : "s"} downloaded from the cloud`);
+    if (pushed) parts.push(`${pushed} deck${pushed === 1 ? "" : "s"} uploaded to the cloud`);
+    const summary = parts.length
+      ? `Synced — ${parts.join(", ")}${failed ? ` (${failed} failed — see console)` : ""}`
+      : failed
+        ? `Sync finished, but ${failed} deck${failed === 1 ? "" : "s"} failed — see console`
+        : "Already up to date — nothing to sync";
+    if (explicit) {
+      setStatus(summary);
+      showToast(summary, failed ? "error" : "success");
+    }
+  } catch (error) {
+    console.error("Reconcile failed", error);
+    setSyncIndicator("error");
+    if (explicit) {
+      const reason = error?.message ? `: ${error.message}` : "";
+      setStatus(`Sync failed${reason}. Your decks are safe on this device.`, "error");
+      showToast(`Sync failed${reason}`, "error");
+    }
+  } finally {
+    reconcileInFlight = false;
+    if (el.syncNowBtn) setButtonLoading(el.syncNowBtn, false);
+  }
 }
 
 function readLocalDeckIndex() {
@@ -6102,7 +6392,9 @@ function listLocalDecks() {
 // Save the current deck into the local library. Re-saving the same deck (matched
 // by local id, or by cloud deckId for decks pulled from the web) updates in place
 // rather than creating a duplicate. Returns the stored metadata, or null on failure.
-function saveDeckToLibrary({ id = null, silent = false } = {}) {
+// `updatedAt` may be overridden to align the local copy's timestamp with the
+// cloud's after a successful push (so two-way reconcile sees them in sync).
+function saveDeckToLibrary({ id = null, silent = false, updatedAt = null } = {}) {
   if (!state.masterCards.length && !state.notes.trim()) {
     if (!silent) setStatus("Add some cards or notes before saving a deck.", "error");
     return null;
@@ -6130,7 +6422,7 @@ function saveDeckToLibrary({ id = null, silent = false } = {}) {
     category: snapshot.deckCategory || defaultDeckCategory,
     cardCount: snapshot.cards.length,
     hasNotes: Boolean(String(snapshot.notes || "").trim()),
-    updatedAt: new Date().toISOString(),
+    updatedAt: updatedAt || new Date().toISOString(),
     deckId: snapshot.deckId || null,
   };
   writeLocalDeckIndex([meta, ...readLocalDeckIndex().filter((entry) => entry.id !== localId)]);
@@ -6150,6 +6442,7 @@ function loadDeckFromLibrary(id) {
     loadDeckSnapshot(payload, payload.sourceTitle || payload.deckTitle || "");
     state.localDeckId = id;
     persistWorkingDeck();
+    refreshSyncIndicatorBaseline();
     return true;
   } catch (error) {
     console.warn("Could not load saved deck", error);
@@ -7269,25 +7562,25 @@ function dragVelocity(current, previous, time) {
 
 const LONG_PRESS_MS = 450;
 
-// A glowing conic-gradient border fills around the card perimeter over the
-// long-press duration (driven entirely by CSS on the .card element).
-function startHoldProgress() {
-  const card = el.card;
-  card.classList.remove("is-holding", "is-holding-complete");
-  void card.offsetWidth; // force reflow so the fill animation restarts cleanly
-  card.style.setProperty("--hold-dur", `${LONG_PRESS_MS}ms`);
-  card.classList.add("is-holding");
+// A glowing conic-gradient border fills around the perimeter of `target`
+// (the flashcard by default, or the notes stage) over the long-press
+// duration — driven entirely by the shared .is-holding CSS.
+function startHoldProgress(target = el.card) {
+  target.classList.remove("is-holding", "is-holding-complete");
+  void target.offsetWidth; // force reflow so the fill animation restarts cleanly
+  target.style.setProperty("--hold-dur", `${LONG_PRESS_MS}ms`);
+  target.classList.add("is-holding");
 }
 
-function stopHoldProgress() {
-  el.card.classList.remove("is-holding", "is-holding-complete");
+function stopHoldProgress(target = el.card) {
+  target.classList.remove("is-holding", "is-holding-complete");
 }
 
 // Flash the fully-lit border at the moment the mode flips, then clear it.
-function completeHoldProgress() {
-  el.card.classList.add("is-holding-complete");
+function completeHoldProgress(target = el.card) {
+  target.classList.add("is-holding-complete");
   setTimeout(() => {
-    el.card.classList.remove("is-holding", "is-holding-complete");
+    target.classList.remove("is-holding", "is-holding-complete");
   }, 200);
 }
 
@@ -7786,20 +8079,20 @@ el.importBtn.addEventListener("click", () => {
   closeDeckMenu();
   openImportPanel();
 });
-el.webDecksBtn.addEventListener("click", () => {
-  closeDeckMenu();
-  openWebDecksPanel();
-});
 el.myDecksBtn?.addEventListener("click", () => {
   closeDeckMenu();
   openMyDecksPanel();
 });
-el.saveDeckBtn?.addEventListener("click", () => {
+el.syncNowBtn?.addEventListener("click", () => {
   closeDeckMenu();
-  saveCurrentDeckToDevice();
+  reconcileAllDecks({ explicit: true });
 });
 el.closeMyDecksBtn?.addEventListener("click", closeMyDecksPanel);
-el.saveCurrentToMyDecksBtn?.addEventListener("click", saveCurrentDeckToDevice);
+el.myDecksRefreshBtn?.addEventListener("click", () => renderMyDecksList());
+el.manageCloudBtn?.addEventListener("click", () => {
+  closeMyDecksPanel();
+  openWebDecksPanel();
+});
 el.closeImportBtn.addEventListener("click", closeImportPanel);
 el.closeImportSelectorBtn.addEventListener("click", closeImportSelectorPanel);
 el.importSelectorCancelBtn.addEventListener("click", closeImportSelectorPanel);
@@ -8051,32 +8344,12 @@ el.prevCardBtn.addEventListener("click", () => navigateCard(-1, "prev"));
 el.nextCardBtn.addEventListener("click", () => navigateCard(1, "next"));
 el.knownBtn.addEventListener("click", () => moveCard("known"));
 el.reviewBtn.addEventListener("click", () => moveCard("review"));
-el.knownBrickList.addEventListener("click", (event) => {
-  const item = event.target.closest(".brick");
-  if (!item) return;
-  previewCard(state.results.known[Number(item.dataset.index)]);
-});
-el.reviewBrickList.addEventListener("click", (event) => {
-  const item = event.target.closest(".brick");
-  if (!item) return;
-  previewCard(state.results.review[Number(item.dataset.index)]);
-});
 el.replayReviewBtn.addEventListener("click", () => replayDeck("review"));
 el.replayKnownBtn.addEventListener("click", () => replayDeck("known"));
 el.replayUncategorizedBtn.addEventListener("click", () => replayDeck("uncategorized"));
 el.replayAllBtn.addEventListener("click", () => replayDeck("all"));
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
-el.mobileStackToggle?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-mobile-stack]");
-  if (!button) return;
-  const stack = button.dataset.mobileStack === "known" ? "known" : "review";
-  const studyLayout = document.querySelector(".study-layout");
-  if (studyLayout) studyLayout.dataset.mobileStack = stack;
-  el.mobileStackToggle.querySelectorAll("[data-mobile-stack]").forEach((item) => {
-    item.classList.toggle("is-active", item === button);
-  });
-});
 el.card.addEventListener("click", (event) => {
   // A long-press just opened edit mode — swallow the trailing click
   if (state.longPressFired) {
@@ -8189,6 +8462,11 @@ function initAppForUser() {
   setStyleStatus("Local style");
   installManifestLink();
   registerServiceWorker();
+  // Mirror every cloud deck onto this device (and push anything newer locally)
+  // so the PWA has a full, up-to-date offline library. Runs in the background.
+  if (navigator.onLine) {
+    setTimeout(() => reconcileAllDecks({ explicit: false }), 1200);
+  }
 }
 
 let authListenerSubscription = null;
@@ -8200,12 +8478,14 @@ function setupAuthListener() {
   }
   const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
     if (session?.user) {
+      isSignedIn = true;
       showAuthenticatedUI();
       if (!appInitialized) {
         appInitialized = true;
         initAppForUser();
       }
     } else if (event === "SIGNED_OUT") {
+      isSignedIn = false;
       // Only drop to the login screen for a real sign-out. A failed token
       // refresh while offline also emits SIGNED_OUT — ignore it so the user
       // isn't locked out of their offline decks.
@@ -8232,6 +8512,7 @@ async function bootApp() {
   // still let a signed-in user reach their decks instead of the login wall.
   const session = await getCachedSession();
   if (session?.user) {
+    isSignedIn = true;
     showAuthenticatedUI();
     if (!appInitialized) {
       appInitialized = true;
@@ -8265,9 +8546,17 @@ function updateOnlineIndicator() {
   const indicator = document.getElementById("offlineIndicator");
   if (indicator) indicator.hidden = navigator.onLine;
 }
+let onlineReconcileTimer = null;
 window.addEventListener("online", () => {
   updateOnlineIndicator();
   showToast("Back online", "success");
+  // Connectivity returned — reconcile the local mirror with the cloud. Debounced
+  // so a flaky connection flapping doesn't kick off overlapping syncs.
+  if (onlineReconcileTimer) clearTimeout(onlineReconcileTimer);
+  onlineReconcileTimer = setTimeout(() => {
+    onlineReconcileTimer = null;
+    reconcileAllDecks({ explicit: false });
+  }, 1500);
 });
 window.addEventListener("offline", () => {
   updateOnlineIndicator();
@@ -8422,6 +8711,48 @@ function attachExitLongPress(textarea, side) {
 attachExitLongPress(el.questionEdit, "question");
 attachExitLongPress(el.answerEdit, "answer");
 
+// Notes get the same mouse-only long-press gesture as the card faces: hold
+// the rendered view to start editing, hold inside the editor to commit back
+// to the rendered view. The glowing ring shows on .notes-stage (its bordered
+// container) rather than on the view/textarea themselves.
+function attachNotesLongPress(target, onFire) {
+  let timer = null;
+  let sx = 0;
+  let sy = 0;
+  const clear = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    stopHoldProgress(el.notesStage);
+  };
+  target.addEventListener("pointerdown", (e) => {
+    clear();
+    // Let touch/pen long-press select text; only mouse long-press toggles mode.
+    if (e.pointerType && e.pointerType !== "mouse") return;
+    sx = e.clientX;
+    sy = e.clientY;
+    startHoldProgress(el.notesStage);
+    timer = setTimeout(() => {
+      timer = null;
+      completeHoldProgress(el.notesStage);
+      state.suppressClickUntil = performance.now() + 500;
+      onFire();
+    }, LONG_PRESS_MS);
+  });
+  target.addEventListener("pointermove", (e) => {
+    if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) clear();
+  });
+  target.addEventListener("pointerup", clear);
+  target.addEventListener("pointercancel", clear);
+  target.addEventListener("blur", clear);
+}
+
+if (el.notesView && el.notesStage) {
+  attachNotesLongPress(el.notesView, () => { if (!isNotesEditing()) enterNotesEditing(); });
+  attachNotesLongPress(el.notesEdit, () => { if (isNotesEditing()) commitNotesEditIfActive(); });
+}
+
 if (el.newDeckBtn) {
   el.newDeckBtn.addEventListener("click", createNewDeck);
 }
@@ -8467,7 +8798,7 @@ const deckEmptyImportBtn2 = document.getElementById("deckEmptyImportBtn");
 const deckEmptyWebBtn = document.getElementById("deckEmptyWebBtn");
 if (deckEmptyNewBtn) deckEmptyNewBtn.addEventListener("click", () => createNewDeck());
 if (deckEmptyImportBtn2) deckEmptyImportBtn2.addEventListener("click", () => openImportPanel());
-if (deckEmptyWebBtn) deckEmptyWebBtn.addEventListener("click", () => openWebDecksPanel());
+if (deckEmptyWebBtn) deckEmptyWebBtn.addEventListener("click", () => openMyDecksPanel());
 
 const helpModal = document.getElementById("helpModal");
 const helpBtn = document.getElementById("helpBtn");

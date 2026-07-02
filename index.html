@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="styles.css?v=20260702-1">
+    <link rel="stylesheet" href="styles.css?v=20260702-3">
   </head>
   <body>
     <span class="offline-indicator" id="offlineIndicator" hidden>Offline</span>
@@ -32,30 +32,18 @@
           <span class="drawer-section-label">Decks</span>
           <button class="tool-button" id="newDeckBtn" type="button">&#43; New Deck</button>
           <button class="tool-button" id="importBtn" type="button">&#8679; Import from File</button>
-          <button class="tool-button" id="webDecksBtn" type="button">&#9782; Web Decks</button>
-          <button class="tool-button" id="myDecksBtn" type="button" title="Decks saved on this device (works offline)">&#128190; My Decks</button>
+          <button class="tool-button" id="myDecksBtn" type="button" title="All your decks — saved on this device and synced to the cloud automatically">&#128218; My Decks</button>
+          <button class="tool-button" id="syncNowBtn" type="button" title="Sync all decks with the cloud now (two-way, keeps the newest of each)">&#8635; Sync Now</button>
 
           <span class="drawer-section-label">Study</span>
           <button class="tool-button" id="allCardsBtn" type="button">&#8801; Browse All Cards</button>
           <button class="tool-button" id="notesBtn" type="button" title="Freeform study notes for this deck">&#128221; Study Notes</button>
-          <button class="tool-button" id="saveDeckBtn" type="button" title="Save the current deck to this device (works offline)">&#11015; Save to Device</button>
-          <button class="tool-button" id="syncBtn" type="button" title="Sync current deck to Web">&#8635; Sync to Cloud</button>
           <div class="menu-wrap">
             <button class="tool-button" id="exportBtn" type="button">&#8659; Export Cards&#8230;</button>
             <div class="export-menu" id="exportMenu" hidden>
-              <span class="export-group-label">Known</span>
-              <button type="button" data-export="pdf" data-scope="known">Cornell PDF</button>
-              <button type="button" data-export="sql" data-scope="known">SQL</button>
-              <hr class="export-divider">
-              <span class="export-group-label">Review</span>
-              <button type="button" data-export="pdf" data-scope="review">Cornell PDF</button>
-              <button type="button" data-export="sql" data-scope="review">SQL</button>
-              <hr class="export-divider">
-              <span class="export-group-label">All</span>
               <button type="button" data-export="pdf" data-scope="all">Cornell PDF</button>
               <button type="button" data-export="markdown" data-scope="all">Markdown</button>
               <button type="button" data-export="json" data-scope="all">JSON</button>
-              <button type="button" data-export="sql" data-scope="all">SQL</button>
             </div>
           </div>
 
@@ -76,21 +64,13 @@
             <span class="deck-meta-sep" aria-hidden="true"></span>
             <span id="positionText">0/0</span>
             <strong id="scoreText">Known 0 / Review 0</strong>
+            <span class="deck-meta-sep" aria-hidden="true"></span>
+            <span class="sync-indicator" id="syncIndicator" data-state="idle" title="Saving happens automatically"></span>
           </span>
         </div>
       </header>
 
       <section class="study-layout" aria-label="Flashcard study area">
-        <aside class="result-panel review-panel" aria-label="Review cards">
-          <div class="result-head">
-            <div>
-              <span class="result-label">&#8592; Review</span>
-              <strong id="reviewStackCount">0</strong>
-            </div>
-          </div>
-          <div class="brick-list" id="reviewBrickList"></div>
-        </aside>
-
         <section class="quiz-panel" aria-label="Flashcard quiz">
           <div class="view-mode-toggle" id="viewModeToggle" hidden aria-label="Deck view">
             <button class="is-active" type="button" data-view-mode="cards">&#9634; Cards</button>
@@ -118,8 +98,8 @@
                   Import
                 </button>
                 <button class="deck-empty-action" id="deckEmptyWebBtn" type="button">
-                  <span class="deck-empty-action-icon" aria-hidden="true">☁</span>
-                  Web Decks
+                  <span class="deck-empty-action-icon" aria-hidden="true">📚</span>
+                  My Decks
                 </button>
               </div>
             </div>
@@ -172,7 +152,7 @@
               <button class="edit-card-btn edit-toggle-pill" id="editNotesBtn" type="button" title="Edit notes" aria-label="Edit notes"><span class="pill-seg pill-seg-edit">&#9998;</span><span class="pill-seg pill-seg-view">&#128065;</span></button>
             </div>
             <div class="rendered notes-rendered" id="notesView"></div>
-            <textarea class="edit-textarea notes-edit" id="notesEdit" hidden spellcheck="false" placeholder="Study first, card later. Write or paste your notes here — markdown, math, diagrams and images all work. In the preview, highlight any fact to make it a card's answer, then frame its question."></textarea>
+            <textarea class="edit-textarea notes-edit" id="notesEdit" hidden spellcheck="false" placeholder="Write your notes here…"></textarea>
             <button class="notes-make-card-btn" id="makeCardFromSelectionBtn" type="button" hidden>&#43; Make card</button>
           </div>
 
@@ -198,21 +178,6 @@
             <button id="replayUncategorizedBtn" type="button">Uncategorized</button>
           </div>
         </section>
-
-        <div class="mobile-stack-toggle" aria-label="Review and known stack tabs">
-          <button class="is-active" type="button" data-mobile-stack="review">Review <strong id="mobileReviewCount">0</strong></button>
-          <button type="button" data-mobile-stack="known">Known <strong id="mobileKnownCount">0</strong></button>
-        </div>
-
-        <aside class="result-panel known-panel" aria-label="Known cards">
-          <div class="result-head">
-            <div>
-              <span class="result-label">Known &#8594;</span>
-              <strong id="knownStackCount">0</strong>
-            </div>
-          </div>
-          <div class="brick-list" id="knownBrickList"></div>
-        </aside>
       </section>
     </main>
 
@@ -390,7 +355,6 @@
                     <button type="button" data-bulk-export="pdf">Cornell PDF</button>
                     <button type="button" data-bulk-export="markdown">Markdown</button>
                     <button type="button" data-bulk-export="json">JSON</button>
-                    <button type="button" data-bulk-export="sql">SQL</button>
                   </div>
                 </div>
                 <button id="bulkDeleteBtn" class="bulk-action-btn bulk-delete" type="button">Delete</button>
@@ -403,7 +367,6 @@
               <button type="button" data-global-web-export="pdf">Cornell PDF</button>
               <button type="button" data-global-web-export="markdown">Markdown</button>
               <button type="button" data-global-web-export="json">JSON</button>
-              <button type="button" data-global-web-export="sql">SQL</button>
             </div>
           </div>
         </div>
@@ -431,17 +394,25 @@
         <div class="web-decks-head">
           <div>
             <h1>My Decks</h1>
-            <p>Decks saved on this device. These load and save fully offline.</p>
+            <p>Every deck you study lives here — saved on this device and synced to the cloud automatically.</p>
           </div>
           <button class="icon-button" id="closeMyDecksBtn" type="button" aria-label="Close my decks panel">&#215;</button>
         </div>
         <div class="web-decks-tools">
           <div class="web-decks-tools-left">
-            <button class="web-decks-refresh" id="saveCurrentToMyDecksBtn" type="button">&#11015; Save Current Deck</button>
+            <button class="web-decks-refresh" id="myDecksRefreshBtn" type="button">&#8635; Refresh</button>
+            <button class="web-decks-refresh" id="manageCloudBtn" type="button" hidden>&#9729; Manage cloud decks</button>
           </div>
         </div>
         <div class="web-decks-table-wrap">
-          <table class="web-decks-table">
+          <table class="web-decks-table my-decks-table">
+            <colgroup>
+              <col style="width:26%">
+              <col style="width:13%">
+              <col style="width:9%">
+              <col style="width:22%">
+              <col style="width:30%">
+            </colgroup>
             <thead>
               <tr>
                 <th>Title</th>
@@ -816,6 +787,6 @@ What year was the Eiffel Tower built?
     <script src="https://cdn.jsdelivr.net/npm/nomnoml/dist/nomnoml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
-    <script src="app.js?v=20260702-1"></script>
+    <script src="app.js?v=20260702-3"></script>
   </body>
 </html>
