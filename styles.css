@@ -402,11 +402,12 @@ button:disabled {
 
 .deck-meta {
   display: flex;
-  flex-wrap: wrap;
-  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 0 1 auto;
   min-width: 0;
-  align-items: center;
-  gap: 2px 8px;
+  max-width: 100%;
+  gap: 2px;
   color: var(--muted);
   font-size: 0.82rem;
   overflow: hidden;
@@ -414,7 +415,8 @@ button:disabled {
 
 .deck-title-wrap {
   display: inline-flex;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   align-items: center;
   flex-wrap: nowrap;
   gap: 5px;
@@ -423,7 +425,8 @@ button:disabled {
 }
 
 .deck-title {
-  flex: 1;
+  flex: 0 1 auto;
+  max-width: min(420px, 50vw);
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
@@ -445,7 +448,8 @@ button:disabled {
 
 .deck-meta-row2 {
   display: flex;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   align-items: center;
   flex-wrap: nowrap;
   gap: 5px;
@@ -1309,12 +1313,15 @@ button:disabled {
 }
 
 .sync-modal-content {
+  display: flex;
+  flex-direction: column;
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 1.5rem;
-  max-width: 400px;
+  max-width: 480px;
+  max-height: 80vh;
   width: 90%;
 }
 
@@ -1322,18 +1329,57 @@ button:disabled {
   margin-top: 0;
   margin-bottom: 1rem;
   font-size: 1.25rem;
+  flex-shrink: 0;
 }
 
 .sync-modal-details {
   margin-bottom: 1.5rem;
+  min-height: 0;
+  overflow-y: auto;
   font-size: 0.95rem;
   line-height: 1.5;
 }
 
 .sync-modal-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+/* ── Detailed sync report (reuses the .sync-modal chrome above) ── */
+.sync-report-summary {
+  margin: 0 0 0.75rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.sync-report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sync-report-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+  padding: 8px 10px;
+}
+
+.sync-report-row-error {
+  border-color: color-mix(in srgb, var(--review, #d9534f) 55%, var(--line));
+  background: color-mix(in srgb, var(--review, #d9534f) 12%, transparent);
+}
+
+.sync-report-detail {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 400;
 }
 
 .sync-modal-btn {
@@ -4307,12 +4353,18 @@ textarea {
   }
 
   /* ── Compact deck-meta: lives in the appbar flex row ── */
+  /* On mobile the header has little else in it, so (unlike desktop) the
+     title/meta rows should stretch to fill it — otherwise a short title
+     would clamp its width to its own content instead of using the space
+     available, which is what lets a long title 2-line-clamp sensibly. */
   .deck-meta {
+    flex: 1;
     gap: 2px 0;
   }
 
   /* Title row: 2-line clamp + pencil right after */
   .deck-title-wrap {
+    width: 100%;
     flex-wrap: nowrap;
     align-items: flex-start;
     gap: 4px;
@@ -4320,6 +4372,7 @@ textarea {
   }
 
   .deck-title {
+    max-width: none;
     font-size: 0.68rem;
     font-weight: 900;
     white-space: normal;
