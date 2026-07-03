@@ -76,8 +76,6 @@ const state = {
   dragging: false,
   dragMoved: false,
   suppressClickUntil: 0,
-  longPressTimer: null,
-  longPressFired: false,
   transitionToken: 0,
   styleSettings: {},
   styleProfiles: {
@@ -1789,23 +1787,11 @@ async function showSyncModal() {
   if (confirmBtn) confirmBtn.disabled = false;
 }
 
-// Detailed post-sync report — every deck reconcileAllDecks() touched, what
-// direction it went, and exactly what changed (cards added/updated/deleted,
-// notes). Reuses the (otherwise-dead, since the manual "Sync to Cloud" button
-// it was written for no longer exists) #syncModal chrome, repurposed as a
-// plain report instead of a confirm-before-you-sync prompt.
-function showSyncReport(deckLog, { pulled = 0, pushed = 0, failed = 0, isStartup = false } = {}) {
-  const modal = el.syncModal;
-  const content = el.syncDetailsContent;
-  if (!modal || !content) return;
-
-  const titleEl = document.getElementById("syncModalTitle");
-  const confirmBtn = document.getElementById("confirmSyncBtn");
-  const cancelBtn = document.getElementById("cancelSyncBtn");
-  if (titleEl) titleEl.textContent = isStartup ? "Startup Sync Report" : "Sync Report";
-  if (confirmBtn) confirmBtn.hidden = true;
-  if (cancelBtn) cancelBtn.textContent = "Close";
-
+// Shared HTML for a sync report — every deck reconcileAllDecks() touched,
+// what direction it went, and exactly what changed (cards added/updated/
+// deleted, notes). Used both by the explicit-sync modal and the inline
+// startup report on the welcome screen.
+function buildSyncReportHtml(deckLog, { pulled = 0, pushed = 0, failed = 0 } = {}) {
   const describeCounts = (entry) => {
     const parts = [];
     if (entry.cardsAdded) parts.push(`${entry.cardsAdded} card${entry.cardsAdded === 1 ? "" : "s"} added`);
@@ -1829,11 +1815,31 @@ function showSyncReport(deckLog, { pulled = 0, pushed = 0, failed = 0, isStartup
     </li>`;
   }).join("");
 
-  content.innerHTML = `
+  return `
     <p class="sync-report-summary">${pulled} deck${pulled === 1 ? "" : "s"} downloaded, ${pushed} deck${pushed === 1 ? "" : "s"} uploaded${failed ? `, ${failed} failed` : ""}</p>
     <ul class="sync-report-list">${rows}</ul>
   `;
+}
 
+// Post-sync report modal for an EXPLICIT "Sync Now" click only — background
+// startup/reconnect syncs render their report inline on the welcome screen
+// instead (see renderWelcomeSyncReport) rather than popping a modal.
+// Reuses the (otherwise-dead, since the manual "Sync to Cloud" button it was
+// written for no longer exists) #syncModal chrome, repurposed as a plain
+// report instead of a confirm-before-you-sync prompt.
+function showSyncReport(deckLog, { pulled = 0, pushed = 0, failed = 0 } = {}) {
+  const modal = el.syncModal;
+  const content = el.syncDetailsContent;
+  if (!modal || !content) return;
+
+  const titleEl = document.getElementById("syncModalTitle");
+  const confirmBtn = document.getElementById("confirmSyncBtn");
+  const cancelBtn = document.getElementById("cancelSyncBtn");
+  if (titleEl) titleEl.textContent = "Sync Report";
+  if (confirmBtn) confirmBtn.hidden = true;
+  if (cancelBtn) cancelBtn.textContent = "Close";
+
+  content.innerHTML = buildSyncReportHtml(deckLog, { pulled, pushed, failed });
   modal.hidden = false;
 }
 
@@ -2101,6 +2107,17 @@ const el = {
   progressKnown: document.querySelector("#progressKnown"),
   progressReview: document.querySelector("#progressReview"),
   deckEmptyState: document.querySelector("#deckEmptyState"),
+  deckEmptyPanel: document.querySelector("#deckEmptyPanel"),
+  deckEmptySyncValue: document.querySelector("#deckEmptySyncValue"),
+  deckEmptyLibraryValue: document.querySelector("#deckEmptyLibraryValue"),
+  deckEmptyIcon: document.querySelector("#deckEmptyIcon"),
+  deckEmptyTitle: document.querySelector("#deckEmptyTitle"),
+  deckEmptyBody: document.querySelector("#deckEmptyBody"),
+  deckEmptyActionsNone: document.querySelector("#deckEmptyActionsNone"),
+  deckEmptyActionsActive: document.querySelector("#deckEmptyActionsActive"),
+  deckEmptyAddCardBtn: document.querySelector("#deckEmptyAddCardBtn"),
+  deckEmptyGoNotesBtn: document.querySelector("#deckEmptyGoNotesBtn"),
+  deckEmptySyncReport: document.querySelector("#deckEmptySyncReport"),
   swipeHint: document.querySelector("#swipeHint"),
   confirmModal: document.querySelector("#confirmModal"),
   confirmModalMessage: document.querySelector("#confirmModalMessage"),
@@ -2138,6 +2155,7 @@ const el = {
   notesEditToolbar: document.querySelector("#notesEditToolbar"),
   editNotesBtn: document.querySelector("#editNotesBtn"),
   makeCardFromSelectionBtn: document.querySelector("#makeCardFromSelectionBtn"),
+  makeCardFromNotesBtn: document.querySelector("#makeCardFromNotesBtn"),
   frameCardModal: document.querySelector("#frameCardModal"),
   frameCardAnswerPreview: document.querySelector("#frameCardAnswerPreview"),
   frameCardQuestionInput: document.querySelector("#frameCardQuestionInput"),
@@ -5244,12 +5262,17 @@ function updateActiveCardStatusBadges() {
   setCardStatusBadge(el.answerStatusBadge, status);
 }
 
+// A deck "exists" for UI purposes once it's been created/loaded (has a title),
+// has cards, or has study notes — so a freshly created deck with zero cards
+// still shows its title/toolbar instead of looking like nothing is loaded.
+function hasActiveDeck() {
+  return Boolean(state.deckTitle) || state.masterCards.length > 0 || Boolean(state.notes.trim());
+}
+
 function updateMeta() {
   const total = state.cards.length;
   const finished = Math.min(state.current, total);
-  // A deck "exists" for UI purposes once it has cards OR study notes, so
-  // notes-first decks show their title and can be saved/synced/exported.
-  const hasDeck = state.masterCards.length > 0 || Boolean(state.notes.trim());
+  const hasDeck = hasActiveDeck();
   syncResults();
   updateActiveCardStatusBadges();
   el.deckTitle.textContent = state.deckTitle;
@@ -5311,6 +5334,7 @@ function resetNotesEditingUI() {
   el.notesEditToolbar.hidden = true;
   el.editNotesBtn.classList.remove("is-editing");
   el.editNotesBtn.title = "Edit notes";
+  hideNotesSelectionButton();
 }
 
 function commitNotesEditIfActive() {
@@ -5376,11 +5400,12 @@ el.viewModeToggle?.addEventListener("click", (event) => {
 
 el.notesBtn?.addEventListener("click", () => setViewMode("notes"));
 
-// ── Select text in rendered notes → make a flashcard in this deck ──
-// Highlighting text/images in the notes preview floats a "+ Make card ·
-// N words" pill next to the selection; tapping it opens the frame-card modal
-// where the captured selection (serialized back to markdown, so images and
-// math survive) is previewed as the ANSWER and the user frames the question.
+// ── Select text in notes (rendered OR raw) → make a flashcard in this deck ──
+// Highlighting text/images in the notes preview, or a text range in the raw
+// markdown editor, floats a "+ Make card · N words" pill next to the
+// selection; tapping it opens the frame-card modal where the captured
+// selection (serialized back to markdown, so images and math survive) is
+// previewed as the ANSWER and the user frames the question.
 // Works offline — the new card syncs with the normal flow.
 let notesSelectionTimer = null;
 
@@ -5419,10 +5444,65 @@ function notesSelectionMarkdown(range) {
   return markdown || fragment.textContent.trim();
 }
 
+// The raw-textarea equivalent of notesSelectionRange(): plain selected text
+// (already markdown source, so no HTML→markdown conversion needed) plus its
+// image count, counted from markdown image syntax since there's no DOM to
+// query.
+function notesEditSelectionText() {
+  if (!isNotesEditing()) return "";
+  const { selectionStart, selectionEnd, value } = el.notesEdit;
+  if (selectionStart === selectionEnd) return "";
+  return value.slice(selectionStart, selectionEnd);
+}
+
+// The current selection's markdown, regardless of whether notes are being
+// viewed (rendered) or edited (raw) — shared by the floating pill and the
+// persistent toolbar button.
+function currentNotesSelectionMarkdown() {
+  if (isNotesEditing()) return notesEditSelectionText().trim();
+  const range = notesSelectionRange();
+  return range ? notesSelectionMarkdown(range) : "";
+}
+
+function scheduleNotesSelectionCheck() {
+  if (notesSelectionTimer) clearTimeout(notesSelectionTimer);
+  notesSelectionTimer = setTimeout(positionNotesSelectionButton, 160);
+}
+
 function positionNotesSelectionButton() {
   const button = el.makeCardFromSelectionBtn;
   if (!button) return;
-  const range = state.viewMode === "notes" ? notesSelectionRange() : null;
+  if (state.viewMode !== "notes") {
+    hideNotesSelectionButton();
+    return;
+  }
+
+  if (isNotesEditing()) {
+    const raw = notesEditSelectionText();
+    const text = raw.trim();
+    if (!text) {
+      hideNotesSelectionButton();
+      return;
+    }
+    button.dataset.selectionText = text;
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const imageMatches = text.match(/!\[[^\]]*\]\([^)]*\)/g) || [];
+    const parts = [];
+    if (words) parts.push(`${words} word${words === 1 ? "" : "s"}`);
+    if (imageMatches.length) parts.push(imageMatches.length === 1 ? "1 image" : `${imageMatches.length} images`);
+    button.textContent = `+ Make card · ${parts.join(" + ")}`;
+    button.hidden = false;
+    const editRect = el.notesEdit.getBoundingClientRect();
+    const btnRect = button.getBoundingClientRect();
+    const margin = 12;
+    const top = Math.min(editRect.bottom - btnRect.height - margin, window.innerHeight - btnRect.height - margin);
+    const left = Math.min(editRect.right - btnRect.width - margin, window.innerWidth - btnRect.width - margin);
+    button.style.top = `${Math.max(margin, top)}px`;
+    button.style.left = `${Math.max(margin, left)}px`;
+    return;
+  }
+
+  const range = notesSelectionRange();
   const fragment = range ? cleanedSelectionFragment(range) : null;
   const text = fragment ? fragment.textContent.trim() : "";
   const imageCount = fragment ? fragment.querySelectorAll("img").length : 0;
@@ -5515,9 +5595,16 @@ function createCardFromNotesSelection(markdown) {
 
 document.addEventListener("selectionchange", () => {
   if (state.viewMode !== "notes") return;
-  if (notesSelectionTimer) clearTimeout(notesSelectionTimer);
-  notesSelectionTimer = setTimeout(positionNotesSelectionButton, 160);
+  scheduleNotesSelectionCheck();
 });
+
+// <textarea> selections don't fire the document "selectionchange" event
+// reliably across browsers, so raw/edit mode is covered separately via
+// direct mouse/keyboard selection events on the editor itself.
+el.notesEdit?.addEventListener("mouseup", scheduleNotesSelectionCheck);
+el.notesEdit?.addEventListener("keyup", scheduleNotesSelectionCheck);
+el.notesEdit?.addEventListener("select", scheduleNotesSelectionCheck);
+el.notesEdit?.addEventListener("scroll", hideNotesSelectionButton, { passive: true });
 
 el.makeCardFromSelectionBtn?.addEventListener("pointerdown", (event) => {
   // preventDefault keeps the selection from dissolving mid-tap.
@@ -5530,6 +5617,20 @@ el.makeCardFromSelectionBtn?.addEventListener("pointerdown", (event) => {
 });
 
 el.notesView?.addEventListener("scroll", hideNotesSelectionButton, { passive: true });
+
+// Persistent alternative to the floating pill (which only appears while a
+// selection is live) — sits in the notes header and works from whatever text
+// is currently selected, rendered or raw, when tapped.
+el.makeCardFromNotesBtn?.addEventListener("click", () => {
+  const text = currentNotesSelectionMarkdown();
+  if (!text) {
+    setStatus("Select some text in your notes first, then tap this to turn it into a card.", "error");
+    return;
+  }
+  hideNotesSelectionButton();
+  window.getSelection()?.removeAllRanges();
+  createCardFromNotesSelection(text);
+});
 
 function transitionClassFor(direction, phase) {
   if (!direction) return "";
@@ -5669,9 +5770,11 @@ async function showCard(direction = 0) {
       el.card.hidden = false;
       el.card.closest(".quiz-panel")?.classList.add("deck-complete");
     } else {
-      // No deck loaded — show styled empty state
+      // Zero cards — either a freshly created/loaded deck waiting for its
+      // first card, or truly nothing loaded. Same container, different copy.
       if (el.deckSummary) el.deckSummary.hidden = true;
       if (el.deckEmptyState) el.deckEmptyState.hidden = false;
+      renderDeckEmptyState(hasActiveDeck() ? "active" : "none");
       el.card.hidden = true;
       el.card.closest(".quiz-panel")?.classList.remove("deck-complete");
       el.card.closest(".quiz-panel")?.classList.add("is-deck-empty");
@@ -6151,6 +6254,14 @@ function loadDeckSnapshot(payload, titleHint = "", append = false) {
 // ---------------------------------------------------------------------------
 const LOCAL_DECKS_INDEX_KEY = "flashcards_local_decks_index_v1";
 const LOCAL_DECK_PREFIX = "flashcards_local_deck_v1:";
+// Timestamp of the last reconcile that completed without throwing (whether or
+// not it found anything to change) — survives reloads so the startup screen
+// can say "last checked Xm ago" even before the next reconcile finishes.
+const LAST_GLOBAL_SYNC_KEY = "flashcards_last_global_sync_at";
+// Set when a reconcile throws, cleared the next time one completes cleanly —
+// lets the welcome screen show "Sync failed" the same way the per-deck pill
+// (setSyncIndicator) would, even though no deck is loaded to attach it to.
+const LAST_GLOBAL_SYNC_ERROR_KEY = "flashcards_last_global_sync_error";
 
 let deckAutosaveTimer = null;
 
@@ -6185,12 +6296,27 @@ function scheduleDeckAutosave() {
   }, 400);
 }
 
+// Coarse "Xm ago" style relative time, for the sync pill's last-synced suffix.
+function formatRelativeTime(iso) {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "";
+  const diffSec = Math.round((Date.now() - then) / 1000);
+  if (diffSec < 10) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
 // Reflects the auto-save / cloud-sync lifecycle in the deck-meta pill.
 function setSyncIndicator(stateName) {
   const node = el.syncIndicator;
   if (!node) return;
-  const hasDeck = state.masterCards.length || state.notes.trim();
-  if (!hasDeck) {
+  if (!hasActiveDeck()) {
     node.textContent = "";
     node.dataset.state = "idle";
     return;
@@ -6204,16 +6330,96 @@ function setSyncIndicator(stateName) {
     error: "Sync failed · saved on device",
   };
   node.dataset.state = stateName === "signin" ? "saved" : stateName;
-  node.textContent = labels[stateName] || "";
+  let text = labels[stateName] || "";
+  if (stateName === "synced" && state.localDeckId) {
+    const localMeta = readLocalDeckIndex().find((m) => m.id === state.localDeckId);
+    const relative = formatRelativeTime(localMeta?.lastSyncedAt);
+    if (relative) text += ` · ${relative}`;
+  }
+  node.textContent = text;
 }
 
 // Sets the resting state of the pill (used after a deck loads, when there are no
 // pending edits) based on where the deck currently lives.
 function refreshSyncIndicatorBaseline() {
-  if (!(state.masterCards.length || state.notes.trim())) return setSyncIndicator("idle");
+  if (!hasActiveDeck()) return setSyncIndicator("idle");
   if (!supabaseClient || !isSignedIn) return setSyncIndicator("saved");
   if (!navigator.onLine) return setSyncIndicator("offline");
   return setSyncIndicator(state.deckId ? "synced" : "signin");
+}
+
+// Swaps the shared #deckEmptyState container between two variants: "none"
+// (nothing loaded at all — New Deck/Import/My Decks) and "active" (a deck
+// exists but has zero cards yet — prompts to add one or draft notes first).
+function renderDeckEmptyState(mode) {
+  const isActive = mode === "active";
+  if (el.deckEmptyIcon) el.deckEmptyIcon.textContent = isActive ? "🗂️" : "📚";
+  if (el.deckEmptyTitle) el.deckEmptyTitle.textContent = isActive ? "No cards yet" : "Recall";
+  if (el.deckEmptyBody) {
+    el.deckEmptyBody.textContent = isActive
+      ? "Add your first card, or draft in Notes first:"
+      : "Choose how to get started:";
+  }
+  if (el.deckEmptyActionsNone) el.deckEmptyActionsNone.hidden = isActive;
+  if (el.deckEmptyActionsActive) el.deckEmptyActionsActive.hidden = !isActive;
+  if (el.deckEmptyPanel) el.deckEmptyPanel.hidden = isActive;
+  if (isActive) {
+    if (el.deckEmptySyncReport) el.deckEmptySyncReport.hidden = true;
+  } else {
+    updateDeckEmptyStatus();
+    renderWelcomeSyncReport();
+  }
+}
+
+// Inline replacement for the old "Startup Sync Report" popup: the same
+// per-deck breakdown, rendered directly on the welcome screen instead of a
+// modal, so it's only ever seen where it's actually relevant (nothing else
+// to look at) and never interrupts active use.
+function renderWelcomeSyncReport() {
+  const node = el.deckEmptySyncReport;
+  if (!node) return;
+  if (!lastStartupSyncReport) {
+    node.hidden = true;
+    node.innerHTML = "";
+    return;
+  }
+  const { deckLog, pulled, pushed, failed } = lastStartupSyncReport;
+  node.innerHTML = `<p class="deck-empty-sync-report-title">Startup Sync Report</p>${buildSyncReportHtml(deckLog, { pulled, pushed, failed })}`;
+  node.hidden = false;
+}
+
+// Fills in the Sync Status / Your Decks rows on the "Recall" welcome screen so
+// it's never a dead end — this is the same information the per-deck sync
+// pill (setSyncIndicator) shows once a deck is loaded, plus the local
+// library's deck count, laid out as two clearly labeled fields instead of one
+// blended sentence. Called whenever that screen is shown, at the start/end of
+// a reconcile, and on online/offline transitions.
+function updateDeckEmptyStatus() {
+  const syncNode = el.deckEmptySyncValue;
+  const libraryNode = el.deckEmptyLibraryValue;
+  if (!syncNode || !libraryNode) return;
+
+  const count = listLocalDecks().length;
+  libraryNode.textContent = count ? `${count} saved deck${count === 1 ? "" : "s"} on this device` : "No decks yet";
+
+  if (!supabaseClient || !isSignedIn) {
+    syncNode.textContent = "💾 Local only — sign in to back up to the cloud";
+    return;
+  }
+  if (!navigator.onLine) {
+    syncNode.textContent = "📴 Offline — will sync once you're back online";
+    return;
+  }
+  if (reconcileInFlight) {
+    syncNode.textContent = "🔄 Checking for updates from the cloud…";
+    return;
+  }
+  if (localStorage.getItem(LAST_GLOBAL_SYNC_ERROR_KEY)) {
+    syncNode.textContent = "⚠️ Sync failed — will retry automatically";
+    return;
+  }
+  const lastSync = formatRelativeTime(localStorage.getItem(LAST_GLOBAL_SYNC_KEY));
+  syncNode.textContent = lastSync ? `✅ Synced · last checked ${lastSync}` : "✅ Signed in and ready to sync";
 }
 
 // ---------------------------------------------------------------------------
@@ -6228,6 +6434,14 @@ function refreshSyncIndicatorBaseline() {
 function tsMs(value) {
   const t = new Date(value || 0).getTime();
   return Number.isFinite(t) ? t : 0;
+}
+
+// A pull/push whose diff stats are all-zero is just a timestamp-alignment
+// artifact (e.g. clock granularity between an edit-time stamp and a push-time
+// stamp) — nothing actually moved, so it shouldn't be counted or reported as
+// user-visible sync activity.
+function isNoOpStats(stats) {
+  return !stats.cardsAdded && !stats.cardsUpdated && !stats.cardsDeleted && !stats.notesChanged;
 }
 
 // Pulls one cloud deck (metadata already in hand) plus its cards into the local
@@ -6298,6 +6512,10 @@ async function pullCloudDeckToLibrary(cloud) {
     cardCount: snapshot.cards.length,
     hasNotes: Boolean(snapshot.notes.trim()),
     updatedAt: cloud.updated_at || new Date().toISOString(),
+    // Distinct from updatedAt (which also bumps on plain local edits) — this
+    // specifically means "last confirmed match with the cloud", surfaced in
+    // the sync indicator pill.
+    lastSyncedAt: cloud.updated_at || new Date().toISOString(),
     deckId: String(cloud.id),
   };
   writeLocalDeckIndex([meta, ...readLocalDeckIndex().filter((m) => m.id !== localId)]);
@@ -6343,6 +6561,7 @@ async function pushLibraryDeckToCloud(localMeta, { cloudExists = false, cloudNot
   if (entry) {
     entry.deckId = deckId;
     entry.updatedAt = now;
+    entry.lastSyncedAt = now;
     writeLocalDeckIndex(index);
   }
   // If we just pushed the active deck (first sync), adopt its new cloud id.
@@ -6357,6 +6576,9 @@ async function pushLibraryDeckToCloud(localMeta, { cloudExists = false, cloudNot
 }
 
 let reconcileInFlight = false;
+// Most recent background (non-explicit) sync's report, or null once nothing's
+// left to show — rendered inline on the welcome screen, never as a modal.
+let lastStartupSyncReport = null;
 
 // The full bidirectional sync. Pulls every cloud deck that's missing locally or
 // newer in the cloud; pushes every local deck that's new or newer locally.
@@ -6368,6 +6590,7 @@ async function reconcileAllDecks({ explicit = false } = {}) {
   if (!navigator.onLine) {
     if (explicit) showToast("Offline — your decks are safe on this device", "info");
     setSyncIndicator("offline");
+    updateDeckEmptyStatus();
     return;
   }
   if (reconcileInFlight) return;
@@ -6375,6 +6598,7 @@ async function reconcileAllDecks({ explicit = false } = {}) {
 
   if (el.syncNowBtn) setButtonLoading(el.syncNowBtn, true, "Syncing…");
   setSyncIndicator("saving");
+  updateDeckEmptyStatus();
   if (explicit) setStatus("Syncing all decks…");
 
   // A brand-new deck that's only in memory (never auto-saved) still belongs in
@@ -6403,8 +6627,10 @@ async function reconcileAllDecks({ explicit = false } = {}) {
       if (!cloudNewer) continue;
       try {
         const res = await pullCloudDeckToLibrary(cloud);
-        pulled++;
-        deckLog.push({ title: cloud.title || "Untitled deck", direction: "pulled", ...res.stats });
+        if (!isNoOpStats(res.stats)) {
+          pulled++;
+          deckLog.push({ title: cloud.title || "Untitled deck", direction: "pulled", ...res.stats });
+        }
         if (activeDeckId && String(cloud.id) === String(activeDeckId)) activePulledLocalId = res.localId;
       } catch (e) {
         failed++;
@@ -6421,8 +6647,10 @@ async function reconcileAllDecks({ explicit = false } = {}) {
       if (!localNewer) continue;
       try {
         const res = await pushLibraryDeckToCloud(localMeta, { cloudExists: Boolean(cloud), cloudNotes: cloud?.notes || "" });
-        pushed++;
-        deckLog.push({ title: localMeta.title || "Untitled deck", direction: "pushed", ...res.stats });
+        if (!isNoOpStats(res.stats)) {
+          pushed++;
+          deckLog.push({ title: localMeta.title || "Untitled deck", direction: "pushed", ...res.stats });
+        }
       } catch (e) {
         failed++;
         deckLog.push({ title: localMeta.title || "Untitled deck", direction: "failed", error: e?.message || String(e) });
@@ -6439,6 +6667,8 @@ async function reconcileAllDecks({ explicit = false } = {}) {
       refreshSyncIndicatorBaseline();
     }
     if (el.myDecksPanel && !el.myDecksPanel.hidden) renderMyDecksList();
+    localStorage.setItem(LAST_GLOBAL_SYNC_KEY, new Date().toISOString());
+    localStorage.removeItem(LAST_GLOBAL_SYNC_ERROR_KEY);
 
     const parts = [];
     if (pulled) parts.push(`${pulled} deck${pulled === 1 ? "" : "s"} downloaded from the cloud`);
@@ -6451,14 +6681,21 @@ async function reconcileAllDecks({ explicit = false } = {}) {
     if (explicit) {
       setStatus(summary);
       showToast(summary, failed ? "error" : "success");
+      // Detailed report modal — only for the explicit "Sync Now" click, and
+      // only when there's actually something to report.
+      if (deckLog.length) showSyncReport(deckLog, { pulled, pushed, failed });
+    } else {
+      // Silent startup/reconnect sync never pops a modal — its report is
+      // rendered inline on the welcome screen instead (see
+      // renderWelcomeSyncReport), so it's only ever seen if that screen is
+      // already what the user is looking at.
+      lastStartupSyncReport = deckLog.length ? { deckLog, pulled, pushed, failed } : null;
+      if (el.deckEmptyState && !el.deckEmptyState.hidden) renderDeckEmptyState(hasActiveDeck() ? "active" : "none");
     }
-    // Detailed report — shown for the explicit "Sync Now" click AND for the
-    // silent startup/reconnect sync, but only when there's actually
-    // something to report (no point popping a modal to say "did nothing").
-    if (deckLog.length) showSyncReport(deckLog, { pulled, pushed, failed, isStartup: !explicit });
   } catch (error) {
     console.error("Reconcile failed", error);
     setSyncIndicator("error");
+    localStorage.setItem(LAST_GLOBAL_SYNC_ERROR_KEY, "1");
     if (explicit) {
       const reason = error?.message ? `: ${error.message}` : "";
       setStatus(`Sync failed${reason}. Your decks are safe on this device.`, "error");
@@ -6467,6 +6704,7 @@ async function reconcileAllDecks({ explicit = false } = {}) {
   } finally {
     reconcileInFlight = false;
     if (el.syncNowBtn) setButtonLoading(el.syncNowBtn, false);
+    updateDeckEmptyStatus();
   }
 }
 
@@ -6521,6 +6759,7 @@ function saveDeckToLibrary({ id = null, silent = false, updatedAt = null } = {})
     return null;
   }
 
+  const previousEntry = readLocalDeckIndex().find((entry) => entry.id === localId);
   const meta = {
     id: localId,
     title: snapshot.deckTitle || "Untitled deck",
@@ -6528,6 +6767,7 @@ function saveDeckToLibrary({ id = null, silent = false, updatedAt = null } = {})
     cardCount: snapshot.cards.length,
     hasNotes: Boolean(String(snapshot.notes || "").trim()),
     updatedAt: updatedAt || new Date().toISOString(),
+    lastSyncedAt: previousEntry?.lastSyncedAt || null,
     deckId: snapshot.deckId || null,
   };
   writeLocalDeckIndex([meta, ...readLocalDeckIndex().filter((entry) => entry.id !== localId)]);
@@ -7665,59 +7905,6 @@ function dragVelocity(current, previous, time) {
   return (current - previous) / elapsed;
 }
 
-const LONG_PRESS_MS = 450;
-
-// A glowing conic-gradient border fills around the perimeter of `target`
-// (the flashcard by default, or the notes stage) over the long-press
-// duration — driven entirely by the shared .is-holding CSS.
-function startHoldProgress(target = el.card) {
-  target.classList.remove("is-holding", "is-holding-complete");
-  void target.offsetWidth; // force reflow so the fill animation restarts cleanly
-  target.style.setProperty("--hold-dur", `${LONG_PRESS_MS}ms`);
-  target.classList.add("is-holding");
-}
-
-function stopHoldProgress(target = el.card) {
-  target.classList.remove("is-holding", "is-holding-complete");
-}
-
-// Flash the fully-lit border at the moment the mode flips, then clear it.
-function completeHoldProgress(target = el.card) {
-  target.classList.add("is-holding-complete");
-  setTimeout(() => {
-    target.classList.remove("is-holding", "is-holding-complete");
-  }, 200);
-}
-
-function startLongPress() {
-  cancelLongPress();
-  state.longPressFired = false;
-  if (state.previewCard || !state.cards[state.current]) return;
-  // On touch/pen, a stationary long-press is the OS gesture for selecting text.
-  // Don't hijack it to toggle edit mode — the pencil (✎) buttons do that instead.
-  if (state.dragPointerType && state.dragPointerType !== "mouse") return;
-  const side = state.flipped ? "answer" : "question";
-  const view = side === "question" ? el.questionView : el.answerView;
-  if (view.hidden) return; // already editing this face
-  startHoldProgress();
-  state.longPressTimer = setTimeout(() => {
-    state.longPressTimer = null;
-    state.longPressFired = true;
-    completeHoldProgress();
-    state.suppressClickUntil = performance.now() + 500;
-    window.getSelection()?.removeAllRanges();
-    toggleEditMode(side);
-  }, LONG_PRESS_MS);
-}
-
-function cancelLongPress() {
-  if (state.longPressTimer) {
-    clearTimeout(state.longPressTimer);
-    state.longPressTimer = null;
-  }
-  stopHoldProgress();
-}
-
 function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   const time = performance.now();
   state.dragging = false;
@@ -7733,11 +7920,9 @@ function beginSwipe(clientX, clientY, pointerId = null, pointerType = "") {
   state.dragPointerId = pointerId;
   state.dragPointerType = pointerType;
   state.dragCaptured = false;
-  startLongPress();
 }
 
 function resetCardDrag() {
-  cancelLongPress();
   state.dragging = false;
   state.dragPointerId = null;
   state.dragPointerType = "";
@@ -7748,7 +7933,6 @@ function resetCardDrag() {
 }
 
 function updateSwipe(clientX, clientY, event) {
-  if (state.longPressFired) return;
   if (event?.pointerType === "mouse" && hasCardTextSelection()) {
     if (state.dragCaptured && typeof state.dragPointerId === "number") {
       el.card.releasePointerCapture?.(state.dragPointerId);
@@ -7767,7 +7951,6 @@ function updateSwipe(clientX, clientY, event) {
   const absX = Math.abs(dx);
   const absY = Math.abs(dy);
   state.dragMoved = state.dragMoved || absX > 6 || absY > 6;
-  if (state.dragMoved) cancelLongPress();
 
   if (!state.dragging) {
     const hasHorizontalIntent = absX >= swipeConfig.intentDistance && absX >= absY * swipeConfig.intentRatio;
@@ -7817,7 +8000,6 @@ function updateSwipe(clientX, clientY, event) {
 }
 
 function finishSwipe() {
-  cancelLongPress();
   const dx = state.dragCurrentX - state.dragStartX;
   const dy = state.dragCurrentY - state.dragStartY;
   const absX = Math.abs(dx);
@@ -8064,7 +8246,7 @@ function createNewDeck() {
     state.notes = "";
     state.sourceTitle = "New Deck";
     state.importTitleHint = "New Deck";
-    state.masterCards = [createBlankCard()];
+    state.masterCards = [];
     resetStudyDeck(state.masterCards);
     setViewMode("cards");
     closeImportPanel();
@@ -8072,7 +8254,7 @@ function createNewDeck() {
     showCard();
     setStatus("Created new deck.");
   };
-  if (state.masterCards.length > 0) {
+  if (hasActiveDeck()) {
     showConfirmModal("Create a new deck? Unsaved local progress will be lost.", doCreate, { confirmLabel: "Create New" });
   } else {
     doCreate();
@@ -8456,12 +8638,6 @@ el.replayAllBtn.addEventListener("click", () => replayDeck("all"));
 el.shuffleBtn.addEventListener("click", shuffleCards);
 el.resetBtn.addEventListener("click", resetQuiz);
 el.card.addEventListener("click", (event) => {
-  // A long-press just opened edit mode — swallow the trailing click
-  if (state.longPressFired) {
-    state.longPressFired = false;
-    event.preventDefault();
-    return;
-  }
   if (performance.now() < state.suppressClickUntil) {
     event.preventDefault();
     return;
@@ -8487,6 +8663,17 @@ el.card.addEventListener("touchend", handleTouchEnd);
 el.card.addEventListener("touchcancel", handleTouchCancel);
 
 document.addEventListener("keydown", (event) => {
+  // Ctrl/Cmd+E toggles raw/rendered view — checked first so it still fires
+  // while focus is inside the question/answer/notes edit textareas.
+  if ((event.ctrlKey || event.metaKey) && (event.key === "e" || event.key === "E")) {
+    event.preventDefault();
+    if (state.viewMode === "notes") {
+      isNotesEditing() ? commitNotesEditIfActive() : enterNotesEditing();
+    } else if (state.cards[state.current]) {
+      toggleEditMode(state.flipped ? "answer" : "question");
+    }
+    return;
+  }
   if (event.target.matches("input, textarea")) return;
   if (event.key === "Escape") {
     el.exportMenu.hidden = true;
@@ -8654,6 +8841,7 @@ function updateOnlineIndicator() {
 let onlineReconcileTimer = null;
 window.addEventListener("online", () => {
   updateOnlineIndicator();
+  updateDeckEmptyStatus();
   showToast("Back online", "success");
   // Connectivity returned — reconcile the local mirror with the cloud. Debounced
   // so a flaky connection flapping doesn't kick off overlapping syncs.
@@ -8665,6 +8853,7 @@ window.addEventListener("online", () => {
 });
 window.addEventListener("offline", () => {
   updateOnlineIndicator();
+  updateDeckEmptyStatus();
   showToast("You're offline — local decks still work", "info");
 });
 updateOnlineIndicator();
@@ -8779,84 +8968,6 @@ el.answerEdit.addEventListener('blur', (e) => {
   if (!el.answerEdit.hidden && e.relatedTarget !== el.editAnswerBtn) toggleEditMode('answer');
 });
 
-// Long-press inside the editor → commit and return to rendered view (reverse of long-press to edit)
-function attachExitLongPress(textarea, side) {
-  let timer = null;
-  let sx = 0;
-  let sy = 0;
-  const clear = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    stopHoldProgress();
-  };
-  textarea.addEventListener("pointerdown", (e) => {
-    clear();
-    // Let touch/pen long-press select text in the editor; only mouse long-press exits.
-    if (e.pointerType && e.pointerType !== "mouse") return;
-    sx = e.clientX;
-    sy = e.clientY;
-    startHoldProgress();
-    timer = setTimeout(() => {
-      timer = null;
-      completeHoldProgress();
-      state.suppressClickUntil = performance.now() + 500;
-      toggleEditMode(side); // commits edits and returns to rendered view
-    }, LONG_PRESS_MS);
-  });
-  textarea.addEventListener("pointermove", (e) => {
-    if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) clear();
-  });
-  textarea.addEventListener("pointerup", clear);
-  textarea.addEventListener("pointercancel", clear);
-  textarea.addEventListener("blur", clear);
-}
-
-attachExitLongPress(el.questionEdit, "question");
-attachExitLongPress(el.answerEdit, "answer");
-
-// Notes get the same mouse-only long-press gesture as the card faces: hold
-// the rendered view to start editing, hold inside the editor to commit back
-// to the rendered view. The glowing ring shows on .notes-stage (its bordered
-// container) rather than on the view/textarea themselves.
-function attachNotesLongPress(target, onFire) {
-  let timer = null;
-  let sx = 0;
-  let sy = 0;
-  const clear = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
-    stopHoldProgress(el.notesStage);
-  };
-  target.addEventListener("pointerdown", (e) => {
-    clear();
-    // Let touch/pen long-press select text; only mouse long-press toggles mode.
-    if (e.pointerType && e.pointerType !== "mouse") return;
-    sx = e.clientX;
-    sy = e.clientY;
-    startHoldProgress(el.notesStage);
-    timer = setTimeout(() => {
-      timer = null;
-      completeHoldProgress(el.notesStage);
-      state.suppressClickUntil = performance.now() + 500;
-      onFire();
-    }, LONG_PRESS_MS);
-  });
-  target.addEventListener("pointermove", (e) => {
-    if (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8) clear();
-  });
-  target.addEventListener("pointerup", clear);
-  target.addEventListener("pointercancel", clear);
-  target.addEventListener("blur", clear);
-}
-
-if (el.notesView && el.notesStage) {
-  attachNotesLongPress(el.notesView, () => { if (!isNotesEditing()) enterNotesEditing(); });
-  attachNotesLongPress(el.notesEdit, () => { if (isNotesEditing()) commitNotesEditIfActive(); });
-}
 
 if (el.newDeckBtn) {
   el.newDeckBtn.addEventListener("click", createNewDeck);
@@ -8866,19 +8977,35 @@ if (el.newDeckFromImportBtn) {
   el.newDeckFromImportBtn.addEventListener("click", createNewDeck);
 }
 
-if (el.addCardBtn) {
-  el.addCardBtn.addEventListener("click", () => {
-    if (!state.masterCards.length && !state.deckTitle) {
-      setStatus("Create a new deck or import one first.", "error");
-      return;
-    }
-    const newCard = createBlankCard();
-    state.masterCards.splice(state.current + 1, 0, newCard);
-    state.cards.splice(state.current + 1, 0, newCard);
+function addBlankCardAtCursor() {
+  if (!state.masterCards.length && !state.deckTitle) {
+    setStatus("Create a new deck or import one first.", "error");
+    return;
+  }
+  // From zero cards there's no "current" card to navigate from — land
+  // directly on the new sole card instead of animating navigateCard(1),
+  // which assumes a real current card and would overshoot to the
+  // deck-complete summary.
+  const wasEmpty = state.masterCards.length === 0;
+  const newCard = createBlankCard();
+  const insertAt = wasEmpty ? 0 : state.current + 1;
+  state.masterCards.splice(insertAt, 0, newCard);
+  state.cards.splice(insertAt, 0, newCard);
+  if (wasEmpty) {
+    state.current = 0;
+    showCard();
+  } else {
     navigateCard(1, "next");
-    setStatus("Card added. Click the edit icon to modify it.");
-  });
+  }
+  setStatus("Card added. Click the edit icon to modify it.");
 }
+
+if (el.addCardBtn) {
+  el.addCardBtn.addEventListener("click", addBlankCardAtCursor);
+}
+
+el.deckEmptyAddCardBtn?.addEventListener("click", addBlankCardAtCursor);
+el.deckEmptyGoNotesBtn?.addEventListener("click", () => setViewMode("notes"));
 
 if (el.deleteCardBtn) {
   el.deleteCardBtn.addEventListener("click", async (e) => {

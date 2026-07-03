@@ -85,10 +85,20 @@
 
           <div class="deck" id="deck">
             <div class="deck-empty-state" id="deckEmptyState" hidden>
-              <div class="deck-empty-icon" aria-hidden="true">📚</div>
-              <h2 class="deck-empty-title">No deck loaded</h2>
-              <p class="deck-empty-body">Choose how to get started:</p>
-              <div class="deck-empty-actions">
+              <div class="deck-empty-icon" id="deckEmptyIcon" aria-hidden="true">📚</div>
+              <h2 class="deck-empty-title" id="deckEmptyTitle">Recall</h2>
+              <p class="deck-empty-body" id="deckEmptyBody">Choose how to get started:</p>
+              <div class="deck-empty-panel" id="deckEmptyPanel">
+                <div class="deck-empty-panel-row">
+                  <span class="deck-empty-panel-label">Sync Status</span>
+                  <span class="deck-empty-panel-value" id="deckEmptySyncValue"></span>
+                </div>
+                <div class="deck-empty-panel-row">
+                  <span class="deck-empty-panel-label">Your Decks</span>
+                  <span class="deck-empty-panel-value" id="deckEmptyLibraryValue"></span>
+                </div>
+              </div>
+              <div class="deck-empty-actions" id="deckEmptyActionsNone">
                 <button class="deck-empty-action" id="deckEmptyNewBtn" type="button">
                   <span class="deck-empty-action-icon" aria-hidden="true">✦</span>
                   New Deck
@@ -102,6 +112,17 @@
                   My Decks
                 </button>
               </div>
+              <div class="deck-empty-actions" id="deckEmptyActionsActive" hidden>
+                <button class="deck-empty-action" id="deckEmptyAddCardBtn" type="button">
+                  <span class="deck-empty-action-icon" aria-hidden="true">+</span>
+                  Add Card
+                </button>
+                <button class="deck-empty-action" id="deckEmptyGoNotesBtn" type="button">
+                  <span class="deck-empty-action-icon" aria-hidden="true">📝</span>
+                  Write Notes
+                </button>
+              </div>
+              <div class="deck-empty-sync-report" id="deckEmptySyncReport" hidden></div>
             </div>
             <div class="swipe-hint" id="swipeHint" hidden aria-hidden="true">
               <div class="swipe-hint-row">
@@ -149,6 +170,7 @@
                 <span class="face-label">Study Notes</span>
               </div>
               <div class="edit-toolbar" id="notesEditToolbar" hidden></div>
+              <button class="edit-card-btn" id="makeCardFromNotesBtn" type="button" title="Make a flashcard from the selected notes text" aria-label="Make a flashcard from the selected notes text">&#10133;</button>
               <button class="edit-card-btn edit-toggle-pill" id="editNotesBtn" type="button" title="Edit notes" aria-label="Edit notes"><span class="pill-seg pill-seg-edit">&#9998;</span><span class="pill-seg pill-seg-view">&#128065;</span></button>
             </div>
             <div class="rendered notes-rendered" id="notesView"></div>
@@ -503,6 +525,7 @@
               <tr><td><kbd>K</kbd></td><td>Mark Known</td></tr>
               <tr><td><kbd>R</kbd></td><td>Mark for Review</td></tr>
               <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Navigate cards</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>E</kbd></td><td>Toggle edit / rendered view</td></tr>
             </table>
           </section>
 

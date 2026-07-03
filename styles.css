@@ -1580,61 +1580,6 @@ button:disabled {
   transform: translateY(-2px);
 }
 
-/* Long-press feedback: a glowing border fills around the card perimeter,
-   completing exactly as the mode flips. */
-@property --hold-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
-.card.is-holding::before,
-.card.is-holding-complete::before,
-.notes-stage.is-holding::before,
-.notes-stage.is-holding-complete::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: var(--card-radius);
-  padding: 4px;                       /* border thickness */
-  pointer-events: none;
-  z-index: 30;
-  /* Mask trick: show only the padded border band, cut out the centre */
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  filter:
-    drop-shadow(0 0 5px var(--accent))
-    drop-shadow(0 0 12px var(--accent));
-}
-
-.card.is-holding::before,
-.notes-stage.is-holding::before {
-  background: conic-gradient(
-    from -90deg,
-    var(--accent) var(--hold-angle),
-    color-mix(in srgb, var(--accent) 14%, transparent) var(--hold-angle)
-  );
-  animation: holdRingFill var(--hold-dur, 450ms) linear forwards;
-}
-
-@keyframes holdRingFill {
-  from { --hold-angle: 0deg; }
-  to   { --hold-angle: 360deg; }
-}
-
-/* Completion flash: full bright ring */
-.card.is-holding-complete::before,
-.notes-stage.is-holding-complete::before {
-  background: var(--accent);
-  filter:
-    drop-shadow(0 0 9px var(--accent))
-    drop-shadow(0 0 20px var(--accent))
-    brightness(1.25);
-}
-
 .card.swipe-left {
   opacity: 0;
   transform: translateX(-42px) rotate(-1deg) scale(0.992);
@@ -6672,11 +6617,72 @@ textarea {
   line-height: 1.5;
 }
 
+/* Structured Sync Status / Your Decks fields on the welcome screen — replaces
+   a single blended status sentence with two clearly labeled rows so both
+   pieces of information are always distinctly visible, not just implied. */
+.deck-empty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--toolbar-button-radius);
+  background: color-mix(in srgb, var(--panel-2) 55%, transparent);
+}
+
+.deck-empty-panel-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.deck-empty-panel-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.deck-empty-panel-value {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: right;
+}
+
 .deck-empty-actions {
   display: flex;
   gap: 8px;
   margin-top: 10px;
   width: 100%;
+}
+
+/* Inline replacement for the old "Startup Sync Report" modal — same
+   .sync-report-* row styling, just docked in the welcome card instead of a
+   popup, with its own scroll cap so a long deck list doesn't blow out the
+   card's height. */
+.deck-empty-sync-report {
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+
+.deck-empty-sync-report-title {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .deck-empty-action {
