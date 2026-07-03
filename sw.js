@@ -1,8 +1,8 @@
-const CACHE_NAME = "recall-v20260702-3";
+const CACHE_NAME = "recall-v20260703-2";
 const APP_SHELL = [
   "./",
-  "./styles.css?v=20260702-1",
-  "./app.js?v=20260702-1",
+  "./styles.css?v=20260703-2",
+  "./app.js?v=20260703-2",
   "./manifest.webmanifest",
   "./fevicon.png",
   "./icons/icon-192.png",

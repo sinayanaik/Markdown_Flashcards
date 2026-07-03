@@ -4214,6 +4214,7 @@ async function renderMarkdown(container, markdown, allowPlaceholder = false) {
   }
   container.innerHTML = markdownToSafeHtml(displayMarkdown);
   await enhanceRenderedMarkdown(container);
+  if (container === el.notesView) enhanceNotesImageControls();
 }
 
 function markdownTableColumnCount(table) {
@@ -5631,6 +5632,572 @@ el.makeCardFromNotesBtn?.addEventListener("click", () => {
   window.getSelection()?.removeAllRanges();
   createCardFromNotesSelection(text);
 });
+
+// ── Editable images in rendered Notes: resize, side-by-side pairing, free
+// repositioning ─────────────────────────────────────────────────────────
+// state.notes is a plain markdown string, so every operation here works by
+// tokenizing it into top-level blocks with marked.lexer() (each token's
+// `.raw` is the exact source slice), mutating the token array, and rejoining
+// `.raw` strings back into state.notes. This is what makes moves safe inside
+// arbitrary surrounding markdown (lists, quotes, code fences) without a
+// hand-rolled parser: marked already knows the real block boundaries.
+//
+// Persistence formats written into state.notes:
+//   resized single image → <img src=... alt=... style="--notes-img-w:N%; width:N%">
+//   side-by-side pair    → <div class="notes-img-row"><img ...><img ...></div>
+// Both are raw HTML blocks, which marked/DOMPurify already pass through
+// untouched (confirmed: no sanitize/html-disabling option is set on marked,
+// and DOMPurify's ADD_ATTR already allows style/class). A bare `![alt](url)`
+// that's never touched is left alone. Only images that sit on their own
+// blank-line-separated paragraph get interactive controls — one mixed in
+// with running text (no isolating blank lines) stays plain, matching how a
+// reader would expect an inline image vs. a "block" image to behave.
+
+function notesLexTokens() {
+  return marked.lexer(state.notes || "");
+}
+
+function parseImgTagFromHtml(html) {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = html;
+  const img = wrap.querySelector("img");
+  if (!img) return null;
+  const wProp = img.style.getPropertyValue("--notes-img-w").trim();
+  return {
+    url: img.getAttribute("src") || "",
+    alt: img.getAttribute("alt") || "",
+    widthPx: wProp ? parseInt(wProp, 10) || null : null
+  };
+}
+
+// Sizing is stored as an absolute pixel width (not a percentage of whatever
+// happens to contain it) — freestyle, not clamped to "100% of container is
+// the max", and stable regardless of viewport width changes after the fact.
+function imgTagHtml({ url, alt = "", widthPx = null }) {
+  const style = widthPx ? ` style="--notes-img-w:${widthPx}px; width:${widthPx}px"` : "";
+  return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}"${style}>`;
+}
+
+// Walks top-level marked tokens and returns every image-bearing block in
+// document order: { tokenIndex, isRow, images:[{url,alt,widthPx}] }.
+function findImageTokens(tokens) {
+  const results = [];
+  tokens.forEach((token, tokenIndex) => {
+    if (token.type === "paragraph" && Array.isArray(token.tokens) && token.tokens.length === 1) {
+      const inline = token.tokens[0];
+      if (inline.type === "image") {
+        results.push({ tokenIndex, isRow: false, images: [{ url: inline.href, alt: inline.text || "", widthPx: null }] });
+        return;
+      }
+      if (inline.type === "html" && /^<img\b/i.test((inline.raw || inline.text || "").trim())) {
+        const info = parseImgTagFromHtml(inline.raw || inline.text);
+        if (info) results.push({ tokenIndex, isRow: false, images: [info] });
+        return;
+      }
+    }
+    // An image pasted mid-sentence (no isolating blank lines) shares its
+    // paragraph with other text — can't be resized/moved as its own block
+    // without first "promoting" it out, so it's flagged separately and only
+    // gets a minimal "move to its own line" control (see enhanceNotes-
+    // ImageControls / promoteInlineImage) rather than the full control set.
+    if (token.type === "paragraph" && Array.isArray(token.tokens) && token.tokens.length > 1) {
+      token.tokens.forEach((inline, inlinePos) => {
+        if (inline.type === "image") {
+          results.push({
+            tokenIndex, isRow: false, isInline: true, inlinePos,
+            images: [{ url: inline.href, alt: inline.text || "", widthPx: null }]
+          });
+        } else if (inline.type === "html" && /^<img\b/i.test((inline.raw || inline.text || "").trim())) {
+          const info = parseImgTagFromHtml(inline.raw || inline.text);
+          if (info) results.push({ tokenIndex, isRow: false, isInline: true, inlinePos, images: [info] });
+        }
+      });
+      return;
+    }
+    if (token.type === "html") {
+      const wrap = document.createElement("div");
+      wrap.innerHTML = token.raw;
+      const rowDiv = wrap.querySelector(".notes-img-row");
+      if (rowDiv) {
+        const images = Array.from(rowDiv.querySelectorAll("img")).map((img) => {
+          const wProp = img.style.getPropertyValue("--notes-img-w").trim();
+          return {
+            url: img.getAttribute("src") || "",
+            alt: img.getAttribute("alt") || "",
+            widthPx: wProp ? parseInt(wProp, 10) || null : null
+          };
+        });
+        if (images.length) results.push({ tokenIndex, isRow: true, images });
+        return;
+      }
+      if (/^<img\b/i.test(token.raw.trim())) {
+        const info = parseImgTagFromHtml(token.raw);
+        if (info) results.push({ tokenIndex, isRow: false, images: [info] });
+      }
+      return;
+    }
+    // Anything else — most commonly a list or blockquote — can have images
+    // buried inside its own nested items/sub-tokens (e.g. a diagram under one
+    // bullet of a numbered list), invisible to the block-level checks above.
+    // These can't be resized/moved in place without understanding marked's
+    // internal list/quote structure, so — same as a mid-sentence image —
+    // they only get a "move to its own line" control that extracts them out
+    // to a clean top-level block (see promoteDeepImage).
+    const deep = [];
+    collectImagesDeep(token, deep);
+    deep.forEach((found) => {
+      results.push({ tokenIndex, isRow: false, isDeep: true, imageRaw: found.raw, images: [{ url: found.url, alt: found.alt, widthPx: null }] });
+    });
+  });
+  return results;
+}
+
+// Recursively collects every image (markdown ![]() or raw <img> HTML) found
+// anywhere within a token's subtree — marked's list_item/blockquote tokens
+// nest their own content under .tokens (and .items, for lists), so a diagram
+// pasted under a bullet point lives several levels deep, not at the top
+// level findImageTokens otherwise checks.
+function collectImagesDeep(token, results) {
+  if (!token || typeof token !== "object") return;
+  if (token.type === "image") {
+    results.push({ raw: token.raw || `![${token.text || ""}](${token.href})`, url: token.href, alt: token.text || "" });
+    return;
+  }
+  if (token.type === "html" && /^<img\b/i.test((token.raw || token.text || "").trim())) {
+    const info = parseImgTagFromHtml(token.raw || token.text);
+    if (info) results.push({ raw: token.raw || token.text, ...info });
+    return;
+  }
+  if (Array.isArray(token.tokens)) token.tokens.forEach((t) => collectImagesDeep(t, results));
+  if (Array.isArray(token.items)) token.items.forEach((t) => collectImagesDeep(t, results));
+}
+
+// Extracts an image found via collectImagesDeep out of its enclosing
+// top-level token (a list, blockquote, etc.) by removing its exact raw
+// source slice from that token's raw text, then inserts it as a brand-new
+// standalone block immediately after. Leaves the rest of the list/quote
+// structurally intact; may leave a blank line behind where the image was,
+// which is a small, self-correcting cosmetic side effect rather than
+// corruption of the surrounding structure.
+function promoteDeepImage(tokenIndex, imageRaw, info) {
+  const tokens = notesLexTokens();
+  const token = tokens[tokenIndex];
+  if (!token) return;
+  const idx = token.raw.indexOf(imageRaw);
+  if (idx === -1) return;
+  const newRaw = token.raw.slice(0, idx) + token.raw.slice(idx + imageRaw.length);
+  const imgHtml = imgTagHtml(info) + "\n\n";
+  const replacement = [
+    { ...token, raw: newRaw },
+    { type: "html", raw: imgHtml, text: imgHtml, pre: false, block: true }
+  ];
+  tokens.splice(tokenIndex, 1, ...replacement);
+  rebuildNotesFromTokens(tokens);
+}
+
+// Rebuilds state.notes from a (possibly mutated) token array, keeps the raw
+// editor in sync if it's open, re-renders, and autosaves — the single write
+// path every resize/pair/move commit goes through.
+function rebuildNotesFromTokens(tokens) {
+  // Every token's raw is captured from its ORIGINAL position, where
+  // separation from its neighbor may have lived in a separate "space" token
+  // rather than in its own trailing whitespace. After a move/pair/split, a
+  // token can end up next to a brand-new neighbor it was never adjacent to
+  // — so normalize every token to end in a blank line, guaranteeing safe
+  // separation regardless of where it lands. Safe for list/code-fence/quote
+  // tokens too, since their raw is the whole atomic block; this only touches
+  // trailing whitespace after it, never content inside it.
+  // "space" tokens (marked.lexer's own representation of blank-line gaps
+  // between blocks) carry no content — dropped entirely rather than kept and
+  // normalized, since every remaining token already gets its own trailing
+  // blank line below; keeping both would double up the gap. Only touches
+  // trailing whitespace of each token's OWN raw, never a blind global
+  // collapse, so blank lines that are meaningfully part of a code fence's
+  // actual content are never touched.
+  state.notes = tokens
+    .filter((t) => t.type !== "space")
+    .map((t) => t.raw.replace(/\n*$/, "\n\n"))
+    .join("")
+    .replace(/\n+$/, "\n");
+  if (isNotesEditing()) el.notesEdit.value = state.notes;
+  renderMarkdown(el.notesView, state.notes, true);
+  scheduleDeckAutosave();
+}
+
+// Freestyle sizing — an absolute pixel width with only a sanity floor/ceiling
+// (not a "100% of container is the max" cap), so an image can be shrunk to a
+// small inline-sized accent or blown up past its container (the shell
+// scrolls) if that's genuinely what's wanted. Pixels rather than a
+// percentage of whatever happens to contain it, so it stays put regardless
+// of later viewport/layout changes.
+function commitImageWidth(tokenIndex, rowPos, px) {
+  const widthPx = Math.min(2000, Math.max(20, Math.round(px)));
+  const tokens = notesLexTokens();
+  const token = tokens[tokenIndex];
+  if (!token) return;
+
+  if (rowPos !== null && token.type === "html") {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = token.raw;
+    const rowDiv = wrap.querySelector(".notes-img-row");
+    const target = rowDiv?.querySelectorAll("img")[rowPos];
+    if (!target) return;
+    target.setAttribute("style", `--notes-img-w:${widthPx}px; width:${widthPx}px`);
+    const rowHtml = `<div class="notes-img-row">${rowDiv.innerHTML}</div>\n\n`;
+    tokens[tokenIndex] = { type: "html", raw: rowHtml, text: rowHtml, pre: false, block: true };
+  } else {
+    const entry = findImageTokens(tokens).find((e) => e.tokenIndex === tokenIndex);
+    if (!entry) return;
+    const html = imgTagHtml({ ...entry.images[0], widthPx }) + "\n\n";
+    tokens[tokenIndex] = { type: "html", raw: html, text: html, pre: false, block: true };
+  }
+  rebuildNotesFromTokens(tokens);
+}
+
+// Presets are expressed as "% of the notes panel" for the user, but stored
+// as the resulting absolute pixel width like every other resize (see
+// commitImageWidth) — computed once now, not tied to the panel's width later.
+function applyImagePreset(tokenIndex, rowPos, pct) {
+  const refWidth = el.notesView?.clientWidth || 600;
+  commitImageWidth(tokenIndex, rowPos, (refWidth * pct) / 100);
+}
+
+function commitImagePair(sourceTokenIndex, sourceRowPos, targetTokenIndex, targetRowPos) {
+  if (sourceTokenIndex === targetTokenIndex) return;
+  const tokens = notesLexTokens();
+  const entries = findImageTokens(tokens);
+  const sourceEntry = entries.find((e) => e.tokenIndex === sourceTokenIndex);
+  const targetEntry = entries.find((e) => e.tokenIndex === targetTokenIndex);
+  if (!sourceEntry || !targetEntry || sourceEntry.isRow || targetEntry.isRow) return;
+
+  const rowHtml = `<div class="notes-img-row">${imgTagHtml(targetEntry.images[0])}${imgTagHtml(sourceEntry.images[0])}</div>\n\n`;
+  tokens[targetTokenIndex] = { type: "html", raw: rowHtml, text: rowHtml, pre: false, block: true };
+  tokens.splice(sourceTokenIndex, 1);
+  rebuildNotesFromTokens(tokens);
+}
+
+function splitImageFromRow(tokenIndex, rowPos) {
+  const tokens = notesLexTokens();
+  const entry = findImageTokens(tokens).find((e) => e.tokenIndex === tokenIndex);
+  if (!entry || !entry.isRow) return;
+  const extracted = entry.images[rowPos];
+  const remaining = entry.images.filter((_, i) => i !== rowPos);
+  const asToken = (info) => {
+    const html = imgTagHtml(info) + "\n\n";
+    return { type: "html", raw: html, text: html, pre: false, block: true };
+  };
+  let replacement;
+  if (remaining.length <= 1) {
+    // Two-image row splits back into two standalone blocks, original order.
+    const ordered = rowPos === 0 ? [extracted, ...remaining] : [...remaining, extracted];
+    replacement = ordered.map(asToken);
+  } else {
+    const rowHtml = `<div class="notes-img-row">${remaining.map(imgTagHtml).join("")}</div>\n\n`;
+    replacement = [{ type: "html", raw: rowHtml, text: rowHtml, pre: false, block: true }, asToken(extracted)];
+  }
+  tokens.splice(tokenIndex, 1, ...replacement);
+  rebuildNotesFromTokens(tokens);
+}
+
+// marked.lexer() emits non-rendering tokens too (notably "space", for runs of
+// blank lines) that never produce a DOM child — so #notesView's children do
+// NOT correspond 1:1 with raw token-array indices. This maps "the Nth actual
+// rendered block" to its real index in the full token array, which is what
+// every commit function below needs to splice correctly.
+function renderableTokenIndices(tokens) {
+  const indices = [];
+  tokens.forEach((t, i) => { if (t.type !== "space") indices.push(i); });
+  return indices;
+}
+
+// Splices the source block out and back in relative to a target position
+// expressed in the SAME full-token-array index space (see
+// renderableTokenIndices — callers must translate DOM-child positions before
+// calling this).
+function commitImageMoveToTokenIndex(sourceTokenIndex, targetTokenIndex) {
+  const tokens = notesLexTokens();
+  if (sourceTokenIndex < 0 || sourceTokenIndex >= tokens.length) return;
+  const [moved] = tokens.splice(sourceTokenIndex, 1);
+  let insertAt = targetTokenIndex;
+  if (sourceTokenIndex < targetTokenIndex) insertAt -= 1;
+  insertAt = Math.max(0, Math.min(tokens.length, insertAt));
+  tokens.splice(insertAt, 0, moved);
+  rebuildNotesFromTokens(tokens);
+}
+
+function beginImageResize(event, shell, img, tokenIndex, rowPos) {
+  event.preventDefault();
+  event.stopPropagation();
+  const startX = event.clientX;
+  const startWidth = shell.getBoundingClientRect().width;
+  let widthPx = startWidth;
+
+  const onMove = (e) => {
+    const dx = e.clientX - startX;
+    widthPx = Math.min(2000, Math.max(20, Math.round(startWidth + dx)));
+    img.style.setProperty("--notes-img-w", `${widthPx}px`);
+    img.style.width = `${widthPx}px`;
+    img.classList.add("has-custom-size");
+  };
+  const onUp = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    commitImageWidth(tokenIndex, rowPos, widthPx);
+  };
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp, { once: true });
+}
+
+function beginImageMove(event, shell, tokenIndex, rowPos) {
+  event.preventDefault();
+  event.stopPropagation();
+  // state.notes doesn't change until commit, so the DOM-child ↔ real-token-
+  // index mapping is stable for the whole drag — compute it once up front
+  // rather than re-lexing on every pointermove.
+  const renderableIndices = renderableTokenIndices(notesLexTokens());
+  let dragging = false;
+  let dropIndicator = null;
+  let pairTarget = null;
+  let dropPlan = null;
+
+  const clearIndicators = () => {
+    dropIndicator?.remove();
+    dropIndicator = null;
+    if (pairTarget) pairTarget.classList.remove("is-pair-target");
+    pairTarget = null;
+  };
+
+  const onMove = (e) => {
+    if (!dragging) {
+      dragging = true;
+      shell.classList.add("is-dragging");
+    }
+    dropPlan = null;
+    clearIndicators();
+    if (!el.notesView) return;
+
+    const overShell = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("#notesView .diagram-shell");
+    if (overShell && overShell !== shell) {
+      const rect = overShell.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const inCenterZone = Math.abs(e.clientX - cx) < rect.width * 0.35 && Math.abs(e.clientY - cy) < rect.height * 0.35;
+      const overIsRow = overShell.dataset.isRow === "1";
+      if (inCenterZone && !overIsRow) {
+        pairTarget = overShell;
+        pairTarget.classList.add("is-pair-target");
+        dropPlan = { type: "pair", targetTokenIndex: Number(overShell.dataset.tokenIndex), targetRowPos: null };
+        return;
+      }
+    }
+
+    // blocks are #notesView's rendered children, which correspond 1:1 (in
+    // order) with renderableIndices — bestIndex is a position among THESE,
+    // then translated to a real token-array index below.
+    const blocks = Array.from(el.notesView.children);
+    let bestIndex = blocks.length;
+    let bestDist = Infinity;
+    blocks.forEach((block, i) => {
+      if (block.classList.contains("notes-drop-indicator")) return;
+      const r = block.getBoundingClientRect();
+      const mid = r.top + r.height / 2;
+      const dist = Math.abs(e.clientY - mid);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIndex = e.clientY < mid ? i : i + 1;
+      }
+    });
+    dropIndicator = document.createElement("div");
+    dropIndicator.className = "notes-drop-indicator";
+    if (blocks[bestIndex]) el.notesView.insertBefore(dropIndicator, blocks[bestIndex]);
+    else el.notesView.appendChild(dropIndicator);
+    let targetTokenIndex;
+    if (bestIndex < renderableIndices.length) {
+      targetTokenIndex = renderableIndices[bestIndex];
+    } else if (renderableIndices.length) {
+      targetTokenIndex = renderableIndices[renderableIndices.length - 1] + 1;
+    } else {
+      targetTokenIndex = 0;
+    }
+    dropPlan = { type: "move", targetTokenIndex };
+  };
+
+  const onUp = () => {
+    document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerup", onUp);
+    shell.classList.remove("is-dragging");
+    clearIndicators();
+    if (!dragging || !dropPlan) return;
+    if (dropPlan.type === "pair") {
+      commitImagePair(tokenIndex, rowPos, dropPlan.targetTokenIndex, dropPlan.targetRowPos);
+    } else {
+      commitImageMoveToTokenIndex(tokenIndex, dropPlan.targetTokenIndex);
+    }
+  };
+
+  document.addEventListener("pointermove", onMove);
+  document.addEventListener("pointerup", onUp, { once: true });
+}
+
+// Splits a mixed paragraph (image pasted mid-sentence, alongside other text)
+// into up to three blocks — text-before, the image as its own standalone
+// block, text-after — using the paragraph's own inline tokens' raw slices so
+// formatting either side of the image survives untouched. After this, the
+// image qualifies as a normal standalone block on the next render and gets
+// the full resize/pair/move control set.
+function promoteInlineImage(tokenIndex, inlinePos) {
+  const tokens = notesLexTokens();
+  const token = tokens[tokenIndex];
+  if (!token || token.type !== "paragraph" || !Array.isArray(token.tokens)) return;
+  const inline = token.tokens[inlinePos];
+  if (!inline) return;
+
+  const info = inline.type === "image"
+    ? { url: inline.href, alt: inline.text || "", widthPx: null }
+    : parseImgTagFromHtml(inline.raw || inline.text || "");
+  if (!info) return;
+
+  const before = token.tokens.slice(0, inlinePos).map((t) => t.raw).join("").trim();
+  const after = token.tokens.slice(inlinePos + 1).map((t) => t.raw).join("").trim();
+
+  const replacement = [];
+  if (before) replacement.push({ type: "paragraph", raw: before + "\n\n", text: before, tokens: [] });
+  const imgHtml = imgTagHtml(info) + "\n\n";
+  replacement.push({ type: "html", raw: imgHtml, text: imgHtml, pre: false, block: true });
+  if (after) replacement.push({ type: "paragraph", raw: after + "\n\n", text: after, tokens: [] });
+
+  tokens.splice(tokenIndex, 1, ...replacement);
+  rebuildNotesFromTokens(tokens);
+}
+
+// Minimal overlay for an image that isn't (yet) its own clean top-level
+// block — still embedded in running text, or buried inside a list/quote —
+// since resize/pair/move all assume the image is already a standalone block.
+// Clicking it promotes the image via the given callback; the full control
+// set then appears normally once findImageTokens sees it as a standalone
+// block on the next render.
+function attachImagePromoteControl(shell, onPromote) {
+  shell.querySelector(".notes-img-controls")?.remove();
+  const controls = document.createElement("div");
+  controls.className = "notes-img-controls";
+  const promoteBtn = document.createElement("button");
+  promoteBtn.type = "button";
+  promoteBtn.className = "notes-img-promote-btn";
+  promoteBtn.title = "Move to its own line to resize, pair, or reposition it";
+  promoteBtn.textContent = "⤢ Move to own line";
+  promoteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onPromote();
+  });
+  controls.appendChild(promoteBtn);
+  shell.appendChild(controls);
+  shell.addEventListener("click", (e) => {
+    if (e.target.closest(".notes-img-controls")) return;
+    const wasSelected = shell.classList.contains("is-selected");
+    document.querySelectorAll("#notesView .diagram-shell.is-selected").forEach((s) => s.classList.remove("is-selected"));
+    if (!wasSelected) shell.classList.add("is-selected");
+  });
+}
+
+function attachNotesImageOverlay(shell, img, tokenIndex, rowPos) {
+  shell.querySelector(".notes-img-controls")?.remove();
+
+  const controls = document.createElement("div");
+  controls.className = "notes-img-controls";
+
+  const dragHandle = document.createElement("button");
+  dragHandle.type = "button";
+  dragHandle.className = "notes-img-drag-handle";
+  dragHandle.title = "Drag to move, or drop on another image to pair them side by side";
+  dragHandle.textContent = "✥";
+  dragHandle.addEventListener("pointerdown", (e) => beginImageMove(e, shell, tokenIndex, rowPos));
+  controls.appendChild(dragHandle);
+
+  const resizeHandle = document.createElement("div");
+  resizeHandle.className = "notes-img-resize-handle";
+  resizeHandle.title = "Drag to resize";
+  resizeHandle.addEventListener("pointerdown", (e) => beginImageResize(e, shell, img, tokenIndex, rowPos));
+  controls.appendChild(resizeHandle);
+
+  const presets = document.createElement("div");
+  presets.className = "notes-img-presets";
+  [25, 50, 75, 100].forEach((pct) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = `${pct}%`;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyImagePreset(tokenIndex, rowPos, pct);
+    });
+    presets.appendChild(btn);
+  });
+  controls.appendChild(presets);
+
+  if (rowPos !== null) {
+    const splitBtn = document.createElement("button");
+    splitBtn.type = "button";
+    splitBtn.className = "notes-img-split-btn";
+    splitBtn.title = "Remove from side-by-side row";
+    splitBtn.textContent = "✕";
+    splitBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      splitImageFromRow(tokenIndex, rowPos);
+    });
+    controls.appendChild(splitBtn);
+  }
+
+  shell.appendChild(controls);
+  shell.addEventListener("click", (e) => {
+    if (e.target.closest(".notes-img-controls")) return;
+    const wasSelected = shell.classList.contains("is-selected");
+    document.querySelectorAll("#notesView .diagram-shell.is-selected").forEach((s) => s.classList.remove("is-selected"));
+    if (!wasSelected) shell.classList.add("is-selected");
+  });
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#notesView .diagram-shell")) return;
+  document.querySelectorAll("#notesView .diagram-shell.is-selected").forEach((s) => s.classList.remove("is-selected"));
+});
+
+// Re-attaches resize/pair/move controls after every notes render. Cross-
+// references rendered .diagram-shell elements (DOM order) against
+// findImageTokens() (source order) — both orders match since none of
+// preprocessSpecialBlocks's transforms reorder or remove image blocks.
+function enhanceNotesImageControls() {
+  if (!el.notesView) return;
+  const tokens = notesLexTokens();
+  const imageTokens = findImageTokens(tokens);
+  const shells = Array.from(el.notesView.querySelectorAll(".diagram-shell")).filter((s) => s.querySelector("img"));
+
+  let cursor = 0;
+  imageTokens.forEach((entry) => {
+    const count = entry.images.length;
+    const entryShells = shells.slice(cursor, cursor + count);
+    cursor += count;
+    entryShells.forEach((shell, i) => {
+      const img = shell.querySelector("img");
+      if (!img) return;
+      img.draggable = false;
+      shell.dataset.tokenIndex = String(entry.tokenIndex);
+      shell.dataset.isRow = entry.isRow ? "1" : "0";
+      const widthPx = entry.images[i]?.widthPx;
+      if (widthPx) {
+        img.style.setProperty("--notes-img-w", `${widthPx}px`);
+        img.classList.add("has-custom-size");
+      } else {
+        img.classList.remove("has-custom-size");
+      }
+      if (entry.isInline) {
+        attachImagePromoteControl(shell, () => promoteInlineImage(entry.tokenIndex, entry.inlinePos));
+      } else if (entry.isDeep) {
+        attachImagePromoteControl(shell, () => promoteDeepImage(entry.tokenIndex, entry.imageRaw, entry.images[0]));
+      } else {
+        attachNotesImageOverlay(shell, img, entry.tokenIndex, entry.isRow ? i : null);
+      }
+    });
+  });
+}
 
 function transitionClassFor(direction, phase) {
   if (!direction) return "";
